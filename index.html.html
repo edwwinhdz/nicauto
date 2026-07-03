@@ -582,6 +582,7 @@ body.no-delete .confirmDelete{display:none!important}
       <table class="tbl" id="tbl-consig-table">
         <thead><tr><th>#</th><th>Dueño</th><th>Vehículo</th><th>Placa</th><th>Km</th><th>Trans.</th><th>Color</th><th>Motor</th><th>Días</th><th>Lista A</th><th>Lista B</th><th>Estado</th><th>Comisión</th><th>Acciones</th></tr></thead>
         <tbody id="tbl-consig"></tbody>
+        <tfoot id="tfoot-consig" style="background:var(--surface2);font-weight:700"></tfoot>
       </table>
     </div>
   </div>
@@ -5097,13 +5098,13 @@ function renderUsuariosLista(){
     const dmKey='dm_'+[miNombre,u.nombre].sort().join('_');
     const unread=mensajes.filter(m=>m.canal===dmKey&&m.nombre!==miNombre&&!m.leido).length;
     const isActive=chatDMActivo===u.nombre;
-    return`<div class="chat-canal${isActive?' active':''}" onclick="selectDM('${u.nombre}')" style="display:flex;align-items:center;gap:8px">
-      <div style="width:8px;height:8px;border-radius:50%;background:${online?'var(--green)':'var(--text3)'}flex-shrink:0"></div>
+    return`<div class="chat-canal${isActive?' active':''}" onclick="selectDM('${u.nombre}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${online?'#40C057':'#adb5bd'};flex-shrink:0;box-shadow:${online?'0 0 6px #40C057':''};"></div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.nombre}</div>
-        <div style="font-size:10px;color:${online?'var(--green)':'var(--text3)'}">${online?'● En línea':'○ Desconectado'}</div>
+        <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${online?'var(--text)':'var(--text2)'}">${u.nombre}</div>
+        <div style="font-size:10px;color:${online?'#40C057':'var(--text3)'};font-weight:${online?'600':'400'}">${online?'● En línea':'○ Desconectado'}</div>
       </div>
-      ${unread>0?`<span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px">${unread}</span>`:''}
+      ${unread>0?`<span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${unread}</span>`:''}
     </div>`;
   }).join('');
 }
@@ -6662,6 +6663,10 @@ function exportExcelCompras(){
 function renderConsig(){
   const data=contData.consignacion||[];
   const tbody=document.getElementById('tbl-consig');if(!tbody)return;
+  const totPrecioA=data.reduce((s,v)=>s+Number(v.precioA||0),0);
+  const totPrecioB=data.reduce((s,v)=>s+Number(v.precioB||0),0);
+  const totPactado=data.reduce((s,v)=>s+Number(v.preciopactado||0),0);
+  const totComision=data.reduce((s,v)=>s+Number(v.comision||0),0);
   tbody.innerHTML=data.length?data.map((v,i)=>{
     const dias=diasDesde(v.fecha);
     return`<tr>
@@ -6676,12 +6681,24 @@ function renderConsig(){
       <td style="color:var(--green);font-weight:600">${v.precioA?fmtD(v.precioA):'—'}</td>
       <td style="color:var(--blue);font-weight:600">${v.precioB?fmtD(v.precioB):'—'}</td>
       <td>${badge(v.estado||'Disponible','')}</td>
-      <td>${v.comision||'—'}%</td>
+      <td style="font-weight:600;color:var(--text2)">${v.comision?fmtD(v.comision):'—'}</td>
       <td><div class="tbl-actions">
         <button class="btn btn-sm" onclick="abrirModalConsig('${v.id}')"><i class="ti ti-edit"></i></button>
         <button class="btn btn-sm btn-danger" onclick="delConsig('${v.id}')"><i class="ti ti-trash"></i></button>
       </div></td>
     </tr>`;}).join(''):`<tr><td colspan="14"><div class="empty"><i class="ti ti-key"></i><p>Sin vehículos en consignación</p></div></td></tr>`;
+  // Totals footer
+  const tfoot=document.getElementById('tfoot-consig');
+  if(tfoot&&data.length){
+    tfoot.innerHTML=`<tr style="background:var(--surface2);font-weight:800;font-size:13px">
+      <td colspan="9" style="padding:10px;text-align:right">TOTALES (${data.length} veh.):</td>
+      <td style="padding:10px;color:var(--green)">${fmtD(totPrecioA)}</td>
+      <td style="padding:10px;color:var(--blue)">${fmtD(totPrecioB)}</td>
+      <td style="padding:10px"></td>
+      <td style="padding:10px;color:var(--purple)">${fmtD(totComision)}</td>
+      <td></td>
+    </tr>`;
+  } else if(tfoot) tfoot.innerHTML='';
   setTimeout(()=>makeResizable('tbl-consig-table'),200);
 }
 function abrirModalConsig(id){
