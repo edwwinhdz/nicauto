@@ -310,13 +310,19 @@ body.no-delete .confirmDelete{display:none!important}
       <label style="font-size:12px;font-weight:600;color:#6C757D;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Usuario</label>
       <select id="login-usuario" onchange="toggleNombreField(this.value)" style="width:100%;padding:10px 12px;border:1.5px solid #DEE2E6;border-radius:8px;font-size:14px;color:#212529;background:#fff">
         <option value="">-- Seleccionar usuario --</option>
-        <option value="admin">Administrador</option>
-        <option value="vendedor">Vendedor</option>
-        <option value="coordinador">Coordinador Administrativo</option>
-        <option value="gerencia">Gerencia General</option>
-        <option value="legal">Legal / Abogado</option>
-        <option value="operaciones">Jefe de Operaciones</option>
-        <option value="compras">Compras</option>
+        <option value="admin">Edwin Hernández — Administrador</option>
+        <option value="coordinador">Steven Amador — Coordinador</option>
+        <option value="gerente1">Julio Mendoza — Gerente 1</option>
+        <option value="gerente2">Gisselle Ortega — Gerente 2</option>
+        <option value="operaciones">Jordan Lopez — Operaciones</option>
+        <option value="vendedor1">Eduardo Giacoman — Vendedor</option>
+        <option value="vendedor2">Erick Araquistain — Vendedor</option>
+        <option value="vendedor3">Yenkel Luna — Vendedor</option>
+        <option value="vendedor4">Julio Gabriel — Vendedor</option>
+        <option value="vendedor5">Marcelo Villarreal — Vendedor</option>
+        <option value="compras">Alonso Hasbani — Compras</option>
+        <option value="compras2">Norvin Orozco — Compras</option>
+        <option value="legal">Gerald Vado — Legal</option>
       </select>
     </div>
     <div id="login-nombre-div" style="margin-bottom:1rem;display:none">
@@ -352,6 +358,7 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
   </div>
   <div class="stats-grid" id="dash-stats"></div>
+  <div class="card" style="margin-bottom:1rem"><div class="card-head"><h3><i class="ti ti-clock"></i> Antigüedad por tipo de vehículo</h3></div><div style="padding:.75rem" id="dash-aging"></div></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
     <div class="card">
       <div class="card-head"><h3>Últimas ventas</h3><a onclick="showPage('ventas')" style="font-size:12px;color:var(--blue);cursor:pointer">Ver todas →</a></div>
@@ -530,6 +537,7 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab active" onclick="showLPTab('precios')"><i class="ti ti-tag" style="font-size:13px"></i> Lista de Precios</button>
     <button class="tab" onclick="showLPTab('clientes')"><i class="ti ti-address-book" style="font-size:13px"></i> Control de Clientes</button>
     <button class="tab" onclick="showLPTab('consignacion')"><i class="ti ti-key" style="font-size:13px"></i> Consignación</button>
+    <button class="tab" onclick="showLPTab('porMarca')"><i class="ti ti-filter" style="font-size:13px"></i> Por Marca</button>
   </div>
   <div id="lp-tab-precios">
     <div id="lp-container"></div>
@@ -557,6 +565,7 @@ body.no-delete .confirmDelete{display:none!important}
       </table>
     </div>
   </div>
+  <div id="lp-tab-pormarca" style="display:none"></div>
   <div id="lp-tab-consignacion" style="display:none">
     <div class="section-header" style="margin-top:.5rem">
       <h3 style="font-size:15px;font-weight:600"><i class="ti ti-key"></i> Vehículos en Consignación</h3>
@@ -707,27 +716,37 @@ body.no-delete .confirmDelete{display:none!important}
     <h2 class="section-title"><i class="ti ti-message-circle"></i> Chat interno</h2>
     <button class="btn" onclick="cargarMensajes()"><i class="ti ti-refresh"></i>Actualizar</button>
   </div>
-  <div style="display:grid;grid-template-columns:240px 1fr;gap:1rem;height:calc(100vh - 200px)">
-    <!-- Canales -->
-    <div class="card" style="overflow-y:auto">
-      <div class="card-head"><h3>Canales</h3></div>
-      <div id="chat-canales">
-        <div class="chat-canal active" onclick="selectCanal('general')" id="canal-general"><i class="ti ti-hash"></i> General</div>
-        <div class="chat-canal" onclick="selectCanal('gerencia')" id="canal-gerencia"><i class="ti ti-building"></i> Gerencia</div>
-        <div class="chat-canal" onclick="selectCanal('ventas')" id="canal-ventas"><i class="ti ti-receipt"></i> Ventas</div>
-        <div class="chat-canal" onclick="selectCanal('taller')" id="canal-taller"><i class="ti ti-tool"></i> Taller</div>
+  <div style="display:grid;grid-template-columns:260px 1fr;gap:1rem;height:calc(100vh - 200px)">
+    <!-- Sidebar -->
+    <div class="card" style="overflow-y:auto;display:flex;flex-direction:column">
+      <div class="card-head" style="padding:.75rem 1rem">
+        <h3 style="font-size:13px">💬 Mensajería</h3>
+        ${`<button class="btn btn-sm btn-primary" onclick="enviarComunicado()" id="btn-comunicado" style="display:none;font-size:11px"><i class="ti ti-speakerphone"></i>Comunicado</button>`}
       </div>
+      <!-- Canales grupales -->
+      <div style="padding:.5rem 1rem;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Canales</div>
+      <div id="chat-canales">
+        <div class="chat-canal active" onclick="selectCanal('general')" id="canal-general"><i class="ti ti-hash" style="font-size:13px"></i> General <span class="badge-unread" id="unread-general" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:auto"></span></div>
+        <div class="chat-canal" onclick="selectCanal('administrador')" id="canal-administrador"><i class="ti ti-shield" style="font-size:13px"></i> Administrador <span class="badge-unread" id="unread-administrador" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:auto"></span></div>
+        <div class="chat-canal" onclick="selectCanal('gerencia')" id="canal-gerencia"><i class="ti ti-building" style="font-size:13px"></i> Gerencia <span class="badge-unread" id="unread-gerencia" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:auto"></span></div>
+        <div class="chat-canal" onclick="selectCanal('ventas')" id="canal-ventas"><i class="ti ti-receipt" style="font-size:13px"></i> Ventas <span class="badge-unread" id="unread-ventas" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:auto"></span></div>
+        <div class="chat-canal" onclick="selectCanal('compras')" id="canal-compras"><i class="ti ti-shopping-cart" style="font-size:13px"></i> Compras <span class="badge-unread" id="unread-compras" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:auto"></span></div>
+        <div class="chat-canal" onclick="selectCanal('operaciones')" id="canal-operaciones"><i class="ti ti-tool" style="font-size:13px"></i> Operaciones <span class="badge-unread" id="unread-operaciones" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:auto"></span></div>
+        <div class="chat-canal" onclick="selectCanal('legal')" id="canal-legal"><i class="ti ti-scale" style="font-size:13px"></i> Legal <span class="badge-unread" id="unread-legal" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:auto"></span></div>
+      </div>
+      <!-- Usuarios en línea / DMs -->
+      <div style="padding:.5rem 1rem;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-top:.5rem">Mensajes directos</div>
+      <div id="chat-usuarios-lista" style="flex:1;overflow-y:auto"></div>
     </div>
     <!-- Mensajes -->
     <div class="card" style="display:flex;flex-direction:column">
       <div class="card-head">
         <h3 id="chat-canal-title"><i class="ti ti-hash"></i> General</h3>
-        <span id="chat-online-badge" style="font-size:11px;color:var(--green)"><i class="ti ti-circle-filled" style="font-size:8px"></i> En línea</span>
+        <div id="chat-online-badge" style="font-size:11px;color:var(--green);display:flex;align-items:center;gap:4px"></div>
       </div>
       <div id="chat-msgs" style="flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.75rem;min-height:100px"></div>
       <div style="padding:1rem;border-top:1px solid var(--border);display:flex;gap:8px">
         <input type="text" id="chat-input" placeholder="Escribe un mensaje…" style="flex:1" onkeydown="if(event.key==='Enter')enviarMensaje()">
-        <input type="text" id="chat-nombre" placeholder="Tu nombre" style="width:120px">
         <button class="btn btn-primary" onclick="enviarMensaje()"><i class="ti ti-send"></i></button>
       </div>
     </div>
@@ -783,11 +802,15 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab" onclick="showRrhhTab('funciones')"><i class="ti ti-list-check" style="font-size:13px"></i> Funciones por Puesto</button>
     <button class="tab" onclick="showRrhhTab('manual')"><i class="ti ti-book" style="font-size:13px"></i> Manual Operativo</button>
     <button class="tab" onclick="showRrhhTab('reglamento')"><i class="ti ti-gavel" style="font-size:13px"></i> Reglamento Interno</button>
+    <button class="tab" onclick="showRrhhTab('equipo')"><i class="ti ti-users" style="font-size:13px"></i> Equipo</button>
+    <button class="tab" onclick="showRrhhTab('planilla')"><i class="ti ti-currency-dollar" style="font-size:13px"></i> Planilla</button>
   </div>
   <div id="rrhh-organigrama" class="rrhh-tab"></div>
   <div id="rrhh-funciones" class="rrhh-tab" style="display:none"></div>
   <div id="rrhh-manual" class="rrhh-tab" style="display:none"></div>
   <div id="rrhh-reglamento" class="rrhh-tab" style="display:none"></div>
+  <div id="rrhh-equipo" class="rrhh-tab" style="display:none"></div>
+  <div id="rrhh-planilla" class="rrhh-tab" style="display:none"></div>
 </div>
 
 <!-- ======================== COMPRAS ======================== -->
@@ -803,15 +826,16 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab active" onclick="showComprasTab('todos')">Todos</button>
     <button class="tab" onclick="showComprasTab('Norvin')">Norvin</button>
     <button class="tab" onclick="showComprasTab('Alonso')">Alonso</button>
+    <button class="tab" onclick="showComprasTab('Gerencia')">Gerencia</button>
     <button class="tab" onclick="showComprasTab('aprobado')">Aprobados</button>
   </div>
   <div id="compras-stats" class="stats-grid" style="margin-bottom:1rem"></div>
   <div class="card" style="overflow-x:auto">
-    <table class="tbl" id="tbl-compras-table" style="min-width:1100px">
+    <table class="tbl" id="tbl-compras-table" style="min-width:1300px">
       <thead><tr>
-        <th>#</th><th>Fecha</th><th>Comprador</th><th>Marca</th><th>Modelo</th><th>Año</th>
+        <th>#</th><th>Fecha</th><th>Comprador</th><th>Tipo</th><th>Origen</th><th>Marca</th><th>Modelo</th><th>Año</th>
         <th>Estado (1-10)</th><th>Precio Compra</th><th>Observaciones</th>
-        <th>Dueño</th><th>Cédula Dueño</th><th>Antecedentes</th><th>Prenda</th>
+        <th>Dueño</th><th>Teléfono</th><th>Cédula</th><th>Primer Contacto</th><th>Antecedentes</th><th>Prenda</th>
         <th>Cita</th><th>Creado por</th><th>Aprobado</th><th>Acciones</th>
       </tr></thead>
       <tbody id="tbl-compras"></tbody>
@@ -889,7 +913,12 @@ body.no-delete .confirmDelete{display:none!important}
       <div class="form-group"><label>Tipo</label><select id="mv-tipo"><option>Sedán</option><option>SUV</option><option>Pickup</option><option>Van</option><option>Hatchback</option><option>Otro</option></select></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Precio de compra (USD $)</label><input id="mv-costo" type="number" placeholder="0" step="0.01" oninput="calcMargenVehiculo()"></div>
+      <div class="form-group"><label>Precio de compra (USD $)</label>
+  <div style="display:flex;gap:4px">
+    <input id="mv-costo" type="number" placeholder="0" step="0.01" oninput="calcMargenVehiculo()" style="flex:1">
+    <input id="mv-costo-ajuste" type="number" placeholder="+/- ajuste" step="0.01" style="width:90px;font-size:11px" title="Sumar o restar al precio" onchange="ajustarCosto()">
+  </div>
+</div>
       <div class="form-group"><label>Kilometraje</label><input id="mv-km" type="number" placeholder="0"></div>
     </div>
     <div class="form-row">
@@ -910,7 +939,7 @@ body.no-delete .confirmDelete{display:none!important}
           <div id="mv-pct-b" style="font-size:11px;color:var(--text2)">—</div>
         </div>
         <div style="background:var(--surface);border-radius:var(--radius);padding:.5rem">
-          <div style="font-size:10px;color:var(--text2);margin-bottom:2px">Precio mínimo (+10%)</div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:2px">Precio mínimo (+12%)</div>
           <div id="mv-min" style="font-size:15px;font-weight:700;color:var(--amber)">—</div>
           <div style="font-size:11px;color:var(--text3)">recomendado</div>
         </div>
@@ -1010,6 +1039,11 @@ body.no-delete .confirmDelete{display:none!important}
       <p style="font-size:10px;color:var(--text3);margin-top:.5rem">Las fotos se comprimen automáticamente antes de guardarse</p>
     </div>
 
+    <div class="form-row">
+      <div class="form-group"><label>Procedencia</label>
+        <select id="mv-procedencia"><option value="">-- Seleccionar --</option><option value="Grupo Q">Grupo Q</option><option value="Local">Local</option><option value="Particular">Particular</option><option value="Importado">Importado</option></select>
+      </div>
+    </div>
     <div class="form-group"><label>Observaciones</label><textarea id="mv-obs" placeholder="Accesorios, condición…"></textarea></div>
   </div>
   <div class="modal-foot">
@@ -1339,7 +1373,7 @@ body.no-delete .confirmDelete{display:none!important}
   </div>
   <div class="modal-foot">
     <button class="btn" onclick="closeOv('ov-gasto')">Cancelar</button>
-    <button class="btn btn-danger" onclick="guardarGasto()"><i class="ti ti-check"></i>Registrar gasto</button>
+    <button class="btn btn-primary" onclick="guardarGasto()"><i class="ti ti-check"></i>Registrar gasto</button>
   </div>
 </div>
 </div>
@@ -1770,9 +1804,17 @@ body.no-delete .confirmDelete{display:none!important}
     <input type="hidden" id="mcompra-id">
     <div class="form-row">
       <div class="form-group"><label>Comprador asignado</label>
-        <select id="mcompra-comprador"><option value="Norvin">Norvin</option><option value="Alonso">Alonso</option></select>
+        <select id="mcompra-comprador"><option value="Norvin">Norvin</option><option value="Alonso">Alonso</option><option value="Gerencia">Gerencia</option></select>
       </div>
       <div class="form-group"><label>Fecha de solicitud</label><input id="mcompra-fecha" type="date"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Tipo de compra</label>
+        <select id="mcompra-tipo"><option value="Directa">Directa</option><option value="Canje">Canje</option></select>
+      </div>
+      <div class="form-group"><label>Origen de compra</label>
+        <select id="mcompra-origen"><option value="Referido">Referido</option><option value="Redes">Redes sociales</option><option value="Piso">Piso (walk-in)</option><option value="Gerencia">Gerencia</option></select>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Marca</label><input id="mcompra-marca" placeholder="Toyota, Honda…"></div>
@@ -1790,10 +1832,14 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-group"><label>Observaciones (reparaciones, detalles)</label><textarea id="mcompra-obs" rows="2" placeholder="Ej: Reparar A/C, cambio de frenos, pintura…"></textarea></div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:.875rem;margin-top:.5rem">
-      <p style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:.75rem;text-transform:uppercase">Datos del dueño del vehículo</p>
+      <p style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:.75rem;text-transform:uppercase">Datos del cliente / dueño</p>
       <div class="form-row">
         <div class="form-group"><label>Nombre del dueño</label><input id="mcompra-duenio" placeholder="Nombre completo…"></div>
+        <div class="form-group"><label>No. Teléfono <span style="color:var(--red)">*</span></label><input id="mcompra-telefono" placeholder="8000-0000" required></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label>Cédula del dueño</label><input id="mcompra-cedula" placeholder="001-000000-0000X"></div>
+        <div class="form-group"><label>Fecha primer contacto</label><input id="mcompra-primercontacto" type="date"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>¿Tiene antecedentes?</label>
@@ -2083,7 +2129,7 @@ function seed(){
     {id:'c1',nombre:'Erick García',rol:'vendedor',cedula:'001-010185-0001K',tel:'8700-0001',email:'erick@autolote.com',dir:'Managua',notas:''},
     {id:'c2',nombre:'Eduardo Martínez',rol:'vendedor',cedula:'001-020290-0002J',tel:'8700-0002',email:'eduardo@autolote.com',dir:'Managua',notas:''},
     {id:'c3',nombre:'Yenkel López',rol:'vendedor',cedula:'001-030395-0003X',tel:'8700-0003',email:'yenkel@autolote.com',dir:'Managua',notas:''},
-    {id:'c4',nombre:'Norvin Ruiz',rol:'comprador',cedula:'001-150480-0004A',tel:'8800-0001',email:'norvin@gmail.com',dir:'Managua, Altamira',notas:'Cliente frecuente'},
+    {id:'c4',nombre:'Norvin Orozco',rol:'comprador',cedula:'001-150480-0004A',tel:'8800-0001',email:'norvin@gmail.com',dir:'Managua, Altamira',notas:'Cliente frecuente'},
     {id:'c5',nombre:'Alonso Pérez',rol:'comprador',cedula:'001-200575-0005B',tel:'8800-0002',email:'alonso@gmail.com',dir:'Managua, Bolonia',notas:''},
   ];
   vehiculos=[
@@ -2137,13 +2183,19 @@ let MODO=''; // Set after login
 
 // ======================== AUTH SYSTEM ========================
 const USERS={
-  'admin':    {pass:'001071080', modo:'admin',    label:'Administrador'},
-  'vendedor': {pass:'001ventas', modo:'vendedor', label:'Vendedor'},
-  'coordinador':{pass:'0012026', modo:'coordinador',label:'Coordinador Administrativo'},
-  'gerencia': {pass:'00099',     modo:'gerencia', label:'Gerencia General'},
-  'legal':    {pass:'Geraldvenadito', modo:'legal', label:'Legal / Abogado'},
-  'operaciones':{pass:'gerenteregional', modo:'operaciones2', label:'Jefe de Operaciones'},
-  'compras':  {pass:'compras007', modo:'compras', label:'Compras'}
+  'admin':      {pass:'001071080',      modo:'admin',        label:'Edwin Hernández',    nombre:'Edwin Hernández'},
+  'coordinador':{pass:'0012026',        modo:'coordinador',  label:'Steven Amador',      nombre:'Steven Amador'},
+  'gerente1':   {pass:'Julio2026',      modo:'gerente1',     label:'Julio Mendoza',      nombre:'Julio Mendoza'},
+  'gerente2':   {pass:'Gisselle2026',   modo:'gerente2',     label:'Gisselle Ortega',    nombre:'Gisselle Ortega'},
+  'operaciones':{pass:'gerenteregional',modo:'operaciones2', label:'Jordan Lopez',       nombre:'Jordan Lopez'},
+  'vendedor1':  {pass:'Eduardo2026',    modo:'vendedor',     label:'Eduardo Giacoman',   nombre:'Eduardo Giacoman'},
+  'vendedor2':  {pass:'Erick2026',      modo:'vendedor',     label:'Erick Araquistain',  nombre:'Erick Araquistain'},
+  'vendedor3':  {pass:'Yenkel2026',     modo:'vendedor',     label:'Yenkel Luna',        nombre:'Yenkel Luna'},
+  'vendedor4':  {pass:'Julio42026',     modo:'vendedor',     label:'Julio Gabriel',      nombre:'Julio Gabriel'},
+  'vendedor5':  {pass:'Marcelo2026',    modo:'vendedor',     label:'Marcelo Villarreal', nombre:'Marcelo Villarreal'},
+  'compras':    {pass:'compras007',     modo:'compras',      label:'Alonso Hasbani',     nombre:'Alonso Hasbani'},
+  'compras2':   {pass:'Norvin2026',     modo:'compras',      label:'Norvin Orozco',      nombre:'Norvin Orozco'},
+  'legal':      {pass:'Geraldvenadito', modo:'legal',        label:'Gerald Vado',        nombre:'Gerald Vado'}
 };
 
 function mostrarLogin(){
@@ -2171,7 +2223,8 @@ function intentarLogin(){
     if(needsNombre&&!nombreIngresado){errEl.textContent='⛔ Ingresá tu nombre completo para continuar';errEl.style.display='block';return;}
     MODO=user.modo;
     sessionStorage.setItem('nicauto_modo',MODO);
-    sessionStorage.setItem('nicauto_label',user.label);
+    sessionStorage.setItem('nicauto_modo_raw',usuario);
+    sessionStorage.setItem('nicauto_label',user.nombre||user.label);
     if(nombreIngresado){
       sessionStorage.setItem('nicauto_nombre',nombreIngresado);
       sessionStorage.setItem('nicauto_label',nombreIngresado+' ('+user.label+')');
@@ -2181,7 +2234,10 @@ function intentarLogin(){
     document.getElementById('app-content').style.display='block';
     aplicarModoAcceso();
     load().then(()=>{
-      if(['admin','coordinador','gerencia'].includes(MODO))renderDash();
+      if(['admin','coordinador','gerencia','gerente1','gerente2'].includes(MODO)){showPage('dashboard');renderDash();}
+      else if(MODO==='vendedor')showPage('listaprecios');
+      else if(MODO==='legal')showPage('legal');
+      else if(MODO==='compras')showPage('compras');
       try{refreshAIChips();}catch(e){}
       setTimeout(()=>{
         try{makeResizable('tbl-inv-table');}catch(e){}
@@ -2221,39 +2277,29 @@ function aplicarModoAcceso(){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
     document.getElementById('nb-listaprecios').style.display='flex';
     document.getElementById('nb-chat').style.display='flex';
+    document.getElementById('nb-pizarras').style.display='flex';
     document.getElementById('lp-modo-badge').style.display='inline-flex';
-    // Hide all delete buttons
-    document.querySelectorAll('.btn-danger').forEach(b=>b.style.display='none');
-    showPage('listaprecios');
   } else if(MODO==='coordinador'){
-    // All nav visible, no delete buttons
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='flex');
-    showPage('dashboard');
+  } else if(MODO==='gerente1'||MODO==='gerente2'){
+    document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='flex');
   } else if(MODO==='gerencia'){
-    // All nav visible, no delete buttons
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='flex');
-    showPage('dashboard');
   } else if(MODO==='legal'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
-    const nbLegal=document.getElementById('nb-legal');
-    if(nbLegal)nbLegal.style.display='flex';
+    ['nb-legal','nb-listaprecios','nb-pizarras','nb-chat'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
     showPage('legal');
   } else if(MODO==='operaciones2'){
-    // Operaciones: Lista precios + Operaciones + Chat
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
-    ['nb-listaprecios','nb-operaciones','nb-chat'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
+    ['nb-listaprecios','nb-operaciones','nb-chat','nb-pizarras'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
     showPage('operaciones');
   } else if(MODO==='compras'){
-    // Compras: solo módulo Compras
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
-    const nbC=document.getElementById('nb-compras');
-    if(nbC)nbC.style.display='flex';
+    ['nb-compras','nb-pizarras','nb-chat'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
     showPage('compras');
   } else if(MODO==='operaciones'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
-    document.getElementById('nb-inventario').style.display='flex';
-    document.getElementById('nb-listaprecios').style.display='flex';
-    document.getElementById('nb-chat').style.display='flex';
+    ['nb-inventario','nb-listaprecios','nb-chat','nb-pizarras'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
     document.getElementById('lp-modo-ops-badge').style.display='inline-flex';
     showPage('inventario');
   }
@@ -2472,7 +2518,21 @@ function diasDesde(fecha){
 }
 
 function renderListaPrecios(){
-  const veh=vehiculos.filter(v=>v.estado!=='Vendido');
+  const lpCont=document.getElementById('lp-container');
+  // Build filter bar if not exists
+  if(!document.getElementById('lp-filtros')){
+    const filtBar=document.createElement('div');
+    filtBar.id='lp-filtros';
+    filtBar.style.cssText='display:flex;gap:8px;margin-bottom:.75rem;flex-wrap:wrap;align-items:center';
+    filtBar.innerHTML=`<div class="search-wrap" style="flex:1;min-width:180px"><i class="ti ti-search"></i><input type="text" id="lp-q" placeholder="Marca, modelo, placa…" oninput="renderListaPrecios()" style="width:100%"></div>
+    <select id="lp-ftipo" onchange="renderListaPrecios()" style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)"><option value="">Todos los tipos</option><option>Sedán</option><option>SUV</option><option>Pickup</option><option>Van</option><option>Hatchback</option><option>Microbus</option><option>Camión</option><option>Otro</option></select>`;
+    lpCont.parentNode.insertBefore(filtBar,lpCont);
+  }
+  const q=(document.getElementById('lp-q')?.value||'').toLowerCase();
+  const ftipo=document.getElementById('lp-ftipo')?.value||'';
+  let veh=vehiculos.filter(v=>v.estado!=='Vendido');
+  if(q)veh=veh.filter(v=>((v.marca||'')+(v.modelo||'')+(v.placa||'')).toLowerCase().includes(q));
+  if(ftipo)veh=veh.filter(v=>v.tipo===ftipo);
   if(!veh.length){
     document.getElementById('lp-container').innerHTML=`<div class="empty"><i class="ti ti-tag"></i><p>No hay vehículos disponibles</p></div>`;
     return;
@@ -2519,7 +2579,7 @@ function lpRow(v,idx){
     <td>${badge(v.estado,'')}</td>
     <td>${gerCol}</td>
     <td><button class="btn btn-sm" onclick="event.stopPropagation();abrirProforma('${v.id}')" style="color:var(--purple);border-color:var(--purple);font-size:11px;padding:3px 8px"><i class="ti ti-file-description"></i>Proforma</button></td>
-    <td>${v.cierreVenta?`<span class="badge badge-green" style="font-size:11px">✓ Cierre enviado</span>`:`<button class="btn btn-sm btn-success" onclick="event.stopPropagation();cierreVentaLP('${v.id}')" style="font-size:11px;padding:3px 8px"><i class="ti ti-check"></i>Cierre de Venta</button>`}</td>
+    <td>${v.cierreVenta?`<div style="display:flex;gap:4px;align-items:center"><span class="badge badge-green" style="font-size:11px">✓ Cierre</span><button class="btn btn-sm" onclick="event.stopPropagation();resetCierreVentaLP('${v.id}')" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red)" title="Anular">✕</button></div>`:`<button class="btn btn-sm btn-success" onclick="event.stopPropagation();cierreVentaLP('${v.id}')" style="font-size:11px;padding:3px 8px"><i class="ti ti-check"></i>Cierre de Venta</button>`}</td>
   </tr>
   <tr id="lp-detail-${v.id}" style="display:none"><td colspan="14" style="padding:0;background:var(--surface2)">${lpDetailHtml(v)}</td></tr>`;
 }
@@ -2730,6 +2790,9 @@ function renderDash(){
     <div class="stat-card"><div class="stat-label"><i class="ti ti-building-bank"></i>Capital contable</div><div class="stat-value stat-blue">${fmtD(capitalContable)}</div></div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-calendar"></i>Ventas este mes</div><div class="stat-value stat-green">${fmtD(ingresosMes)}</div></div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-chart-arrows"></i>Utilidad este mes</div><div class="stat-value ${utilidadMes>=0?'stat-green':'stat-red'}">${fmtD(utilidadMes)}</div></div>
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-cash"></i>Caja Finanzas</div><div class="stat-value stat-green">${fmtD(saldoCaja)}</div></div>
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-building-bank"></i>Bancos totales</div><div class="stat-value stat-blue">${fmtD(saldoBanco)}</div></div>
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-arrows-exchange"></i>CxC Bancos</div><div class="stat-value stat-amber">${fmtD(cxcPend)}</div></div>
   `;
   const ultV=ventas.slice(-5).reverse();
   document.getElementById('dash-ventas-tbl').innerHTML=ultV.length?ultV.map(v=>{
@@ -2748,6 +2811,7 @@ function renderDash(){
   const bit5=bitacora.slice(-5).reverse();
   document.getElementById('dash-bit-preview').innerHTML=bit5.length?bit5.map(b=>bitItem(b,true)).join(''):`<div class="empty" style="padding:1.5rem"><i class="ti ti-notebook"></i><p>Sin actividad</p></div>`;
   renderDashChart();
+  renderDashAging();
 }
 
 // ======================== INVENTARIO ========================
@@ -2856,7 +2920,7 @@ function calcMargenVehiculo(){
   const ganB=listB-costo;
   const pctA=listA>0?((ganA/listA)*100).toFixed(1):0;
   const pctB=listB>0?((ganB/listB)*100).toFixed(1):0;
-  const min=costo*1.10;
+  const min=costo*1.12;
   const colorA=ganA>=0?'var(--green)':'var(--red)';
   const colorB=ganB>=0?'var(--blue)':'var(--red)';
   document.getElementById('mv-gan-a').textContent=listA>0?fmtD(ganA):'—';
@@ -2868,7 +2932,7 @@ function calcMargenVehiculo(){
   document.getElementById('mv-min').textContent=fmtD(min);
 }
 function guardarVehiculo(){
-  const f=['marca','modelo','anio','color','placa','tipo','precio','precioB','costo','km','motor','nomotor','chasis','trans','estado','obs','fechacompra','nombrecomprador','cedulacomprador','direccioncomprador','nacimientocomprador','prendado','agentecompra','mediopago','recibo'];
+  const f=['marca','modelo','anio','color','placa','tipo','precio','precioB','costo','km','motor','nomotor','chasis','trans','estado','obs','procedencia','fechacompra','nombrecomprador','cedulacomprador','direccioncomprador','nacimientocomprador','prendado','agentecompra','mediopago','recibo'];
   const vals={};f.forEach(k=>{const el=document.getElementById('mv-'+k);if(el)vals[k]=el.value;});
   if(!vals.marca||!vals.modelo){alert('Marca y modelo son obligatorios');return;}
   const id=document.getElementById('mv-id').value||uid();
@@ -3065,7 +3129,7 @@ function calcMargen(){
     chips.push(`<span style="background:${utilidad>=0?'var(--green-light)':'var(--red-light)'};color:${utilidad>=0?'var(--green)':'var(--red)'};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700">Utilidad neta: ${fmtD(utilidad)}</span>`);
     const precioMin=inversion*1.10;
     const precioIdeal=inversion*1.25;
-    if(pventa<precioMin)chips.push(`<span style="background:var(--red-light);color:var(--red);border-radius:20px;padding:3px 10px;font-size:11px">⚠ Mínimo sugerido (10%): ${fmtD(precioMin)}</span>`);
+    if(pventa<precioMin)chips.push(`<span style="background:var(--red-light);color:var(--red);border-radius:20px;padding:3px 10px;font-size:11px">⚠ Mínimo sugerido (12%): ${fmtD(precioMin)}</span>`);
     else if(pventa<precioIdeal)chips.push(`<span style="background:var(--amber-light);color:var(--amber);border-radius:20px;padding:3px 10px;font-size:11px">💡 Precio ideal (25%): ${fmtD(precioIdeal)}</span>`);
     else chips.push(`<span style="background:var(--green-light);color:var(--green);border-radius:20px;padding:3px 10px;font-size:11px">✓ Buen margen</span>`);
   }
@@ -3831,7 +3895,7 @@ function renderGastos(){
   </div>
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-building"></i> Gastos Administrativos / Generales</h3>
-      <button class="btn btn-sm btn-danger" onclick="abrirModalGasto()"><i class="ti ti-plus"></i>Nuevo gasto</button>
+      <button class="btn btn-sm btn-primary" onclick="abrirModalGasto()"><i class="ti ti-plus"></i>Nuevo gasto</button>
     </div>
     <table class="tbl"><thead><tr><th>Fecha</th><th>Categoría</th><th>Medio</th><th>Beneficiario</th><th>Comprobante</th><th>Monto</th><th>Descripción</th><th></th></tr></thead>
     <tbody>${admin.map(tblG).join('')||'<tr><td colspan="8"><div class="empty" style="padding:1.5rem"><i class="ti ti-building"></i><p>Sin gastos administrativos</p></div></td></tr>'}</tbody>
@@ -3840,7 +3904,7 @@ function renderGastos(){
   </div>
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-alert-triangle"></i> Gastos No Operativos</h3>
-      <button class="btn btn-sm btn-danger" onclick="abrirModalGasto()"><i class="ti ti-plus"></i>Nuevo gasto</button>
+      <button class="btn btn-sm btn-primary" onclick="abrirModalGasto()"><i class="ti ti-plus"></i>Nuevo gasto</button>
     </div>
     <table class="tbl"><thead><tr><th>Fecha</th><th>Categoría</th><th>Medio</th><th>Beneficiario</th><th>Comprobante</th><th>Monto</th><th>Descripción</th><th></th></tr></thead>
     <tbody>${noOp.map(tblG).join('')||'<tr><td colspan="8"><div class="empty" style="padding:1.5rem"><i class="ti ti-alert-triangle"></i><p>Sin gastos no operativos</p></div></td></tr>'}</tbody>
@@ -4807,61 +4871,180 @@ function exportExcelCtrlClientes(){
 
 // ======================== CHAT INTERNO ========================
 let canalActivo='general';
+let chatDMActivo=null; // null = canal grupal, string = nombre usuario DM
 let chatInterval=null;
+let presenceInterval=null;
+
+// Lista de todos los usuarios del sistema
+const TODOS_USUARIOS=[
+  {key:'admin',     nombre:'Edwin Hernández',    rol:'Administrador'},
+  {key:'coordinador',nombre:'Steven Amador',     rol:'Coordinador'},
+  {key:'gerente1',  nombre:'Julio Mendoza',      rol:'Gerente 1'},
+  {key:'gerente2',  nombre:'Gisselle Ortega',    rol:'Gerente 2'},
+  {key:'operaciones',nombre:'Jordan Lopez',      rol:'Operaciones'},
+  {key:'vendedor1', nombre:'Eduardo Giacoman',   rol:'Vendedor'},
+  {key:'vendedor2', nombre:'Erick Araquistain',  rol:'Vendedor'},
+  {key:'vendedor3', nombre:'Yenkel Luna',        rol:'Vendedor'},
+  {key:'vendedor4', nombre:'Julio Gabriel',      rol:'Vendedor'},
+  {key:'vendedor5', nombre:'Marcelo Villarreal', rol:'Vendedor'},
+  {key:'compras',   nombre:'Alonso Hasbani',     rol:'Compras'},
+  {key:'compras2',  nombre:'Norvin Orozco',      rol:'Compras'},
+  {key:'legal',     nombre:'Gerald Vado',        rol:'Legal'}
+];
+
+function getMiNombre(){
+  return sessionStorage.getItem('nicauto_label')||TODOS_USUARIOS.find(u=>u.key===sessionStorage.getItem('nicauto_modo_raw'))?.nombre||'Usuario';
+}
+
 function renderChat(){
   unseenMsgs=0;updateChatBadge();
+  // Show comunicado button for admin/gerentes
+  const btnCom=document.getElementById('btn-comunicado');
+  if(btnCom)btnCom.style.display=['admin','gerente1','gerente2','coordinador'].includes(MODO)?'block':'none';
+  actualizarPresencia();
   cargarMensajes();
   if(chatInterval)clearInterval(chatInterval);
-  chatInterval=setInterval(cargarMensajes,8000); // Auto-refresh cada 10 seg
+  chatInterval=setInterval(()=>{cargarMensajes();actualizarPresencia();},6000);
 }
+
+async function actualizarPresencia(){
+  // Save my presence
+  const miNombre=getMiNombre();
+  const presKey='presence_'+miNombre.replace(/\s/g,'_');
+  try{
+    await saveOne('mensajes',{id:presKey,tipo:'presence',nombre:miNombre,ts:Date.now(),canal:'_presence'});
+  }catch(e){}
+  // Read presence of others
+  renderUsuariosLista();
+}
+
+function renderUsuariosLista(){
+  const miNombre=getMiNombre();
+  const ahora=Date.now();
+  const onlineThreshold=30000; // 30 seconds
+  const presences=mensajes.filter(m=>m.tipo==='presence'&&m.nombre!==miNombre);
+  const onlineSet=new Set(presences.filter(p=>ahora-p.ts<onlineThreshold).map(p=>p.nombre));
+  const el=document.getElementById('chat-usuarios-lista');
+  if(!el)return;
+  const otros=TODOS_USUARIOS.filter(u=>u.nombre!==miNombre);
+  el.innerHTML=otros.map(u=>{
+    const online=onlineSet.has(u.nombre);
+    const dmKey='dm_'+[miNombre,u.nombre].sort().join('_');
+    const unread=mensajes.filter(m=>m.canal===dmKey&&m.nombre!==miNombre&&!m.leido).length;
+    const isActive=chatDMActivo===u.nombre;
+    return`<div class="chat-canal${isActive?' active':''}" onclick="selectDM('${u.nombre}')" style="display:flex;align-items:center;gap:8px">
+      <div style="width:8px;height:8px;border-radius:50%;background:${online?'var(--green)':'var(--text3)'}flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.nombre}</div>
+        <div style="font-size:10px;color:${online?'var(--green)':'var(--text3)'}">${online?'● En línea':'○ Desconectado'}</div>
+      </div>
+      ${unread>0?`<span style="background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px">${unread}</span>`:''}
+    </div>`;
+  }).join('');
+}
+
 function selectCanal(canal){
   canalActivo=canal;
+  chatDMActivo=null;
   document.querySelectorAll('.chat-canal').forEach(x=>x.classList.remove('active'));
   document.getElementById('canal-'+canal)?.classList.add('active');
-  const titles={'general':'# General','gerencia':'🏢 Gerencia','ventas':'📋 Ventas','taller':'🔧 Taller'};
-  document.getElementById('chat-canal-title').innerHTML=`<i class="ti ti-hash"></i> ${titles[canal]||canal}`;
+  const titles={general:'# General',administrador:'🛡️ Administrador',gerencia:'🏢 Gerencia',ventas:'📋 Ventas',compras:'🛒 Compras',operaciones:'⚙️ Operaciones',legal:'⚖️ Legal'};
+  document.getElementById('chat-canal-title').innerHTML=titles[canal]||canal;
   renderMensajes();
 }
+
+function selectDM(nombreUsuario){
+  chatDMActivo=nombreUsuario;
+  canalActivo=null;
+  document.querySelectorAll('.chat-canal').forEach(x=>x.classList.remove('active'));
+  document.getElementById('chat-canal-title').innerHTML=`💬 ${nombreUsuario}`;
+  renderUsuariosLista();
+  renderMensajes();
+}
+
 async function cargarMensajes(){
   try{
     const rows=await sbGet('mensajes');
     mensajes=rows||[];
     renderMensajes();
+    renderUsuariosLista();
+    actualizarBadgesCanales();
   }catch(e){console.error('Chat error:',e);}
 }
+
+function actualizarBadgesCanales(){
+  const miNombre=getMiNombre();
+  ['general','administrador','gerencia','ventas','compras','operaciones','legal'].forEach(canal=>{
+    const unread=mensajes.filter(m=>m.canal===canal&&m.nombre!==miNombre&&!m.leido).length;
+    const el=document.getElementById('unread-'+canal);
+    if(el){el.style.display=unread>0?'inline':'none';el.textContent=unread;}
+  });
+}
+
 function renderMensajes(){
-  const miNombre=document.getElementById('chat-nombre')?.value||localStorage.getItem('chat_nombre')||'Anónimo';
-  const datos=mensajes.filter(m=>m.canal===canalActivo).sort((a,b)=>a.ts-b.ts).slice(-50);
+  const miNombre=getMiNombre();
+  let canalFiltro;
+  if(chatDMActivo){
+    canalFiltro='dm_'+[miNombre,chatDMActivo].sort().join('_');
+  } else {
+    canalFiltro=canalActivo;
+  }
+  const datos=mensajes.filter(m=>m.canal===canalFiltro&&m.tipo!=='presence').sort((a,b)=>a.ts-b.ts).slice(-60);
   const div=document.getElementById('chat-msgs');
   div.innerHTML=datos.length?datos.map(m=>{
     const esMio=m.nombre===miNombre;
     const hora=new Date(m.ts).toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
-    return`<div class="chat-msg-item ${esMio?'mine':'other'}">
-      <div class="chat-msg-name">${m.nombre}</div>
-      ${m.texto}
-      <div class="chat-msg-time">${hora}</div>
+    const esComunicado=m.tipo==='comunicado';
+    if(esComunicado){
+      return`<div style="text-align:center;margin:.5rem 0">
+        <div style="background:linear-gradient(135deg,var(--blue),var(--blue-mid));color:#fff;border-radius:12px;padding:.75rem 1rem;display:inline-block;max-width:90%;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+          <div style="font-size:10px;font-weight:700;opacity:.8;margin-bottom:4px">📢 COMUNICADO — ${m.nombre}</div>
+          <div style="font-size:13px">${m.texto}</div>
+          <div style="font-size:10px;opacity:.7;margin-top:4px">${hora}</div>
+        </div>
+      </div>`;
+    }
+    return`<div style="display:flex;flex-direction:column;align-items:${esMio?'flex-end':'flex-start'};margin-bottom:4px">
+      ${!esMio?`<div style="font-size:10px;font-weight:700;color:var(--text2);margin-bottom:2px;margin-left:12px">${m.nombre}</div>`:''}
+      <div style="max-width:75%;padding:.625rem .875rem;border-radius:${esMio?'18px 18px 4px 18px':'18px 18px 18px 4px'};background:${esMio?'var(--blue)':'var(--surface2)'};color:${esMio?'#fff':'var(--text)'};font-size:13px;box-shadow:0 1px 3px rgba(0,0,0,.1)">
+        ${m.texto}
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;${esMio?'margin-right:4px':'margin-left:4px'}">${hora}</div>
     </div>`;
-  }).join(''):`<div class="empty" style="padding:2rem"><i class="ti ti-message-circle"></i><p>Sin mensajes aún. ¡Sé el primero!</p></div>`;
+  }).join(''):`<div class="empty" style="padding:2rem"><i class="ti ti-message-circle"></i><p>${chatDMActivo?`Iniciá una conversación con ${chatDMActivo}`:'Sin mensajes aún. ¡Sé el primero!'}</p></div>`;
   div.scrollTop=div.scrollHeight;
 }
+
 async function enviarMensaje(){
   const input=document.getElementById('chat-input');
-  const nombreInput=document.getElementById('chat-nombre');
   const texto=input.value.trim();
-  const nombre=nombreInput.value.trim()||localStorage.getItem('chat_nombre')||'Anónimo';
   if(!texto)return;
-  if(!nombreInput.value.trim()){
-    const n=prompt('¿Cuál es tu nombre?');
-    if(!n)return;
-    nombreInput.value=n;
-    localStorage.setItem('chat_nombre',n);
+  const miNombre=getMiNombre();
+  let canal;
+  if(chatDMActivo){
+    canal='dm_'+[miNombre,chatDMActivo].sort().join('_');
+  } else {
+    canal=canalActivo||'general';
   }
-  const msg={id:uid(),canal:canalActivo,nombre:nombreInput.value.trim(),texto,ts:Date.now()};
+  const msg={id:uid(),canal,nombre:miNombre,texto,ts:Date.now(),tipo:'mensaje',leido:false};
   mensajes.push(msg);
   input.value='';
   renderMensajes();
   await saveOne('mensajes',msg);
 }
+
+async function enviarComunicado(){
+  const texto=prompt('✉️ Escribí el comunicado para TODOS los usuarios:');
+  if(!texto||!texto.trim())return;
+  const miNombre=getMiNombre();
+  const msg={id:uid(),canal:'general',nombre:miNombre,texto:texto.trim(),ts:Date.now(),tipo:'comunicado',leido:false};
+  mensajes.push(msg);
+  await saveOne('mensajes',msg);
+  selectCanal('general');
+  alert('✅ Comunicado enviado a todos los usuarios en el canal General.');
+}
+
+
 
 // ======================== VER ANTICIPO EN INVENTARIO ========================
 function verAnticipo(vid){
@@ -6160,7 +6343,7 @@ let comprasTab='todos';
 
 function showComprasTab(t){
   comprasTab=t;
-  document.querySelectorAll('#page-compras .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['todos','Norvin','Alonso','aprobado'][i]===t));
+  document.querySelectorAll('#page-compras .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['todos','Norvin','Alonso','Gerencia','aprobado'][i]===t));
   renderCompras();
 }
 
@@ -6169,27 +6352,34 @@ function renderCompras(){
   let data=comprasData;
   if(comprasTab==='Norvin')data=data.filter(c=>c.comprador==='Norvin');
   else if(comprasTab==='Alonso')data=data.filter(c=>c.comprador==='Alonso');
+  else if(comprasTab==='Gerencia')data=data.filter(c=>c.comprador==='Gerencia');
   else if(comprasTab==='aprobado')data=data.filter(c=>c.aprobado);
   const norvinTotal=comprasData.filter(c=>c.comprador==='Norvin').reduce((s,c)=>s+Number(c.precio||0),0);
   const alonsoTotal=comprasData.filter(c=>c.comprador==='Alonso').reduce((s,c)=>s+Number(c.precio||0),0);
+  const gerenciaTotal=comprasData.filter(c=>c.comprador==='Gerencia').reduce((s,c)=>s+Number(c.precio||0),0);
   document.getElementById('compras-stats').innerHTML=`
     <div class="stat-card"><div class="stat-label">Total solicitudes</div><div class="stat-value stat-blue">${comprasData.length}</div></div>
     <div class="stat-card"><div class="stat-label">Norvin — inversión</div><div class="stat-value stat-green">${fmtD(norvinTotal)}</div></div>
     <div class="stat-card"><div class="stat-label">Alonso — inversión</div><div class="stat-value stat-purple">${fmtD(alonsoTotal)}</div></div>
+    <div class="stat-card"><div class="stat-label">Gerencia — inversión</div><div class="stat-value stat-blue">${fmtD(gerenciaTotal)}</div></div>
     <div class="stat-card"><div class="stat-label">Aprobados</div><div class="stat-value stat-amber">${comprasData.filter(c=>c.aprobado).length}</div></div>
     <div class="stat-card"><div class="stat-label">Rechazados</div><div class="stat-value" style="color:var(--red)">${comprasData.filter(c=>c.rechazado).length}</div></div>`;
   const tbody=document.getElementById('tbl-compras');
   tbody.innerHTML=data.length?data.map((comp,i)=>`<tr>
     <td style="font-weight:700;color:var(--text2);text-align:center">${i+1}</td>
     <td style="font-size:12px">${comp.fecha||'—'}</td>
-    <td><span class="badge badge-${comp.comprador==='Norvin'?'blue':'purple'}">${comp.comprador}</span></td>
+    <td><span class="badge badge-${comp.comprador==='Norvin'?'blue':comp.comprador==='Gerencia'?'green':'purple'}">${comp.comprador}</span></td>
+    <td><span class="badge badge-${comp.tipo==='Canje'?'amber':'blue'}" style="font-size:10px">${comp.tipo||'Directa'}</span></td>
+    <td><span class="badge badge-gray" style="font-size:10px">${comp.origen||'—'}</span></td>
     <td><b>${comp.marca||'—'}</b></td><td>${comp.modelo||'—'}</td>
     <td style="text-align:center">${comp.anio||'—'}</td>
     <td style="text-align:center"><span class="badge badge-${Number(comp.estado)>=8?'green':Number(comp.estado)>=5?'amber':'red'}">${comp.estado}/10</span></td>
     <td style="font-weight:700;color:var(--blue)">${comp.precio?fmtD(comp.precio):'—'}</td>
-    <td style="font-size:12px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${comp.obs||''}">${comp.obs||'—'}</td>
+    <td style="font-size:12px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${comp.obs||''}">${comp.obs||'—'}</td>
     <td style="font-size:12px">${comp.duenio||'—'}</td>
+    <td style="font-family:monospace;font-size:11px">${comp.telefono||'—'}</td>
     <td style="font-family:monospace;font-size:11px">${comp.cedula||'—'}</td>
+    <td style="font-size:11px">${comp.primercontacto||'—'}</td>
     <td><span class="badge badge-${comp.antecedentes==='No'?'green':comp.antecedentes==='Sí'?'red':'amber'}">${comp.antecedentes||'—'}</span></td>
     <td><span class="badge badge-${comp.prenda==='No'?'green':comp.prenda==='Sí'?'red':'amber'}">${comp.prenda||'—'}</span></td>
     <td>${citaBadge(comp.cita,comp.atendido)}</td>
@@ -6219,10 +6409,16 @@ function abrirModalCompra(id){
   const comp=id?comprasData.find(c=>c.id===id):null;
   document.getElementById('mcompra-id').value=id||'';
   document.getElementById('mcompra-title').textContent=id?'Editar solicitud':'Nueva solicitud';
-  ['comprador','fecha','marca','modelo','anio','estado','precio','color','obs','duenio','cedula','antecedentes','prenda'].forEach(f=>{
+  ['comprador','fecha','tipo','origen','marca','modelo','anio','estado','precio','color','obs','duenio','telefono','cedula','primercontacto','antecedentes','prenda'].forEach(f=>{
     const el=document.getElementById('mcompra-'+f);if(el)el.value=comp?comp[f]||'':'';
   });
-  if(!comp){document.getElementById('mcompra-fecha').value=new Date().toISOString().slice(0,10);document.getElementById('mcompra-estado').value='7';}
+  if(!comp){
+    document.getElementById('mcompra-fecha').value=new Date().toISOString().slice(0,10);
+    document.getElementById('mcompra-estado').value='7';
+    document.getElementById('mcompra-tipo').value='Directa';
+    document.getElementById('mcompra-origen').value='Referido';
+    document.getElementById('mcompra-primercontacto').value=new Date().toISOString().slice(0,10);
+  }
   if(document.getElementById('mcompra-cita'))document.getElementById('mcompra-cita').value=comp?.cita||'';
   if(document.getElementById('mcompra-atendido'))document.getElementById('mcompra-atendido').checked=comp?.atendido||false;
   openOv('ov-compra');
@@ -6230,10 +6426,12 @@ function abrirModalCompra(id){
 
 async function guardarCompra(){
   const marca=document.getElementById('mcompra-marca').value;if(!marca){alert('La marca es obligatoria');return;}
+  const telefono=document.getElementById('mcompra-telefono').value.trim();
+  if(!telefono){alert('⚠️ El número de teléfono es requerido');document.getElementById('mcompra-telefono').focus();return;}
   const id=document.getElementById('mcompra-id').value||uid();
   const existing=(contData.compras||[]).find(c=>c.id===id);
   const obj={id,aprobado:existing?.aprobado||false,creadoPor:existing?.creadoPor||getNombreUsuario(),fechaCreacion:existing?.fechaCreacion||new Date().toISOString().slice(0,10)};
-  ['comprador','fecha','marca','modelo','anio','estado','precio','color','obs','duenio','cedula','antecedentes','prenda','cita'].forEach(f=>{const el=document.getElementById('mcompra-'+f);if(el)obj[f]=el.value;});
+  ['comprador','fecha','tipo','origen','marca','modelo','anio','estado','precio','color','obs','duenio','telefono','cedula','primercontacto','antecedentes','prenda','cita'].forEach(f=>{const el=document.getElementById('mcompra-'+f);if(el)obj[f]=el.value;});
   obj.atendido=document.getElementById('mcompra-atendido')?.checked||false;
   contData.compras=contData.compras||[];
   const i=contData.compras.findIndex(c=>c.id===id);
@@ -7336,6 +7534,268 @@ function eliminarFotoSlot(slot){
   if(ph)ph.style.display='flex';
   if(del)del.style.display='none';
   if(inp)inp.value='';
+}
+
+// ======================== MISC FUNCTIONS ========================
+function ajustarCosto(){
+  const base=parseFloat(document.getElementById('mv-costo')?.value)||0;
+  const ajuste=parseFloat(document.getElementById('mv-costo-ajuste')?.value)||0;
+  if(ajuste!==0){
+    document.getElementById('mv-costo').value=(base+ajuste).toFixed(2);
+    document.getElementById('mv-costo-ajuste').value='';
+    calcMargenVehiculo();
+  }
+}
+
+async function resetCierreVentaLP(vid){
+  if(!confirm('¿Anular el cierre de venta y remover de Legal?'))return;
+  const vi=vehiculos.findIndex(x=>x.id===vid);
+  if(vi<0)return;
+  vehiculos[vi].cierreVenta=false;
+  delete vehiculos[vi].cierreFecha;
+  delete vehiculos[vi].cierreVendedor;
+  await saveOne('vehiculos',vehiculos[vi]);
+  contData.legales=(contData.legales||[]).filter(l=>l.vehiculoId!==vid);
+  await saveOne('contable',{id:'main',...contData});
+  alert('✅ Cierre anulado correctamente.');
+  renderListaPrecios();
+}
+
+// ======================== DASHBOARD AGING ========================
+function mostrarVehsPorDias(tipo,min,max){
+  const veh=vehiculos.filter(v=>v.tipo===tipo&&v.estado!=='Vendido').filter(v=>{
+    const d=diasDesde(v.fechacompra);return d!==null&&d>=min&&d<=max;
+  });
+  const label=max===9999?'+60 días':`${min}-${max} días`;
+  if(!veh.length){alert(`No hay ${tipo}s con ${label}`);return;}
+  alert(`${tipo}s con ${label}:\n\n${veh.map(v=>`• ${v.marca} ${v.modelo} ${v.anio} (${v.placa}) — ${diasDesde(v.fechacompra)} días`).join('\n')}`);
+}
+
+// ======================== LP POR MARCA ========================
+function renderLPPorMarca(){
+  const veh=vehiculos.filter(v=>v.estado!=='Vendido');
+  const marcas={};
+  veh.forEach(v=>{const m=v.marca||'Sin marca';if(!marcas[m])marcas[m]=[];marcas[m].push(v);});
+  const sorted=Object.keys(marcas).sort();
+  const el=document.getElementById('lp-tab-pormarca');
+  if(!el)return;
+  el.innerHTML=`
+  <div style="margin-bottom:1rem;display:flex;gap:6px;flex-wrap:wrap">
+    ${sorted.map(m=>`<button class="btn btn-sm" onclick="document.getElementById('pm-${m.replace(/[\s()]/g,'_')}')?.scrollIntoView({behavior:'smooth'})" style="font-size:11px">${m} (${marcas[m].length})</button>`).join('')}
+  </div>
+  ${sorted.map(m=>`
+  <div id="pm-${m.replace(/[\s()]/g,'_')}" class="card" style="margin-bottom:1rem">
+    <div class="card-head" style="background:var(--blue);color:#fff">
+      <h3><i class="ti ti-car"></i> ${m} — ${marcas[m].length} vehículo(s)</h3>
+      <span style="font-size:12px">Lista A: ${fmtD(marcas[m].reduce((s,v)=>s+Number(v.precio||0),0))}</span>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th>Modelo</th><th>Año</th><th>Placa</th><th>Color</th><th>Trans.</th><th>Km</th><th>Lista A</th><th>Lista B</th><th>Estado</th></tr></thead>
+      <tbody>${marcas[m].map(v=>`<tr>
+        <td><b>${v.modelo||'—'}</b></td><td>${v.anio||'—'}</td>
+        <td style="font-family:monospace;font-size:11px">${v.placa||'—'}</td>
+        <td>${v.color||'—'}</td><td>${v.trans||'—'}</td>
+        <td>${Number(v.km||0).toLocaleString()} km</td>
+        <td style="color:var(--green);font-weight:700">${v.precio?fmtD(v.precio):'—'}</td>
+        <td style="color:var(--blue);font-weight:700">${v.precioB?fmtD(v.precioB):'—'}</td>
+        <td>${badge(v.estado,'')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>`).join('')}`;
+}
+
+// ======================== SHOWLPTAB UPDATE ========================
+function showLPTab(t){
+  lpTab=t;
+  document.querySelectorAll('#page-listaprecios .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['precios','clientes','consignacion','porMarca'][i]===t));
+  document.getElementById('lp-tab-precios').style.display=t==='precios'?'block':'none';
+  document.getElementById('lp-tab-clientes').style.display=t==='clientes'?'block':'none';
+  document.getElementById('lp-tab-consignacion').style.display=t==='consignacion'?'block':'none';
+  const pm=document.getElementById('lp-tab-pormarca');if(pm)pm.style.display=t==='porMarca'?'block':'none';
+  if(t==='clientes')renderCtrlClientesLP();
+  if(t==='consignacion')renderConsig();
+  if(t==='porMarca')renderLPPorMarca();
+}
+
+// ======================== RRHH EQUIPO ========================
+const EQUIPOS_DEF=[
+  {id:'eq1',nombre:'Equipo de Gerencia',color:'#1971C2'},
+  {id:'eq2',nombre:'Equipo Ventas',color:'#2F9E44'},
+  {id:'eq3',nombre:'Equipo de Compras',color:'#E67700'},
+  {id:'eq4',nombre:'Equipo de Operaciones',color:'#6741D9'},
+  {id:'eq5',nombre:'Equipo de Taller',color:'#C92A2A'}
+];
+function renderEquipoRRHH(){
+  const equipos=EQUIPOS_DEF;
+  const miembros=contData.miembrosEquipo||{};
+  document.getElementById('rrhh-equipo').innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem">
+  ${equipos.map(eq=>{
+    const mem=miembros[eq.id]||Array(5).fill(null).map(()=>({nombre:'',foto:'',nacimiento:'',ingreso:'',celular:''}));
+    return`<div class="card">
+      <div class="card-head" style="background:${eq.color};color:#fff"><h3><i class="ti ti-users"></i> ${eq.nombre}</h3></div>
+      <div style="padding:.75rem">
+        ${mem.map((m,i)=>`<div style="border:1px solid var(--border);border-radius:var(--radius);padding:.625rem;margin-bottom:.5rem;display:flex;gap:.625rem;align-items:flex-start">
+          <div style="flex-shrink:0;cursor:pointer" onclick="document.getElementById('foto-eq-${eq.id}-${i}').click()">
+            <div style="width:50px;height:50px;border-radius:50%;background:var(--surface2);border:2px solid ${eq.color};display:flex;align-items:center;justify-content:center;overflow:hidden">
+              ${m&&m.foto?`<img src="${m.foto}" style="width:100%;height:100%;object-fit:cover">`:`<i class="ti ti-user" style="font-size:18px;color:var(--text3)"></i>`}
+            </div>
+            <input type="file" id="foto-eq-${eq.id}-${i}" accept="image/*" capture="environment" style="display:none" onchange="cargarFotoEquipo('${eq.id}',${i},this)">
+          </div>
+          <div style="flex:1;font-size:11px">
+            <input value="${m&&m.nombre||''}" placeholder="Nombre…" onchange="actualizarMiembro('${eq.id}',${i},'nombre',this.value)" style="width:100%;border:none;border-bottom:1px solid var(--border);background:transparent;font-weight:600;font-size:12px;padding:2px 0;margin-bottom:3px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px">
+              <input value="${m&&m.nacimiento||''}" placeholder="F.Nacimiento" type="date" onchange="actualizarMiembro('${eq.id}',${i},'nacimiento',this.value)" style="border:none;border-bottom:1px solid var(--border);background:transparent;font-size:10px;padding:1px">
+              <input value="${m&&m.ingreso||''}" placeholder="F.Ingreso" type="date" onchange="actualizarMiembro('${eq.id}',${i},'ingreso',this.value)" style="border:none;border-bottom:1px solid var(--border);background:transparent;font-size:10px;padding:1px">
+              <input value="${m&&m.celular||''}" placeholder="Celular" onchange="actualizarMiembro('${eq.id}',${i},'celular',this.value)" style="border:none;border-bottom:1px solid var(--border);background:transparent;font-size:10px;padding:1px;grid-column:span 2">
+            </div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+async function actualizarMiembro(eqId,idx,campo,val){
+  contData.miembrosEquipo=contData.miembrosEquipo||{};
+  if(!contData.miembrosEquipo[eqId])contData.miembrosEquipo[eqId]=Array(5).fill(null).map(()=>({nombre:'',foto:'',nacimiento:'',ingreso:'',celular:''}));
+  if(!contData.miembrosEquipo[eqId][idx])contData.miembrosEquipo[eqId][idx]={nombre:'',foto:'',nacimiento:'',ingreso:'',celular:''};
+  contData.miembrosEquipo[eqId][idx][campo]=val;
+  await saveOne('contable',{id:'main',...contData});
+}
+async function cargarFotoEquipo(eqId,idx,input){
+  const file=input.files[0];if(!file)return;
+  const compressed=await comprimirImagen(file,400,0.8);
+  contData.miembrosEquipo=contData.miembrosEquipo||{};
+  if(!contData.miembrosEquipo[eqId])contData.miembrosEquipo[eqId]=Array(5).fill(null).map(()=>({nombre:'',foto:'',nacimiento:'',ingreso:'',celular:''}));
+  if(!contData.miembrosEquipo[eqId][idx])contData.miembrosEquipo[eqId][idx]={nombre:'',foto:'',nacimiento:'',ingreso:'',celular:''};
+  contData.miembrosEquipo[eqId][idx].foto=compressed;
+  await saveOne('contable',{id:'main',...contData});
+  renderEquipoRRHH();
+}
+
+// ======================== RRHH PLANILLA ========================
+function renderPlanillaRRHH(){
+  const semanas=contData.planillaSemanas||[];
+  const puede=MODO==='admin';
+  document.getElementById('rrhh-planilla').innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <p style="font-size:13px;color:var(--text2)">Planilla semanal — No conectada a contabilidad</p>
+    ${puede?`<button class="btn btn-primary btn-sm" onclick="nuevaSemanaplanilla()"><i class="ti ti-plus"></i>Nueva semana</button>`:''}
+  </div>
+  ${!semanas.length?`<div class="empty"><i class="ti ti-currency-dollar"></i><p>No hay planillas registradas</p></div>`:''}
+  ${semanas.map((s,si)=>`<div class="card" style="margin-bottom:1rem">
+    <div class="card-head">
+      <h3>📅 Semana: ${s.fecha||'—'}</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="imprimirPlanilla(${si})"><i class="ti ti-printer"></i></button>
+        ${puede?`<button class="btn btn-sm btn-danger" onclick="eliminarSemana(${si})"><i class="ti ti-trash"></i></button>`:''}
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th style="width:30px">#</th><th>Nombre</th><th>Ingreso C$</th><th>Préstamo/Desc.</th><th>Neto a Recibir</th><th style="min-width:80px">Firma</th></tr></thead>
+      <tbody>${(s.lineas||[]).map((l,li)=>`<tr>
+        <td style="text-align:center;color:var(--text2)">${li+1}</td>
+        <td><input value="${l.nombre||''}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'nombre',this.value)" style="border:none;background:transparent;width:130px;font-size:12px"></td>
+        <td><input type="number" value="${l.ingreso||0}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'ingreso',this.value)" style="border:none;background:transparent;width:90px;text-align:right;font-size:12px"></td>
+        <td><input type="number" value="${l.descuento||0}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'descuento',this.value)" style="border:none;background:transparent;width:90px;text-align:right;color:var(--red);font-size:12px"></td>
+        <td style="font-weight:700;color:var(--green)">C$ ${Number(Number(l.ingreso||0)-Number(l.descuento||0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td style="border-bottom:1px solid var(--border)"></td>
+      </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:800">
+        <td colspan="2" style="padding:8px;text-align:right">TOTALES:</td>
+        <td style="padding:8px">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td style="padding:8px;color:var(--red)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td style="padding:8px;color:var(--green)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0)-Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td></td>
+      </tr></tfoot>
+    </table></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;padding:1.5rem 2rem 1rem;border-top:1px solid var(--border);margin-top:.5rem">
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid var(--border);padding-top:.5rem;font-size:11px;font-weight:700">Gerencia de Finanzas</div><div style="font-size:10px;color:var(--text2)">Edwin Hernández</div></div>
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid var(--border);padding-top:.5rem;font-size:11px;font-weight:700">Autorizado por</div></div>
+    </div>
+  </div>`).join('')}`;
+}
+async function nuevaSemanaplanilla(){
+  const fecha=prompt('Semana (ej: 01/07/2026 al 07/07/2026):');
+  if(!fecha)return;
+  contData.planillaSemanas=contData.planillaSemanas||[];
+  contData.planillaSemanas.unshift({fecha,lineas:Array(15).fill(null).map(()=>({nombre:'',ingreso:0,descuento:0}))});
+  await saveOne('contable',{id:'main',...contData});
+  renderPlanillaRRHH();
+}
+async function actualizarPlanilla(si,li,campo,val){
+  if(!contData.planillaSemanas?.[si]?.lineas?.[li])return;
+  contData.planillaSemanas[si].lineas[li][campo]=campo==='nombre'?val:parseFloat(val)||0;
+  await saveOne('contable',{id:'main',...contData});
+}
+async function eliminarSemana(si){
+  if(!confirmDelete('planilla'))return;
+  contData.planillaSemanas.splice(si,1);
+  await saveOne('contable',{id:'main',...contData});
+  renderPlanillaRRHH();
+}
+function imprimirPlanilla(si){
+  const s=contData.planillaSemanas?.[si];if(!s)return;
+  const totIng=(s.lineas||[]).filter(l=>l.nombre).reduce((t,l)=>t+Number(l.ingreso||0),0);
+  const totDesc=(s.lineas||[]).filter(l=>l.nombre).reduce((t,l)=>t+Number(l.descuento||0),0);
+  const html=`<div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:1rem">
+    <div style="text-align:center;border-bottom:2px solid #1971C2;padding-bottom:1rem;margin-bottom:1rem">
+      <div style="font-size:22px;font-weight:900">NICAUTO</div>
+      <div style="font-weight:700">PLANILLA DE PERSONAL — Semana: ${s.fecha}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#1971C2;color:#fff"><th style="padding:6px">#</th><th style="padding:6px">Nombre</th><th style="padding:6px">Ingreso</th><th style="padding:6px">Descuento</th><th style="padding:6px">Neto</th><th style="padding:6px;min-width:80px">Firma</th></tr></thead>
+      <tbody>${(s.lineas||[]).filter(l=>l.nombre).map((l,i)=>`<tr style="border-bottom:1px solid #eee"><td style="padding:5px;text-align:center">${i+1}</td><td style="padding:5px">${l.nombre}</td><td style="padding:5px;text-align:right">C$ ${Number(l.ingreso||0).toLocaleString('es-NI',{minimumFractionDigits:2})}</td><td style="padding:5px;text-align:right;color:#C92A2A">C$ ${Number(l.descuento||0).toLocaleString('es-NI',{minimumFractionDigits:2})}</td><td style="padding:5px;text-align:right;font-weight:700;color:#2F9E44">C$ ${Number(Number(l.ingreso||0)-Number(l.descuento||0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td><td style="border-bottom:1px solid #333"></td></tr>`).join('')}
+      <tr style="background:#f5f5f5;font-weight:700"><td colspan="2" style="padding:6px;text-align:right">TOTALES</td><td style="padding:6px;text-align:right">C$ ${totIng.toLocaleString('es-NI',{minimumFractionDigits:2})}</td><td style="padding:6px;text-align:right;color:#C92A2A">C$ ${totDesc.toLocaleString('es-NI',{minimumFractionDigits:2})}</td><td style="padding:6px;text-align:right;color:#2F9E44">C$ ${(totIng-totDesc).toLocaleString('es-NI',{minimumFractionDigits:2})}</td><td></td></tr>
+    </table>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;margin-top:2rem;padding-top:1rem;border-top:1px solid #ccc">
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid #333;padding-top:.5rem;font-size:11px;font-weight:700">Gerencia de Finanzas — Edwin Hernández</div></div>
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid #333;padding-top:.5rem;font-size:11px;font-weight:700">Autorizado por</div></div>
+    </div>
+  </div>`;
+  const win=window.open('','_blank','width=850,height=1000');
+  if(!win){alert('Permitir ventanas emergentes');return;}
+  win.document.open();
+  win.document.write('<!DOCTYPE html><html><head><title>Planilla NICAUTO</title><style>body{margin:0;padding:1rem;}@media print{body{margin:0;}}</style></head><body>'+html+'</body></html>');
+  win.document.close();win.onload=()=>{win.focus();win.print();};
+}
+
+// ======================== SHOWRRHHTAB UPDATE ========================
+function showRrhhTab(t){
+  rrhhTab=t;
+  document.querySelectorAll('#page-rrhh .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['organigrama','funciones','manual','reglamento','equipo','planilla'][i]===t));
+  document.querySelectorAll('.rrhh-tab').forEach(x=>x.style.display='none');
+  document.getElementById('rrhh-'+t).style.display='block';
+  if(t==='organigrama')renderOrganigrama();
+  else if(t==='funciones')renderFunciones();
+  else if(t==='manual')renderManual();
+  else if(t==='reglamento')renderReglamento();
+  else if(t==='equipo')renderEquipoRRHH();
+  else if(t==='planilla')renderPlanillaRRHH();
+}
+
+// ======================== DASHBOARD AGING RENDER ========================
+function renderDashAging(){
+  const el=document.getElementById('dash-aging');if(!el)return;
+  const tipos=['Pickup','Sedán','SUV','Van','Hatchback','Microbus','Camion','Otro'];
+  const dispVeh=vehiculos.filter(v=>v.estado!=='Vendido');
+  el.innerHTML=tipos.map(tipo=>{
+    const grupo=dispVeh.filter(v=>v.tipo===tipo);
+    if(!grupo.length)return'';
+    const r0=grupo.filter(v=>{const d=diasDesde(v.fechacompra);return d!==null&&d<=15;});
+    const r1=grupo.filter(v=>{const d=diasDesde(v.fechacompra);return d!==null&&d>15&&d<=30;});
+    const r2=grupo.filter(v=>{const d=diasDesde(v.fechacompra);return d!==null&&d>30&&d<=60;});
+    const r3=grupo.filter(v=>{const d=diasDesde(v.fechacompra);return d!==null&&d>60;});
+    return`<div class="card" style="margin-bottom:.625rem">
+      <div class="card-head" style="padding:.5rem 1rem;background:var(--surface2)"><h3 style="font-size:13px"><i class="ti ti-car"></i> ${tipo} (${grupo.length})</h3></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:.5rem">
+        <div onclick="mostrarVehsPorDias('${tipo}',0,15)" style="cursor:pointer;text-align:center;padding:6px;border-radius:var(--radius);background:var(--green-light)"><div style="font-size:20px;font-weight:800;color:var(--green)">${r0.length}</div><div style="font-size:10px;color:var(--text2)">0-15 días</div></div>
+        <div onclick="mostrarVehsPorDias('${tipo}',16,30)" style="cursor:pointer;text-align:center;padding:6px;border-radius:var(--radius);background:var(--blue-light)"><div style="font-size:20px;font-weight:800;color:var(--blue)">${r1.length}</div><div style="font-size:10px;color:var(--text2)">16-30 días</div></div>
+        <div onclick="mostrarVehsPorDias('${tipo}',31,60)" style="cursor:pointer;text-align:center;padding:6px;border-radius:var(--radius);background:var(--amber-light)"><div style="font-size:20px;font-weight:800;color:var(--amber)">${r2.length}</div><div style="font-size:10px;color:var(--text2)">31-60 días</div></div>
+        <div onclick="mostrarVehsPorDias('${tipo}',61,9999)" style="cursor:pointer;text-align:center;padding:6px;border-radius:var(--radius);background:var(--red-light)"><div style="font-size:20px;font-weight:800;color:var(--red)">${r3.length}</div><div style="font-size:10px;color:var(--text2)">+60 días</div></div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function makeResizable(tableId){
