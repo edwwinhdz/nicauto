@@ -498,7 +498,8 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab active" onclick="showContTab('caja')">Caja y Banco</button>
     <button class="tab" onclick="showContTab('cuentas')">Cuentas</button>
     <button class="tab" onclick="showContTab('gastos')">Gastos</button>
-    <button class="tab" onclick="showContTab('planilla')">Planilla Comisiones</button>
+    <button class="tab" onclick="showContTab('planilla')">Planilla Personal</button>
+    <button class="tab" onclick="showContTab('comisiones')">Comisiones</button>
     <button class="tab" onclick="showContTab('catalogo')">Catálogo Contable</button>
     <button class="tab" onclick="showContTab('balance')">Balance General</button>
     <button class="tab" onclick="showContTab('estado')">Estado de Resultados</button>
@@ -508,10 +509,13 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab" onclick="showContTab('costosfijos')">Costos Fijos</button>
     <button class="tab" onclick="showContTab('proyeccion')">Proyección</button>
   </div>
+  <div id="cont-planilla" class="cont-tab" style="display:none"></div>
+  <div id="cont-comisiones" class="cont-tab" style="display:none"></div>
   <div id="cont-caja" class="cont-tab"></div>
   <div id="cont-cuentas" class="cont-tab" style="display:none"></div>
   <div id="cont-gastos" class="cont-tab" style="display:none"></div>
   <div id="cont-planilla" class="cont-tab" style="display:none"></div>
+  <div id="cont-comisiones" class="cont-tab" style="display:none"></div>
   <div id="cont-catalogo" class="cont-tab" style="display:none"></div>
   <div id="cont-balance" class="cont-tab" style="display:none"></div>
   <div id="cont-estado" class="cont-tab" style="display:none"></div>
@@ -584,11 +588,13 @@ body.no-delete .confirmDelete{display:none!important}
 </div>
 <div class="page" id="page-pizarras">
   <div class="section-header">
-    <h2 class="section-title"><i class="ti ti-chart-dots"></i> Pizarras de rendimiento</h2>
+    <h2 class="section-title" id="piz-titulo"><i class="ti ti-chart-dots"></i> Pizarra</h2>
     <div style="display:flex;gap:8px;align-items:center">
+      <span id="piz-dias-badge" style="font-size:12px;color:var(--text2);font-weight:600"></span>
       <select id="piz-mes" onchange="renderPizarras()" style="width:auto">
         <option value="">Mes actual</option>
       </select>
+      <button class="btn btn-success" onclick="cerrarMesPizarra()" title="Cerrar mes y archivar"><i class="ti ti-archive"></i>Cerrar mes</button>
       <button class="btn" onclick="exportExcelPizarras()"><i class="ti ti-download"></i>Excel</button>
     </div>
   </div>
@@ -596,10 +602,13 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab active" onclick="showPizTab('bitacora-kpi')"><i class="ti ti-notebook" style="font-size:13px"></i> Bitácora Ventas</button>
     <button class="tab" onclick="showPizTab('rendimiento-kpi')"><i class="ti ti-trending-up" style="font-size:13px"></i> Rendimiento Vendedores</button>
     <button class="tab" onclick="showPizTab('compras-kpi')"><i class="ti ti-shopping-cart" style="font-size:13px"></i> KPI Compras</button>
+    <button class="tab" onclick="showPizTab('historial-kpi')"><i class="ti ti-archive" style="font-size:13px"></i> Historial</button>
   </div>
+  <div id="piz-frase-dia"></div>
   <div id="piz-bitacora-kpi" class="piz-tab"></div>
   <div id="piz-rendimiento-kpi" class="piz-tab" style="display:none"></div>
   <div id="piz-compras-kpi" class="piz-tab" style="display:none"></div>
+  <div id="piz-historial-kpi" class="piz-tab" style="display:none"></div>
 </div>
 
 <!-- ======================== INVENTARIO GERENCIA / TALLER ======================== -->
@@ -758,6 +767,7 @@ body.no-delete .confirmDelete{display:none!important}
   <div class="section-header">
     <h2 class="section-title"><i class="ti ti-scale"></i> Legal — Escrituración</h2>
     <button class="btn" onclick="renderLegal()"><i class="ti ti-refresh"></i>Actualizar</button>
+    <button class="btn" onclick="exportarLegal()"><i class="ti ti-download"></i>Exportar</button>
   </div>
   <div style="background:var(--blue-light);border:1px solid #74C0FC;border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;font-size:13px">
     <i class="ti ti-info-circle" style="color:var(--blue)"></i> Vehículos pendientes de escriturar. El vendedor activa el <b>Cierre de Venta</b> desde la Lista de Precios para enviar aquí.
@@ -767,8 +777,10 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab" onclick="showLegalTab('proceso')"><i class="ti ti-progress" style="font-size:13px"></i> En Proceso</button>
     <button class="tab" onclick="showLegalTab('escriturado')"><i class="ti ti-check" style="font-size:13px"></i> Escriturados</button>
     <button class="tab" onclick="showLegalTab('todos')"><i class="ti ti-list" style="font-size:13px"></i> Todos</button>
+    <button class="tab" onclick="showLegalTab('expedientes')"><i class="ti ti-folder" style="font-size:13px"></i> Expedientes</button>
   </div>
   <div id="legal-list"></div>
+  <div id="legal-expedientes" style="display:none"></div>
 </div>
 
 <!-- ======================== OPERACIONES ======================== -->
@@ -803,14 +815,12 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab" onclick="showRrhhTab('manual')"><i class="ti ti-book" style="font-size:13px"></i> Manual Operativo</button>
     <button class="tab" onclick="showRrhhTab('reglamento')"><i class="ti ti-gavel" style="font-size:13px"></i> Reglamento Interno</button>
     <button class="tab" onclick="showRrhhTab('equipo')"><i class="ti ti-users" style="font-size:13px"></i> Equipo</button>
-    <button class="tab" onclick="showRrhhTab('planilla')"><i class="ti ti-currency-dollar" style="font-size:13px"></i> Planilla</button>
   </div>
   <div id="rrhh-organigrama" class="rrhh-tab"></div>
   <div id="rrhh-funciones" class="rrhh-tab" style="display:none"></div>
   <div id="rrhh-manual" class="rrhh-tab" style="display:none"></div>
   <div id="rrhh-reglamento" class="rrhh-tab" style="display:none"></div>
   <div id="rrhh-equipo" class="rrhh-tab" style="display:none"></div>
-  <div id="rrhh-planilla" class="rrhh-tab" style="display:none"></div>
 </div>
 
 <!-- ======================== COMPRAS ======================== -->
@@ -1873,6 +1883,7 @@ body.no-delete .confirmDelete{display:none!important}
   <div class="modal-head"><h3 id="mconsig-title">Vehículo en consignación</h3><button class="btn-ghost btn" onclick="closeOv('ov-consig')"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
     <input type="hidden" id="mconsig-id">
+    <input type="hidden" id="mconsig-vehiculoId">
     <div class="form-group"><label>Dueño del vehículo</label><input id="mconsig-duenio" placeholder="Nombre del propietario…"></div>
     <div class="form-row">
       <div class="form-group"><label>Marca</label><input id="mconsig-marca" placeholder="Toyota…"></div>
@@ -1895,7 +1906,10 @@ body.no-delete .confirmDelete{display:none!important}
       <div class="form-group"><label>Lista B (USD $)</label><input id="mconsig-precioB" type="number" step="0.01" placeholder="0.00"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Comisión NICAUTO (%)</label><input id="mconsig-comision" type="number" placeholder="10"></div>
+      <div class="form-group"><label>Precio pactado con dueño (USD $)</label><input id="mconsig-preciopactado" type="number" step="0.01" placeholder="0.00"></div>
+      <div class="form-group"><label>Comisión NICAUTO (USD $)</label><input id="mconsig-comision" type="number" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="form-row">
       <div class="form-group"><label>Estado</label>
         <select id="mconsig-estado"><option>Disponible</option><option>Reservado</option><option>Vendido</option></select>
       </div>
@@ -2234,7 +2248,7 @@ function intentarLogin(){
     document.getElementById('app-content').style.display='block';
     aplicarModoAcceso();
     load().then(()=>{
-      if(['admin','coordinador','gerencia','gerente1','gerente2'].includes(MODO)){showPage('dashboard');renderDash();}
+      if(['admin','gerente1','gerente2'].includes(MODO)){showPage('dashboard');renderDash();} else if(['coordinador','gerencia'].includes(MODO)){showPage('inventario');}
       else if(MODO==='vendedor')showPage('listaprecios');
       else if(MODO==='legal')showPage('legal');
       else if(MODO==='compras')showPage('compras');
@@ -2281,10 +2295,12 @@ function aplicarModoAcceso(){
     document.getElementById('lp-modo-badge').style.display='inline-flex';
   } else if(MODO==='coordinador'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='flex');
+    document.getElementById('nb-dashboard').style.display='none';
   } else if(MODO==='gerente1'||MODO==='gerente2'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='flex');
   } else if(MODO==='gerencia'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='flex');
+    document.getElementById('nb-dashboard').style.display='none';
   } else if(MODO==='legal'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
     ['nb-legal','nb-listaprecios','nb-pizarras','nb-chat'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
@@ -2304,6 +2320,9 @@ function aplicarModoAcceso(){
     showPage('inventario');
   }
   // Hide delete buttons for non-admin via CSS class
+  // RRHH solo para admin, gerente1, gerente2
+  const nbRrhh=document.getElementById('nb-rrhh');
+  if(nbRrhh&&!['admin','gerente1','gerente2'].includes(MODO))nbRrhh.style.display='none';
   if(MODO!=='admin'){
     document.body.classList.add('no-delete');
     window._canDelete=false;
@@ -2542,7 +2561,7 @@ function renderListaPrecios(){
     <table class="tbl" id="lp-tbl" style="min-width:900px">
       <thead><tr>
         <th style="width:36px">#</th><th>Vehículo</th><th>Placa</th><th>Km</th><th>Trans.</th><th>Color</th><th>Motor</th>
-        <th>Días</th><th>Lista A</th><th>Lista B</th><th>Comisión</th><th>Estado</th><th>Precio Gerencia</th><th>Proforma</th><th>Cierre Venta</th>
+        <th>Días</th><th>Lista A</th><th>Lista B</th><th>Comisión</th><th>Estado</th><th>Precio Gerencia</th><th>Proforma</th><th>Cierre Venta</th><th>Consig.</th>
       </tr></thead>
       <tbody>${sortByTipo(veh).map((v,i)=>lpRow(v,i)).join('')}</tbody>
     </table>
@@ -2580,8 +2599,9 @@ function lpRow(v,idx){
     <td>${gerCol}</td>
     <td><button class="btn btn-sm" onclick="event.stopPropagation();abrirProforma('${v.id}')" style="color:var(--purple);border-color:var(--purple);font-size:11px;padding:3px 8px"><i class="ti ti-file-description"></i>Proforma</button></td>
     <td>${v.cierreVenta?`<div style="display:flex;gap:4px;align-items:center"><span class="badge badge-green" style="font-size:11px">✓ Cierre</span><button class="btn btn-sm" onclick="event.stopPropagation();resetCierreVentaLP('${v.id}')" style="font-size:10px;padding:2px 6px;color:var(--red);border-color:var(--red)" title="Anular">✕</button></div>`:`<button class="btn btn-sm btn-success" onclick="event.stopPropagation();cierreVentaLP('${v.id}')" style="font-size:11px;padding:3px 8px"><i class="ti ti-check"></i>Cierre de Venta</button>`}</td>
+    <td>${(contData.consignaciones||[]).find(cs=>cs.vehiculoId===v.id)?`<span class="badge badge-amber" style="font-size:10px">✓ Consig.</span>`:`<button class="btn btn-sm" onclick="event.stopPropagation();abrirConsigDesdeLP('${v.id}')" style="font-size:11px;padding:3px 8px;color:var(--amber);border-color:var(--amber)"><i class="ti ti-key"></i>Consig.</button>`}</td>
   </tr>
-  <tr id="lp-detail-${v.id}" style="display:none"><td colspan="14" style="padding:0;background:var(--surface2)">${lpDetailHtml(v)}</td></tr>`;
+  <tr id="lp-detail-${v.id}" style="display:none"><td colspan="15" style="padding:0;background:var(--surface2)">${lpDetailHtml(v)}</td></tr>`;
 }
 
 function lpDetailHtml(v){
@@ -3256,7 +3276,10 @@ function abrirModalVenta(id){
   sVend.innerHTML='<option value="">-- Seleccionar --</option>'+clientes.filter(c=>c.rol==='vendedor').map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   const sVeh=document.getElementById('mvt-vehiculo');
   const dispVeh=vehiculos.filter(x=>x.estado==='Disponible'||x.estado==='Reservado'||(v&&x.id===v.vehiculoId));
-  sVeh.innerHTML='<option value="">-- Seleccionar vehículo --</option>'+dispVeh.map(x=>`<option value="${x.id}">${x.marca} ${x.modelo} ${x.anio} (${x.placa}) — ${fmtD(x.precio)}</option>`).join('');
+  const consigs=(contData.consignacion||[]).filter(cs=>cs.estado!=='Vendido');
+  sVeh.innerHTML='<option value="">-- Seleccionar vehículo --</option>'+
+    (dispVeh.length?`<optgroup label="── Inventario NICAUTO ──">${dispVeh.map(x=>`<option value="${x.id}">${x.marca} ${x.modelo} ${x.anio} (${x.placa}) — ${fmtD(x.precio)}</option>`).join('')}</optgroup>`:'')+ 
+    (consigs.length?`<optgroup label="── Consignación ──">${consigs.map(x=>`<option value="CONSIG_${x.id}">${x.marca} ${x.modelo} ${x.anio} (${x.placa||'—'}) — ${fmtD(x.precioA||0)} [Consig.]</option>`).join('')}</optgroup>`:'');
   if(v){
     sComp.value=v.compradorId||'';sVend.value=v.vendedorId||'';sVeh.value=v.vehiculoId||'';
     document.getElementById('mvt-precio').value=parseFloat(v.precio||0).toFixed(2);
@@ -3284,6 +3307,27 @@ function abrirModalVenta(id){
 function autoFill(){
   const vid=document.getElementById('mvt-vehiculo').value;
   if(!vid)return;
+
+  // Check if it's a consignacion vehicle
+  if(vid.startsWith('CONSIG_')){
+    const consigId=vid.replace('CONSIG_','');
+    const cs=(contData.consignacion||[]).find(x=>x.id===consigId);
+    if(!cs)return;
+    document.getElementById('mvt-precio').value=parseFloat(cs.precioA||0).toFixed(2);
+    document.getElementById('mvt-costo').value=parseFloat(cs.preciopactado||0).toFixed(2);
+    const ref=document.getElementById('mvt-rep-ref');
+    if(ref){
+      ref.style.display='block';
+      ref.innerHTML=`<i class="ti ti-key" style="color:var(--amber)"></i> <b>Vehículo en Consignación</b> — Dueño: ${cs.duenio||'—'}
+      <br><span style="color:var(--green)">Lista A: <b>${fmtD(cs.precioA||0)}</b></span>
+      ${cs.precioB?`<span style="color:var(--blue);margin-left:12px">Lista B: <b>${fmtD(cs.precioB||0)}</b></span>`:''}
+      ${cs.preciopactado?`<br><span style="color:var(--text2)">Precio pactado dueño: <b>${fmtD(cs.preciopactado)}</b></span>`:''}
+      ${cs.comision?`<span style="color:var(--purple);margin-left:12px">Comisión NICAUTO: <b>${fmtD(cs.comision)}</b></span>`:''}`;
+    }
+    calcLiquidacion();
+    return;
+  }
+
   const v=vehiculos.find(x=>x.id===vid);
   if(!v)return;
   document.getElementById('mvt-precio').value=parseFloat(v.precio||0).toFixed(2);
@@ -3369,8 +3413,13 @@ async function guardarVenta(){
 
   if(!vehiculoId||!precio){alert('Vehículo y precio de venta son obligatorios');return;}
 
+  // Handle consignacion vehicles
+  const esConsig=vehiculoId.startsWith('CONSIG_');
+  const consigId=esConsig?vehiculoId.replace('CONSIG_',''):null;
+  const cs=esConsig?(contData.consignacion||[]).find(x=>x.id===consigId):null;
+
   // Calcular costo total con reparaciones
-  const vh=vehiculos.find(x=>x.id===vehiculoId);
+  const vh=esConsig?null:vehiculos.find(x=>x.id===vehiculoId);
   const reps=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo),0):0;
   const costoTotal=costoInput+reps;
   const ganancia=precio-costoTotal;
@@ -3402,16 +3451,23 @@ async function guardarVenta(){
 
   if(estado==='Completada'){
     // 1. Cambiar estado vehículo a Vendido
-    const vi=vehiculos.findIndex(v=>v.id===vehiculoId);
-    if(vi>=0){vehiculos[vi].estado='Vendido';await saveOne('vehiculos',vehiculos[vi]);}
+    if(esConsig&&cs){
+      // Mark consignacion as sold
+      const ci=(contData.consignacion||[]).findIndex(x=>x.id===consigId);
+      if(ci>=0){contData.consignacion[ci].estado='Vendido';contData.consignacion[ci].fechaVenta=fecha;}
+    } else {
+      const vi=vehiculos.findIndex(v=>v.id===vehiculoId);
+      if(vi>=0){vehiculos[vi].estado='Vendido';await saveOne('vehiculos',vehiculos[vi]);}
+    }
 
     contData.recibos=contData.recibos||[];
     contData.cuentas=contData.cuentas||[];
     const comp=clientes.find(x=>x.id===compradorId);
     const compNombre=nombreFactura||comp?.nombre||'';
     const comprobanteId=uid(); // agrupa todas las partidas de esta venta
-    const descVeh=vh?`${vh.marca} ${vh.modelo} ${vh.anio} (${vh.placa})`:'';
-
+    const descVeh=esConsig?`${cs?.marca} ${cs?.modelo} ${cs?.anio} (${cs?.placa||'—'}) [Consig.]`:vh?`${vh.marca} ${vh.modelo} ${vh.anio} (${vh.placa})`:'';
+    // Use real vehiculoId for partidas
+    const vehIdPartida=esConsig?('CONSIG_'+consigId):vehiculoId;
     // ================================================================
     // PARTIDAS DOBLES CONTABLES — VENTA DE VEHÍCULO
     // ================================================================
@@ -3571,7 +3627,7 @@ function showContTab(t){
   document.getElementById('cont-'+t).style.display='block';
   const tabs=['caja','cuentas','gastos','planilla','catalogo','balance','estado','flujo','periodos','auxiliares','costosfijos','proyeccion'];
   document.querySelectorAll('#page-contable .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',tabs[i]===t));
-  ({caja:renderCaja,cuentas:renderCuentas,gastos:renderGastos,planilla:renderPlanilla,catalogo:renderCatalogo,balance:renderBalance,estado:renderEstado,flujo:renderFlujo,periodos:renderPeriodosCerrados,auxiliares:renderAuxiliares,costosfijos:renderCostosFijos,proyeccion:renderProyeccion})[t]?.();
+  ({caja:renderCaja,cuentas:renderCuentas,gastos:renderGastos,planilla:renderPlanillaContable,comisiones:renderComisionesContable,catalogo:renderCatalogo,balance:renderBalance,estado:renderEstado,flujo:renderFlujo,periodos:renderPeriodosCerrados,auxiliares:renderAuxiliares,costosfijos:renderCostosFijos,proyeccion:renderProyeccion})[t]?.();
 }
 
 // ---- PLANILLA COMISIONES ----
@@ -4278,23 +4334,32 @@ function showPizTab(t){
 }
 
 function renderPizarras(){
-  // Populate mes selector
+  actualizarPizarraTitulo();
   const sel=document.getElementById('piz-mes');
   const meses=new Set(ventas.filter(v=>v.fecha).map(v=>v.fecha.slice(0,7)));
   const cur=sel.value;
-  sel.innerHTML='<option value="">Todos los períodos</option>'+[...meses].sort().reverse().map(m=>`<option value="${m}"${m===cur?' selected':''}>${m}</option>`).join('');
+  sel.innerHTML='<option value="">Mes actual</option>'+[...meses].sort().reverse().map(m=>`<option value="${m}"${m===cur?' selected':''}>${m}</option>`).join('');
   showPizTab(pizTab);
 }
 
-function getVentasFiltradas(){
-  const mes=document.getElementById('piz-mes')?.value||'';
-  return ventas.filter(v=>v.estado==='Completada'&&(!mes||v.fecha.startsWith(mes)));
+function showPizTab(t){
+  pizTab=t;
+  document.querySelectorAll('#page-pizarras .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['bitacora-kpi','rendimiento-kpi','compras-kpi','historial-kpi'][i]===t));
+  document.querySelectorAll('.piz-tab').forEach(x=>x.style.display='none');
+  document.getElementById('piz-'+t).style.display='block';
+  renderPizTab(t);
 }
 
 function renderPizTab(t){
   if(t==='bitacora-kpi')renderPizBitacora();
   else if(t==='rendimiento-kpi')renderPizRendimiento();
-  else renderPizCompras();
+  else if(t==='compras-kpi')renderPizCompras();
+  else if(t==='historial-kpi')renderPizarraHistorial();
+}
+
+function getVentasFiltradas(){
+  const mes=document.getElementById('piz-mes')?.value||'';
+  return ventas.filter(v=>v.estado==='Completada'&&(!mes||v.fecha.startsWith(mes)));
 }
 
 function kpiCard(lbl,val,sub='',color='stat-blue'){
@@ -4891,6 +4956,47 @@ const TODOS_USUARIOS=[
   {key:'compras2',  nombre:'Norvin Orozco',      rol:'Compras'},
   {key:'legal',     nombre:'Gerald Vado',        rol:'Legal'}
 ];
+
+
+const FRASES_MOTIVACION=[
+  {frase:'El éxito no es la clave de la felicidad. La felicidad es la clave del éxito.',autor:'Albert Schweitzer'},
+  {frase:'Cada cliente es una oportunidad de marcar la diferencia. ¡Hoy puede ser tu mejor día!',autor:'Equipo NICAUTO'},
+  {frase:'El vendedor exitoso no vende carros, vende sueños y soluciones.',autor:'Equipo NICAUTO'},
+  {frase:'La persistencia es el camino del éxito. ¡Un NO más te acerca al SÍ!',autor:'Charles Chaplin'},
+  {frase:'No cuentes los días, haz que los días cuenten.',autor:'Muhammad Ali'},
+  {frase:'El único lugar donde el éxito viene antes que el trabajo es en el diccionario.',autor:'Vidal Sassoon'},
+  {frase:'La mejor venta es la que hace feliz al cliente y orgulloso al vendedor.',autor:'Equipo NICAUTO'},
+  {frase:'Cada vehículo que vendemos lleva a alguien a cumplir su sueño.',autor:'Equipo NICAUTO'},
+  {frase:'Los campeones no se rinden. Ajustan su estrategia y siguen adelante.',autor:'Equipo NICAUTO'},
+  {frase:'El comprador que hoy busca el mejor precio, mañana busca el mejor servicio.',autor:'Equipo NICAUTO'},
+  {frase:'La actitud es una pequeña cosa que hace una gran diferencia.',autor:'Winston Churchill'},
+  {frase:'No hay viento favorable para el marinero que no sabe adónde va.',autor:'Séneca'},
+  {frase:'Un cliente satisfecho trae diez más. Un cliente mal atendido aleja cien.',autor:'Equipo NICAUTO'},
+  {frase:'La diferencia entre lo posible y lo imposible está en la determinación.',autor:'Tommy Lasorda'},
+  {frase:'Cada día es una nueva oportunidad de superar tu récord anterior.',autor:'Equipo NICAUTO'},
+  {frase:'La confianza del cliente se gana con honestidad, se mantiene con consistencia.',autor:'Equipo NICAUTO'},
+  {frase:'Las grandes cosas nunca vienen de zonas de confort.',autor:'Neil Strauss'},
+  {frase:'El éxito en ventas es 20% conocimiento del producto y 80% actitud.',autor:'Equipo NICAUTO'},
+  {frase:'Hoy el comprador que traes puede ser el vendedor que llegue mañana.',autor:'Equipo NICAUTO'},
+  {frase:'La oportunidad no toca dos veces. Prepárate para cuando llegue.',autor:'Equipo NICAUTO'},
+  {frase:'No vendas un carro, construye una relación que dure años.',autor:'Equipo NICAUTO'},
+  {frase:'El mejor negocio es el que beneficia a ambas partes.',autor:'Equipo NICAUTO'},
+  {frase:'El precio se olvida, la calidad del servicio se recuerda siempre.',autor:'Equipo NICAUTO'},
+  {frase:'Cada llamada que haces hoy es una venta que cierras mañana.',autor:'Equipo NICAUTO'},
+  {frase:'Los grandes vendedores escuchan primero, hablan después.',autor:'Equipo NICAUTO'},
+  {frase:'El éxito no es cuestión de suerte, es cuestión de preparación.',autor:'Séneca'},
+  {frase:'Un equipo unido logra lo que ningún individuo puede alcanzar solo.',autor:'Equipo NICAUTO'},
+  {frase:'La negativa de hoy es la oportunidad de seguimiento de mañana.',autor:'Equipo NICAUTO'},
+  {frase:'Cada vehículo en inventario es dinero durmiendo. ¡Despiértalo!',autor:'Equipo NICAUTO'},
+  {frase:'La disciplina es el puente entre metas y logros.',autor:'Jim Rohn'},
+  {frase:'No busques clientes para tus carros. Busca el carro perfecto para cada cliente.',autor:'Equipo NICAUTO'},
+];
+
+function getFraseDelDia(){
+  const hoy=new Date();
+  const idx=(hoy.getDate()+hoy.getMonth()*31)%FRASES_MOTIVACION.length;
+  return FRASES_MOTIVACION[idx];
+}
 
 function getMiNombre(){
   return sessionStorage.getItem('nicauto_label')||TODOS_USUARIOS.find(u=>u.key===sessionStorage.getItem('nicauto_modo_raw'))?.nombre||'Usuario';
@@ -6527,11 +6633,17 @@ async function guardarConsig(){
   const marca=document.getElementById('mconsig-marca').value;if(!marca){alert('La marca es obligatoria');return;}
   const id=document.getElementById('mconsig-id').value||uid();
   const obj={id};
-  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','comision','estado','fecha','obs'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)obj[f]=el.value;});
+  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','preciopactado','comision','estado','fecha','obs'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)obj[f]=el.value;});
+  // vehiculoId if opened from LP
+  const vidLP=document.getElementById('mconsig-vehiculoId')?.value;
+  if(vidLP)obj.vehiculoId=vidLP;
   contData.consignacion=contData.consignacion||[];
+  contData.consignaciones=contData.consignaciones||contData.consignacion; // alias
   const i=contData.consignacion.findIndex(x=>x.id===id);
   if(i>=0)contData.consignacion[i]=obj; else contData.consignacion.push(obj);
+  contData.consignaciones=contData.consignacion;
   await saveOne('contable',{id:'main',...contData});closeOv('ov-consig');renderConsig();
+  renderListaPrecios();
 }
 async function delConsig(id){
   if(!confirmDelete('consignación'))return;
@@ -6581,8 +6693,17 @@ let legalTabActivo='pendiente';
 
 function showLegalTab(t){
   legalTabActivo=t;
-  document.querySelectorAll('#page-legal .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['pendiente','proceso','escriturado','todos'][i]===t));
-  renderLegal();
+  document.querySelectorAll('#page-legal .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['pendiente','proceso','escriturado','todos','expedientes'][i]===t));
+  const listEl=document.getElementById('legal-list');
+  const expEl=document.getElementById('legal-expedientes');
+  if(t==='expedientes'){
+    if(listEl)listEl.style.display='none';
+    if(expEl){expEl.style.display='block';renderLegalExpedientes();}
+  } else {
+    if(listEl)listEl.style.display='block';
+    if(expEl)expEl.style.display='none';
+    renderLegal();
+  }
 }
 
 function renderLegal(){
@@ -7696,16 +7817,16 @@ function renderPlanillaRRHH(){
         <td style="text-align:center;color:var(--text2)">${li+1}</td>
         <td><input value="${l.nombre||''}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'nombre',this.value)" style="border:none;background:transparent;width:130px;font-size:12px"></td>
         <td><input type="number" value="${l.ingreso||0}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'ingreso',this.value)" style="border:none;background:transparent;width:90px;text-align:right;font-size:12px"></td>
-        <td><input type="number" value="${l.descuento||0}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'descuento',this.value)" style="border:none;background:transparent;width:90px;text-align:right;color:var(--red);font-size:12px"></td>
-        <td style="font-weight:700;color:var(--green)">C$ ${Number(Number(l.ingreso||0)-Number(l.descuento||0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td style="display:flex;align-items:center;gap:3px"><input type="number" value="${l.descuento||0}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'descuento',this.value)" style="border:none;background:transparent;width:90px;text-align:right;color:var(--red);font-size:12px"></td>
+        <td id="neto-${si}-${li}" style="font-weight:700;color:var(--green)">C$ ${Number(Number(l.ingreso||0)-Number(l.descuento||0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
         <td style="border-bottom:1px solid var(--border)"></td>
       </tr>`).join('')}
       </tbody>
       <tfoot><tr style="background:var(--surface2);font-weight:800">
         <td colspan="2" style="padding:8px;text-align:right">TOTALES:</td>
-        <td style="padding:8px">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
-        <td style="padding:8px;color:var(--red)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
-        <td style="padding:8px;color:var(--green)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0)-Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td id="tot-ing-${si}" style="padding:8px">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td id="tot-desc-${si}" style="padding:8px;color:var(--red)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td id="tot-neto-${si}" style="padding:8px;color:var(--green)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0)-Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
         <td></td>
       </tr></tfoot>
     </table></div>
@@ -7727,6 +7848,21 @@ async function actualizarPlanilla(si,li,campo,val){
   if(!contData.planillaSemanas?.[si]?.lineas?.[li])return;
   contData.planillaSemanas[si].lineas[li][campo]=campo==='nombre'?val:parseFloat(val)||0;
   await saveOne('contable',{id:'main',...contData});
+  // Update neto display live
+  const l=contData.planillaSemanas[si].lineas[li];
+  const neto=Number(l.ingreso||0)-Number(l.descuento||0);
+  const netoEl=document.getElementById(`neto-${si}-${li}`);
+  if(netoEl)netoEl.textContent=`C$ ${neto.toLocaleString('es-NI',{minimumFractionDigits:2})}`;
+  // Update totals
+  const totIng=contData.planillaSemanas[si].lineas.reduce((t,x)=>t+Number(x.ingreso||0),0);
+  const totDesc=contData.planillaSemanas[si].lineas.reduce((t,x)=>t+Number(x.descuento||0),0);
+  const totNeto=totIng-totDesc;
+  const tIngEl=document.getElementById(`tot-ing-${si}`);
+  const tDescEl=document.getElementById(`tot-desc-${si}`);
+  const tNetoEl=document.getElementById(`tot-neto-${si}`);
+  if(tIngEl)tIngEl.textContent=`C$ ${totIng.toLocaleString('es-NI',{minimumFractionDigits:2})}`;
+  if(tDescEl)tDescEl.textContent=`C$ ${totDesc.toLocaleString('es-NI',{minimumFractionDigits:2})}`;
+  if(tNetoEl)tNetoEl.textContent=`C$ ${totNeto.toLocaleString('es-NI',{minimumFractionDigits:2})}`;
 }
 async function eliminarSemana(si){
   if(!confirmDelete('planilla'))return;
@@ -7763,7 +7899,7 @@ function imprimirPlanilla(si){
 // ======================== SHOWRRHHTAB UPDATE ========================
 function showRrhhTab(t){
   rrhhTab=t;
-  document.querySelectorAll('#page-rrhh .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['organigrama','funciones','manual','reglamento','equipo','planilla'][i]===t));
+  document.querySelectorAll('#page-rrhh .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['organigrama','funciones','manual','reglamento','equipo'][i]===t));
   document.querySelectorAll('.rrhh-tab').forEach(x=>x.style.display='none');
   document.getElementById('rrhh-'+t).style.display='block';
   if(t==='organigrama')renderOrganigrama();
@@ -7771,7 +7907,6 @@ function showRrhhTab(t){
   else if(t==='manual')renderManual();
   else if(t==='reglamento')renderReglamento();
   else if(t==='equipo')renderEquipoRRHH();
-  else if(t==='planilla')renderPlanillaRRHH();
 }
 
 // ======================== DASHBOARD AGING RENDER ========================
@@ -7796,6 +7931,390 @@ function renderDashAging(){
       </div>
     </div>`;
   }).join('');
+}
+
+function exportarLegal(){
+  const legales=contData.legales||[];
+  const rows=[['#','Vehículo','Placa','Año','Chasis','Motor','Precio Cerrado','Método Pago','Fecha','Vendedor','Cliente','Cédula','Estado Civil','Profesión','Residencia','Antecedentes','Prendado','Estado','Notas']];
+  legales.forEach((l,idx)=>{
+    const v=vehiculos.find(x=>x.id===l.vehiculoId);
+    const gen=l.generales||{};
+    rows.push([idx+1,v?v.marca+' '+v.modelo+' '+v.anio:'—',v?v.placa:'—',v?v.anio:'—',v?v.chasis||'—':'—',v?v.nomotor||'—':'—',
+      l.precioCerrado||l.precioVenta||'',l.metodoPago||'',l.fechaCierre||'',l.vendedor||'',
+      gen.nombre||'',gen.cedula||'',gen.estCivil||'',gen.profesion||'',gen.residencia||'',gen.antecedentes||'',
+      l.prendado?'Sí':'No',l.estado||'',l.notas||'']);
+  });
+  downloadCSV(toCSV(rows),'legal_nicauto');
+}
+
+// ======================== PIZARRA - CIERRE DE MES ========================
+async function cerrarMesPizarra(){
+  const ahora=new Date();
+  const mesLabel=ahora.toLocaleString('es-NI',{month:'long',year:'numeric'}).toUpperCase();
+  if(!confirm(`¿Cerrar y archivar el mes de ${mesLabel}?\n\nEl historial se guardará y la pizarra empezará el nuevo mes en limpio.`))return;
+  contData.pizarraHistorial=contData.pizarraHistorial||[];
+  // Archive current month ventas summary
+  const mesKey=ahora.toISOString().slice(0,7);
+  const vtasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha?.startsWith(mesKey));
+  const archivo={
+    id:uid(),mes:mesKey,label:mesLabel,
+    fechaCierre:ahora.toISOString().slice(0,10),
+    totalVentas:vtasMes.length,
+    ingresos:vtasMes.reduce((s,v)=>s+Number(v.precio||0),0),
+    utilidad:vtasMes.reduce((s,v)=>s+Number(v.precio||0)-Number(v.costo||0),0),
+    cerradoPor:getMiNombre()
+  };
+  contData.pizarraHistorial.push(archivo);
+  await saveOne('contable',{id:'main',...contData});
+  alert(`✅ Mes ${mesLabel} archivado correctamente.`);
+  renderPizarras();
+}
+
+function renderPizarraHistorial(){
+  const hist=(contData.pizarraHistorial||[]).slice().reverse();
+  const el=document.getElementById('piz-historial-kpi');if(!el)return;
+  el.innerHTML=hist.length?`<div class="card" style="overflow-x:auto"><table class="tbl">
+    <thead><tr><th>Mes</th><th>Ventas</th><th>Ingresos</th><th>Utilidad</th><th>Fecha cierre</th><th>Cerrado por</th></tr></thead>
+    <tbody>${hist.map(h=>`<tr>
+      <td style="font-weight:700">${h.label||h.mes}</td>
+      <td>${h.totalVentas} unidades</td>
+      <td style="color:var(--green);font-weight:700">${fmtD(h.ingresos)}</td>
+      <td style="color:var(--blue);font-weight:700">${fmtD(h.utilidad)}</td>
+      <td>${h.fechaCierre||'—'}</td>
+      <td>${h.cerradoPor||'—'}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`:`<div class="empty"><i class="ti ti-archive"></i><p>Sin meses archivados aún</p></div>`;
+}
+
+// ======================== PIZARRA - DIAS Y TITULO MES ========================
+function actualizarPizarraTitulo(){
+  const ahora=new Date();
+  const mes=ahora.toLocaleString('es-NI',{month:'long',year:'numeric'}).toUpperCase();
+  const dia=ahora.getDate();
+  const diasMes=new Date(ahora.getFullYear(),ahora.getMonth()+1,0).getDate();
+  const titulo=document.getElementById('piz-titulo');
+  const badge=document.getElementById('piz-dias-badge');
+  if(titulo)titulo.innerHTML=`<i class="ti ti-chart-dots"></i> PIZARRA — ${mes}`;
+  if(badge)badge.innerHTML=`📅 Día ${dia} de ${diasMes} | ${diasMes-dia} días restantes`;
+  // Frase del día
+  const fraseEl=document.getElementById('piz-frase-dia');
+  if(fraseEl){
+    const f=getFraseDelDia();
+    fraseEl.innerHTML=`<div style="background:linear-gradient(135deg,var(--blue),var(--blue-mid));color:#fff;border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1rem;text-align:center">
+      <div style="font-size:11px;font-weight:700;opacity:.8;margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.08em">💡 Frase del día</div>
+      <div style="font-size:15px;font-weight:700;font-style:italic;line-height:1.5">"${f.frase}"</div>
+      <div style="font-size:11px;opacity:.8;margin-top:.5rem">— ${f.autor}</div>
+    </div>`;
+  }
+}
+
+// ======================== LEGAL - EXPEDIENTES DOCUMENTOS ========================
+function renderLegalExpedientes(){
+  const el=document.getElementById('legal-expedientes');if(!el)return;
+  const legales=contData.legales||[];
+  el.innerHTML=`
+  <div style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center">
+    <p style="font-size:13px;color:var(--text2)">Control de documentos por expediente de vehículo</p>
+    <button class="btn btn-sm" onclick="exportLegalExpedientes()"><i class="ti ti-download"></i>Exportar</button>
+  </div>
+  ${legales.length?legales.map(l=>{
+    const v=vehiculos.find(x=>x.id===l.vehiculoId);
+    const docs=l.documentos||{};
+    const docList=['Cédula dueño','Circulación','Factura de compra','Escritura','Poder notarial','Certificado de gravamen','Paz y salvo municipal','Recibo de pago'];
+    const completados=docList.filter(d=>docs[d]);
+    return`<div class="card" style="margin-bottom:.75rem">
+      <div class="card-head" style="cursor:pointer" onclick="toggleExpediente('exp-${l.id}')">
+        <h3 style="font-size:13px"><i class="ti ti-folder"></i> ${v?v.marca+' '+v.modelo+' '+v.anio:'—'} — Placa: ${v?v.placa:'—'}</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="badge badge-${completados.length===docList.length?'green':completados.length>0?'amber':'red'}" style="font-size:10px">${completados.length}/${docList.length} docs</span>
+          <i class="ti ti-chevron-down" style="font-size:12px"></i>
+        </div>
+      </div>
+      <div id="exp-${l.id}" style="display:none;padding:.875rem">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+          ${docList.map(doc=>`<label style="display:flex;align-items:center;gap:8px;padding:.5rem;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;background:${docs[doc]?'var(--green-light)':'var(--surface)'}">
+            <input type="checkbox" ${docs[doc]?'checked':''} onchange="toggleDoc('${l.id}','${doc}',this.checked)" style="width:16px;height:16px;cursor:pointer">
+            <span style="font-size:12px">${doc}</span>
+            ${docs[doc]?'<i class="ti ti-check" style="color:var(--green);margin-left:auto;font-size:12px"></i>':''}
+          </label>`).join('')}
+        </div>
+        <div style="margin-top:.75rem">
+          <label style="font-size:11px;color:var(--text2);font-weight:700">Notas del expediente</label>
+          <textarea style="width:100%;border:1px solid var(--border);border-radius:var(--radius);padding:6px;font-size:12px;margin-top:4px" rows="2" placeholder="Observaciones del expediente…" onchange="actualizarNotaExp('${l.id}',this.value)">${l.notaExp||''}</textarea>
+        </div>
+      </div>
+    </div>`;
+  }).join(''):`<div class="empty"><i class="ti ti-folder"></i><p>No hay expedientes registrados</p></div>`}`;
+}
+
+function toggleExpediente(id){
+  const el=document.getElementById(id);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
+}
+
+async function toggleDoc(legalId,doc,val){
+  const idx=(contData.legales||[]).findIndex(l=>l.id===legalId);
+  if(idx<0)return;
+  contData.legales[idx].documentos=contData.legales[idx].documentos||{};
+  contData.legales[idx].documentos[doc]=val;
+  await saveOne('contable',{id:'main',...contData});
+}
+
+async function actualizarNotaExp(legalId,nota){
+  const idx=(contData.legales||[]).findIndex(l=>l.id===legalId);
+  if(idx<0)return;
+  contData.legales[idx].notaExp=nota;
+  await saveOne('contable',{id:'main',...contData});
+}
+
+function exportLegalExpedientes(){
+  const rows=[['Vehículo','Placa','Cédula dueño','Circulación','Factura','Escritura','Poder','Cert.Gravamen','Paz Salvo','Recibo','Completados','Notas']];
+  (contData.legales||[]).forEach(l=>{
+    const v=vehiculos.find(x=>x.id===l.vehiculoId);
+    const d=l.documentos||{};
+    rows.push([v?v.marca+' '+v.modelo+' '+v.anio:'—',v?v.placa:'—',
+      d['Cédula dueño']?'✓':'✗',d['Circulación']?'✓':'✗',d['Factura de compra']?'✓':'✗',
+      d['Escritura']?'✓':'✗',d['Poder notarial']?'✓':'✗',d['Certificado de gravamen']?'✓':'✗',
+      d['Paz y salvo municipal']?'✓':'✗',d['Recibo de pago']?'✓':'✗',
+      Object.values(d).filter(Boolean).length+'/8',l.notaExp||'']);
+  });
+  downloadCSV(toCSV(rows),'expedientes_legal');
+}
+
+// ======================== CONSIGNACION - LP SCAN ========================
+function abrirConsigDesdeLP(vid){
+  const v=vehiculos.find(x=>x.id===vid);if(!v)return;
+  const ya=(contData.consignaciones||contData.consignacion||[]).find(cs=>cs.vehiculoId===vid);
+  if(ya){alert('Este vehículo ya está registrado en consignación.');return;}
+  abrirModalConsig();
+  setTimeout(()=>{
+    const vhId=document.getElementById('mconsig-vehiculoId');if(vhId)vhId.value=vid;
+    document.getElementById('mconsig-marca').value=v.marca||'';
+    document.getElementById('mconsig-modelo').value=v.modelo||'';
+    document.getElementById('mconsig-anio').value=v.anio||'';
+    document.getElementById('mconsig-placa').value=v.placa||'';
+    document.getElementById('mconsig-color').value=v.color||'';
+    document.getElementById('mconsig-trans').value=v.trans||'Mecánico';
+    document.getElementById('mconsig-motor').value=v.motor||'';
+    document.getElementById('mconsig-km').value=v.km||0;
+    document.getElementById('mconsig-precioA').value=v.precio||'';
+    document.getElementById('mconsig-precioB').value=v.precioB||'';
+    document.getElementById('mconsig-fecha').value=new Date().toISOString().slice(0,10);
+  },150);
+}
+
+// ======================== PLANILLA COMISIONES PARA RRHH ========================
+function renderPlanillaComisionesRRHH(){
+  const el=document.getElementById('rrhh-comisiones');if(!el)return;
+  const planillas=contData.planillaComisiones||[];
+  const puede=['admin','gerente1','gerente2'].includes(MODO);
+  el.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <p style="font-size:13px;color:var(--text2)">Planilla de comisiones por período — No conectada a contabilidad</p>
+    ${puede?`<div style="display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" onclick="nuevaPlanillaComision()"><i class="ti ti-plus"></i>Nueva planilla</button>
+    </div>`:''}
+  </div>
+  ${!planillas.length?`<div class="empty"><i class="ti ti-currency-dollar"></i><p>No hay planillas de comisiones</p></div>`:''}
+  ${planillas.map((p,pi)=>`<div class="card" style="margin-bottom:1rem">
+    <div class="card-head">
+      <h3>💰 ${p.periodo||'—'}</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="imprimirPlanillaComision(${pi})"><i class="ti ti-printer"></i></button>
+        ${puede?`<button class="btn btn-sm btn-success" onclick="pagarPlanillaComision(${pi})" title="Marcar como pagada"><i class="ti ti-check"></i>Pagar</button>`:''}
+        ${puede&&!p.cerrada?`<button class="btn btn-sm btn-danger" onclick="cerrarPlanillaComision(${pi})" title="Cerrar período"><i class="ti ti-lock"></i>Cerrar</button>`:''}
+        ${p.cerrada?`<span class="badge badge-green" style="font-size:10px">✓ Cerrada</span>`:''}
+        ${p.pagada?`<span class="badge badge-purple" style="font-size:10px">✓ Pagada</span>`:''}
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th>#</th><th>Vendedor</th><th>Unidades</th><th>Comisión Unit. (USD)</th><th>Total Comisión</th><th>Firma</th></tr></thead>
+      <tbody>${(p.lineas||[]).map((l,li)=>`<tr>
+        <td style="text-align:center">${li+1}</td>
+        <td><input value="${l.nombre||''}" ${puede&&!p.cerrada?'':'disabled'} onchange="actualizarLinCom(${pi},${li},'nombre',this.value)" style="border:none;background:transparent;width:130px;font-size:12px"></td>
+        <td><input type="number" value="${l.unidades||0}" ${puede&&!p.cerrada?'':'disabled'} onchange="actualizarLinCom(${pi},${li},'unidades',this.value)" style="border:none;background:transparent;width:70px;text-align:center;font-size:12px"></td>
+        <td><input type="number" step="0.01" value="${l.comUnit||0}" ${puede&&!p.cerrada?'':'disabled'} onchange="actualizarLinCom(${pi},${li},'comUnit',this.value)" style="border:none;background:transparent;width:90px;text-align:right;font-size:12px"></td>
+        <td style="font-weight:700;color:var(--green)">${fmtD(Number(l.unidades||0)*Number(l.comUnit||0))}</td>
+        <td style="border-bottom:1px solid var(--border);min-width:80px"></td>
+      </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:800">
+        <td colspan="4" style="padding:8px;text-align:right">TOTAL COMISIONES:</td>
+        <td style="padding:8px;color:var(--green)">${fmtD((p.lineas||[]).reduce((t,l)=>t+Number(l.unidades||0)*Number(l.comUnit||0),0))}</td>
+        <td></td>
+      </tr></tfoot>
+    </table></div>
+  </div>`).join('')}`;
+}
+
+async function nuevaPlanillaComision(){
+  const periodo=prompt('Período (ej: Julio 2026):');
+  if(!periodo)return;
+  contData.planillaComisiones=contData.planillaComisiones||[];
+  contData.planillaComisiones.unshift({id:uid(),periodo,cerrada:false,pagada:false,
+    lineas:Array(10).fill(null).map(()=>({nombre:'',unidades:0,comUnit:0}))});
+  await saveOne('contable',{id:'main',...contData});
+  renderPlanillaComisionesRRHH();
+}
+
+async function actualizarLinCom(pi,li,campo,val){
+  if(!contData.planillaComisiones?.[pi]?.lineas?.[li])return;
+  contData.planillaComisiones[pi].lineas[li][campo]=campo==='nombre'?val:parseFloat(val)||0;
+  await saveOne('contable',{id:'main',...contData});
+  calcNetoComision(pi,li);
+}
+
+async function cerrarPlanillaComision(pi){
+  if(!confirm('¿Cerrar este período? No se podrá editar después.'))return;
+  contData.planillaComisiones[pi].cerrada=true;
+  contData.planillaComisiones[pi].fechaCierre=new Date().toISOString().slice(0,10);
+  await saveOne('contable',{id:'main',...contData});
+  renderPlanillaComisionesRRHH();
+}
+
+async function pagarPlanillaComision(pi){
+  if(!confirm('¿Marcar esta planilla como pagada?'))return;
+  contData.planillaComisiones[pi].pagada=true;
+  contData.planillaComisiones[pi].fechaPago=new Date().toISOString().slice(0,10);
+  await saveOne('contable',{id:'main',...contData});
+  renderPlanillaComisionesRRHH();
+}
+
+function imprimirPlanillaComision(pi){
+  const p=contData.planillaComisiones?.[pi];if(!p)return;
+  const total=(p.lineas||[]).reduce((t,l)=>t+Number(l.unidades||0)*Number(l.comUnit||0),0);
+  const html=`<div style="font-family:Arial;max-width:700px;margin:0 auto;padding:1rem">
+    <div style="text-align:center;border-bottom:2px solid #1971C2;padding-bottom:1rem;margin-bottom:1rem">
+      <div style="font-size:22px;font-weight:900">NICAUTO</div>
+      <div style="font-weight:700">PLANILLA DE COMISIONES — ${p.periodo}</div>
+      ${p.pagada?`<div style="color:#2F9E44;font-weight:700">✓ PAGADA — ${p.fechaPago}</div>`:''}
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#1971C2;color:#fff"><th style="padding:6px">#</th><th style="padding:6px">Vendedor</th><th style="padding:6px">Unidades</th><th style="padding:6px">Comisión Unit.</th><th style="padding:6px">Total</th><th style="padding:6px;min-width:80px">Firma</th></tr></thead>
+      <tbody>${(p.lineas||[]).filter(l=>l.nombre).map((l,i)=>`<tr style="border-bottom:1px solid #eee"><td style="padding:5px;text-align:center">${i+1}</td><td style="padding:5px">${l.nombre}</td><td style="padding:5px;text-align:center">${l.unidades}</td><td style="padding:5px;text-align:right">${fmtD(l.comUnit)}</td><td style="padding:5px;text-align:right;font-weight:700;color:#2F9E44">${fmtD(Number(l.unidades)*Number(l.comUnit))}</td><td style="border-bottom:1px solid #333"></td></tr>`).join('')}
+      <tr style="background:#f5f5f5;font-weight:700"><td colspan="4" style="padding:6px;text-align:right">TOTAL:</td><td style="padding:6px;text-align:right;color:#2F9E44">${fmtD(total)}</td><td></td></tr>
+    </table>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;margin-top:2rem;padding-top:1rem;border-top:1px solid #ccc">
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid #333;padding-top:.5rem;font-size:11px;font-weight:700">Gerencia de Finanzas</div></div>
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid #333;padding-top:.5rem;font-size:11px;font-weight:700">Autorizado</div></div>
+    </div>
+  </div>`;
+  const win=window.open('','_blank','width=800,height:900');
+  if(!win){alert('Permitir ventanas emergentes');return;}
+  win.document.open();
+  win.document.write('<!DOCTYPE html><html><head><title>Comisiones NICAUTO</title><style>body{margin:0;padding:1rem;}@media print{body{margin:0;}}</style></head><body>'+html+'</body></html>');
+  win.document.close();win.onload=()=>{win.focus();win.print();};
+}
+
+function renderPlanillaContable(){
+  // Render in cont-planilla div - same logic as renderPlanillaRRHH but uses contable tab
+  const semanas=contData.planillaSemanas||[];
+  const puede=MODO==='admin'||MODO==='coordinador'||MODO==='gerente1'||MODO==='gerente2';
+  const el=document.getElementById('cont-planilla');
+  if(!el)return;
+  el.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <p style="font-size:13px;color:var(--text2)">Planilla semanal de personal — No conectada a contabilidad automática</p>
+    ${puede?`<button class="btn btn-primary btn-sm" onclick="nuevaSemanaplanilla()"><i class="ti ti-plus"></i>Nueva semana</button>`:''}
+  </div>
+  ${!semanas.length?`<div class="empty"><i class="ti ti-currency-dollar"></i><p>No hay planillas registradas</p></div>`:''}
+  ${semanas.map((s,si)=>`<div class="card" style="margin-bottom:1rem">
+    <div class="card-head">
+      <h3>📅 Semana: ${s.fecha||'—'}</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="imprimirPlanilla(${si})"><i class="ti ti-printer"></i></button>
+        ${puede?`<button class="btn btn-sm btn-danger" onclick="eliminarSemana(${si})"><i class="ti ti-trash"></i></button>`:''}
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th style="width:30px">#</th><th>Nombre</th><th>Ingreso C$</th><th>Préstamo/Desc.</th><th>Neto a Recibir</th><th style="min-width:80px">Firma</th></tr></thead>
+      <tbody>${(s.lineas||[]).map((l,li)=>`<tr>
+        <td style="text-align:center;color:var(--text2)">${li+1}</td>
+        <td><input value="${l.nombre||''}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'nombre',this.value)" style="border:none;background:transparent;width:130px;font-size:12px"></td>
+        <td><input type="number" value="${l.ingreso||0}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'ingreso',this.value)" style="border:none;background:transparent;width:90px;text-align:right;font-size:12px"></td>
+        <td style="display:flex;align-items:center;gap:3px"><input type="number" value="${l.descuento||0}" ${puede?'':'disabled'} onchange="actualizarPlanilla(${si},${li},'descuento',this.value)" style="border:none;background:transparent;width:90px;text-align:right;color:var(--red);font-size:12px"></td>
+        <td id="neto-${si}-${li}" style="font-weight:700;color:var(--green)">C$ ${Number(Number(l.ingreso||0)-Number(l.descuento||0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td style="border-bottom:1px solid var(--border)"></td>
+      </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:800">
+        <td colspan="2" style="padding:8px;text-align:right">TOTALES:</td>
+        <td id="tot-ing-${si}" style="padding:8px">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td id="tot-desc-${si}" style="padding:8px;color:var(--red)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td id="tot-neto-${si}" style="padding:8px;color:var(--green)">C$ ${Number((s.lineas||[]).reduce((t,l)=>t+Number(l.ingreso||0)-Number(l.descuento||0),0)).toLocaleString('es-NI',{minimumFractionDigits:2})}</td>
+        <td></td>
+      </tr></tfoot>
+    </table></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;padding:1.5rem 2rem 1rem;border-top:1px solid var(--border)">
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid var(--border);padding-top:.5rem;font-size:11px;font-weight:700">Gerencia de Finanzas</div><div style="font-size:10px;color:var(--text2)">Edwin Hernández</div></div>
+      <div style="text-align:center"><div style="height:40px"></div><div style="border-top:1px solid var(--border);padding-top:.5rem;font-size:11px;font-weight:700">Autorizado</div></div>
+    </div>
+  </div>`).join('')}`;
+}
+
+function renderComisionesContable(){
+  const planillas=contData.planillaComisiones||[];
+  const puede=['admin','coordinador','gerente1','gerente2'].includes(MODO);
+  const el=document.getElementById('cont-comisiones');
+  if(!el)return;
+  el.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <p style="font-size:13px;color:var(--text2)">Planilla de comisiones por período</p>
+    ${puede?`<button class="btn btn-primary btn-sm" onclick="nuevaPlanillaComision()"><i class="ti ti-plus"></i>Nueva planilla</button>`:''}
+  </div>
+  ${!planillas.length?`<div class="empty"><i class="ti ti-award"></i><p>No hay planillas de comisiones</p></div>`:''}
+  ${planillas.map((p,pi)=>`<div class="card" style="margin-bottom:1rem">
+    <div class="card-head">
+      <h3>💰 ${p.periodo||'—'} ${p.cerrada?'<span class="badge badge-green" style="font-size:10px">Cerrada</span>':''} ${p.pagada?'<span class="badge badge-purple" style="font-size:10px">Pagada</span>':''}</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="imprimirPlanillaComision(${pi})"><i class="ti ti-printer"></i></button>
+        ${puede&&!p.cerrada?`<button class="btn btn-sm btn-success" onclick="pagarPlanillaComision(${pi})"><i class="ti ti-check"></i>Pagar</button>`:''}
+        ${puede&&!p.cerrada?`<button class="btn btn-sm" onclick="cerrarPlanillaComision(${pi})" style="border-color:var(--amber);color:var(--amber)"><i class="ti ti-lock"></i>Cerrar</button>`:''}
+        ${puede&&MODO==='admin'?`<button class="btn btn-sm btn-danger" onclick="eliminarPlanillaComision(${pi})"><i class="ti ti-trash"></i></button>`:''}
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th>#</th><th>Vendedor</th><th>Unidades</th><th>Com. Unit. (USD $)</th><th>Descuento / Ajuste</th><th>Total Comisión</th><th>Firma</th></tr></thead>
+      <tbody>${(p.lineas||[]).map((l,li)=>{
+        const total=Number(l.unidades||0)*Number(l.comUnit||0)-Number(l.descuento||0);
+        return`<tr>
+          <td style="text-align:center;color:var(--text2)">${li+1}</td>
+          <td><input value="${l.nombre||''}" ${puede&&!p.cerrada?'':'disabled'} onchange="actualizarLinCom(${pi},${li},'nombre',this.value)" style="border:none;background:transparent;width:130px;font-size:12px"></td>
+          <td><input type="number" value="${l.unidades||0}" ${puede&&!p.cerrada?'':'disabled'} onchange="actualizarLinCom(${pi},${li},'unidades',this.value);calcNetoComision(${pi},${li})" style="border:none;background:transparent;width:60px;text-align:center;font-size:12px"></td>
+          <td><input type="number" step="0.01" value="${l.comUnit||0}" ${puede&&!p.cerrada?'':'disabled'} onchange="actualizarLinCom(${pi},${li},'comUnit',this.value);calcNetoComision(${pi},${li})" style="border:none;background:transparent;width:90px;text-align:right;font-size:12px"></td>
+          <td><input type="number" step="0.01" value="${l.descuento||0}" ${puede&&!p.cerrada?'':'disabled'} onchange="actualizarLinCom(${pi},${li},'descuento',this.value);calcNetoComision(${pi},${li})" style="border:none;background:transparent;width:90px;text-align:right;color:var(--red);font-size:12px" placeholder="0.00"></td>
+          <td id="com-neto-${pi}-${li}" style="font-weight:700;color:${total>=0?'var(--green)':'var(--red)'}">${fmtD(total)}</td>
+          <td style="border-bottom:1px solid var(--border);min-width:80px"></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:800">
+        <td colspan="5" style="padding:8px;text-align:right">TOTAL:</td>
+        <td id="com-tot-${pi}" style="padding:8px;color:var(--green)">${fmtD((p.lineas||[]).reduce((t,l)=>t+Number(l.unidades||0)*Number(l.comUnit||0)-Number(l.descuento||0),0))}</td>
+        <td></td>
+      </tr></tfoot>
+    </table></div>
+  </div>`).join('')}`;
+}
+
+function calcNetoComision(pi,li){
+  const p=contData.planillaComisiones?.[pi];if(!p)return;
+  const l=p.lineas[li];
+  const total=Number(l.unidades||0)*Number(l.comUnit||0)-Number(l.descuento||0);
+  const el=document.getElementById(`com-neto-${pi}-${li}`);
+  if(el){el.textContent=fmtD(total);el.style.color=total>=0?'var(--green)':'var(--red)';}
+  const totEl=document.getElementById(`com-tot-${pi}`);
+  if(totEl){
+    const tot=(p.lineas||[]).reduce((t,x)=>t+Number(x.unidades||0)*Number(x.comUnit||0)-Number(x.descuento||0),0);
+    totEl.textContent=fmtD(tot);
+  }
+}
+
+async function eliminarPlanillaComision(pi){
+  if(!confirmDelete('planilla de comisiones'))return;
+  contData.planillaComisiones.splice(pi,1);
+  await saveOne('contable',{id:'main',...contData});
+  renderComisionesContable();
 }
 
 function makeResizable(tableId){
