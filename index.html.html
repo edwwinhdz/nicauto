@@ -846,7 +846,7 @@ body.no-delete .confirmDelete{display:none!important}
         <th>#</th><th>Fecha</th><th>Comprador</th><th>Tipo</th><th>Origen</th><th>Marca</th><th>Modelo</th><th>Año</th>
         <th>Estado (1-10)</th><th>Precio Compra</th><th>Observaciones</th>
         <th>Dueño</th><th>Teléfono</th><th>Cédula</th><th>Primer Contacto</th><th>Antecedentes</th><th>Prenda</th>
-        <th>Cita</th><th>Creado por</th><th>Aprobado</th><th>Acciones</th>
+        <th>Cita</th><th>Estado Op.</th><th>Creado por</th><th>Aprobado</th><th>Acciones</th>
       </tr></thead>
       <tbody id="tbl-compras"></tbody>
       <tfoot id="tfoot-compras" style="background:var(--surface2);font-weight:700"></tfoot>
@@ -1075,7 +1075,7 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-row">
       <div class="form-group"><label>Cédula</label><input id="mc-cedula" placeholder="001-123456-7890X"></div>
-      <div class="form-group"><label>Teléfono</label><input id="mc-tel" placeholder="8888-0000"></div>
+      <div class="form-group"><label>Teléfono <span style="color:var(--red)">*</span></label><input id="mc-tel" placeholder="8888-0000" required></div>
     </div>
     <div class="form-group"><label>Email</label><input id="mc-email" placeholder="correo@ejemplo.com"></div>
     <div class="form-group"><label>Dirección</label><input id="mc-dir" placeholder="Ciudad, Barrio…"></div>
@@ -1597,7 +1597,7 @@ body.no-delete .confirmDelete{display:none!important}
     <input type="hidden" id="mctrcli-id">
     <div class="form-row">
       <div class="form-group"><label>Nombre completo</label><input id="mctrcli-nombre" placeholder="Juan Pérez"></div>
-      <div class="form-group"><label>Celular / WhatsApp</label><input id="mctrcli-cel" placeholder="+505 8888-0000"></div>
+      <div class="form-group"><label>Celular / WhatsApp <span style="color:var(--red)">*</span></label><input id="mctrcli-cel" placeholder="+505 8888-0000" required></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Email</label><input id="mctrcli-email" placeholder="correo@ejemplo.com"></div>
@@ -1862,10 +1862,14 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-row" style="background:var(--amber-light);border:1px solid #FFDEAB;border-radius:var(--radius);padding:.75rem;margin-top:.5rem">
       <div class="form-group" style="margin:0"><label>📅 Cita programada</label><input id="mcompra-cita" type="date"></div>
-      <div class="form-group" style="margin:0;display:flex;align-items:flex-end">
+      <div class="form-group" style="margin:0;display:flex;align-items:flex-end;gap:1rem">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
           <input type="checkbox" id="mcompra-atendido" style="width:18px;height:18px">
           <span>✅ Atendido</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--red)">
+          <input type="checkbox" id="mcompra-perdida" style="width:18px;height:18px">
+          <span>❌ Perdida/Fallida</span>
         </label>
       </div>
     </div>
@@ -2818,16 +2822,56 @@ function renderDash(){
   document.getElementById('dash-ventas-tbl').innerHTML=ultV.length?ultV.map(v=>{
     const c=clientes.find(x=>x.id===v.compradorId);
     const vh=vehiculos.find(x=>x.id===v.vehiculoId);
-    const vnd=clientes.find(x=>x.id===v.vendedorId);
     return`<tr><td><b>${c?c.nombre:'?'}</b><br><span style="font-size:11px;color:var(--text2)">${vh?vh.marca+' '+vh.modelo:''}</span></td><td>${fmtD(v.precio)}</td><td>${badge(v.estado,'')}</td></tr>`
   }).join(''):`<tr><td colspan="3"><div class="empty" style="padding:1.5rem"><i class="ti ti-receipt"></i><p>Sin ventas</p></div></td></tr>`;
+
+  // Marcas en inventario
   const marcas={};vehiculos.forEach(v=>marcas[v.marca]=(marcas[v.marca]||0)+1);
   const maxM=Math.max(...Object.values(marcas),1);
   document.getElementById('dash-marcas-chart').innerHTML=`<div class="chart-wrap">${Object.entries(marcas).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([m,n])=>`<div class="chart-row"><span class="chart-lbl">${m}</span><div class="chart-bg"><div class="chart-fill" style="width:${Math.round(n/maxM*100)}%"></div></div><span class="chart-val">${n} und.</span></div>`).join('')}</div>`;
+
+  // ── PIZARRA DATA: Vendedores y Compradores mes actual ──
+  const mesActualKey=hoy.toISOString().slice(0,7);
+  const vtasMesAct=vc.filter(v=>v.fecha?.startsWith(mesActualKey));
+  const comprasData=contData.compras||[];
+  const comprasMes=comprasData.filter(c=>c.fecha?.startsWith(mesActualKey));
+
   const vendedores=clientes.filter(c=>c.rol==='vendedor');
-  const vInfo=vendedores.map(v=>({nombre:v.nombre.split(' ')[0],total:ventas.filter(vt=>vt.vendedorId===v.id&&vt.estado==='Completada').reduce((s,vt)=>s+Number(vt.precio),0)}));
+  const vInfo=vendedores.map(v=>({
+    nombre:v.nombre.split(' ')[0],
+    unidades:vtasMesAct.filter(vt=>vt.vendedorId===v.id).length,
+    total:vtasMesAct.filter(vt=>vt.vendedorId===v.id).reduce((s,vt)=>s+Number(vt.precio),0)
+  })).filter(x=>x.unidades>0||x.total>0);
+  // Also include all with historical data if none this month
+  if(!vInfo.length){
+    vendedores.forEach(v=>{
+      const tot=vc.filter(vt=>vt.vendedorId===v.id).reduce((s,vt)=>s+Number(vt.precio),0);
+      if(tot>0)vInfo.push({nombre:v.nombre.split(' ')[0],unidades:vc.filter(vt=>vt.vendedorId===v.id).length,total:tot});
+    });
+  }
   const maxVd=Math.max(...vInfo.map(x=>x.total),1);
-  document.getElementById('dash-vendedores-chart').innerHTML=`<div class="chart-wrap">${vInfo.map(v=>`<div class="chart-row"><span class="chart-lbl">${v.nombre}</span><div class="chart-bg"><div class="chart-fill" style="width:${Math.round(v.total/maxVd*100)}%;background:var(--green)"></div></div><span class="chart-val">${fmtD(v.total)}</span></div>`).join('')}</div>`;
+
+  const compradoresStats=[
+    {nombre:'Norvin',unidades:comprasMes.filter(c=>c.comprador==='Norvin').length,total:comprasMes.filter(c=>c.comprador==='Norvin').reduce((s,c)=>s+Number(c.precio||0),0)},
+    {nombre:'Alonso',unidades:comprasMes.filter(c=>c.comprador==='Alonso').length,total:comprasMes.filter(c=>c.comprador==='Alonso').reduce((s,c)=>s+Number(c.precio||0),0)},
+    {nombre:'Gerencia',unidades:comprasMes.filter(c=>c.comprador==='Gerencia').length,total:comprasMes.filter(c=>c.comprador==='Gerencia').reduce((s,c)=>s+Number(c.precio||0),0)},
+  ];
+  const maxComp=Math.max(...compradoresStats.map(x=>x.unidades),1);
+
+  document.getElementById('dash-vendedores-chart').innerHTML=`
+  <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:.5rem">📋 Vendedores — ${mesActualKey}</div>
+  <div class="chart-wrap" style="margin-bottom:1rem">${vInfo.length?vInfo.sort((a,b)=>b.total-a.total).map(v=>`<div class="chart-row">
+    <span class="chart-lbl">${v.nombre}</span>
+    <div class="chart-bg"><div class="chart-fill" style="width:${Math.round(v.total/maxVd*100)}%;background:var(--green)"></div></div>
+    <span class="chart-val" style="font-size:11px">${v.unidades} | ${fmtD(v.total)}</span>
+  </div>`).join(''):`<div style="font-size:12px;color:var(--text2);padding:.5rem 0">Sin ventas este mes</div>`}</div>
+  <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:.5rem">🛒 Compradores — ${mesActualKey}</div>
+  <div class="chart-wrap">${compradoresStats.map(c=>`<div class="chart-row">
+    <span class="chart-lbl">${c.nombre}</span>
+    <div class="chart-bg"><div class="chart-fill" style="width:${Math.round(c.unidades/maxComp*100)}%;background:var(--blue)"></div></div>
+    <span class="chart-val" style="font-size:11px">${c.unidades} veh. | ${fmtD(c.total)}</span>
+  </div>`).join('')}</div>`;
+
   const bit5=bitacora.slice(-5).reverse();
   document.getElementById('dash-bit-preview').innerHTML=bit5.length?bit5.map(b=>bitItem(b,true)).join(''):`<div class="empty" style="padding:1.5rem"><i class="ti ti-notebook"></i><p>Sin actividad</p></div>`;
   renderDashChart();
@@ -2878,6 +2922,7 @@ function renderInv(){
       <button class="btn btn-sm" onclick="abrirReparaciones('${v.id}')" title="Reparaciones" style="color:var(--amber);border-color:#FFDEAB"><i class="ti ti-tool"></i></button>
       <button class="btn btn-sm" onclick="abrirReciboCompra('${v.id}')" title="Recibo de compra" style="color:var(--green);border-color:#69DB7C"><i class="ti ti-file-invoice"></i></button>
       <button class="btn btn-sm" onclick="editVehiculo('${v.id}')" title="Editar"><i class="ti ti-edit"></i></button>
+      ${v.estado==='Vendido'&&MODO==='admin'?`<button class="btn btn-sm" onclick="revertirVendido('${v.id}')" title="Revertir a Disponible" style="color:var(--amber);border-color:var(--amber)"><i class="ti ti-arrow-back-up"></i></button>`:''}
       <button class="btn btn-sm btn-danger" onclick="delVehiculo('${v.id}')" title="Eliminar"><i class="ti ti-trash"></i></button>
     </div></td></tr>`}).join(''):`<tr><td colspan="19"><div class="empty"><i class="ti ti-car-garage"></i><p>No hay vehículos</p></div></td></tr>`;
   renderInvTotals(data);
@@ -2980,6 +3025,16 @@ function guardarVehiculo(){
   fotoSlots=[null,null,null];
   closeOv('ov-vehiculo');renderInv();
 }
+async function revertirVendido(id){
+  if(!confirm('¿Revertir este vehículo de Vendido a Disponible?\n\nEsto NO eliminará la venta registrada — solo cambia el estado del inventario.'))return;
+  const vi=vehiculos.findIndex(v=>v.id===id);
+  if(vi<0)return;
+  vehiculos[vi].estado='Disponible';
+  await saveOne('vehiculos',vehiculos[vi]);
+  renderInv();
+  alert('✅ Vehículo revertido a Disponible.');
+}
+
 function delVehiculo(id){
   if(!confirm('¿Eliminar este vehículo?'))return;
   vehiculos=vehiculos.filter(v=>v.id!==id);
@@ -3204,6 +3259,8 @@ function guardarCliente(){
   const f=['nombre','cedula','tel','email','dir','notas','rol'];
   const vals={};f.forEach(k=>vals[k]=document.getElementById('mc-'+k).value);
   if(!vals.nombre){alert('Nombre obligatorio');return;}
+  const mcTel=document.getElementById('mc-tel')?.value?.trim();
+  if(!mcTel){alert('⚠️ El número de teléfono es obligatorio');document.getElementById('mc-tel')?.focus();return;}
   const id=document.getElementById('mc-id').value||uid();
   const obj={id,...vals};
   const i=clientes.findIndex(c=>c.id===id);
@@ -4893,6 +4950,8 @@ function editCtrlCliente(id){abrirModalCtrlCliente(id);}
 function guardarCtrlCliente(){
   const nombre=document.getElementById('mctrcli-nombre').value;
   if(!nombre){alert('El nombre es obligatorio');return;}
+  const cel=document.getElementById('mctrcli-cel')?.value?.trim();
+  if(!cel){alert('⚠️ El número de celular es obligatorio');document.getElementById('mctrcli-cel')?.focus();return;}
   const cedula=document.getElementById('mctrcli-cedula')?.value||'';
   const id=document.getElementById('mctrcli-id').value||uid();
   const isNew=!document.getElementById('mctrcli-id').value;
@@ -6489,6 +6548,7 @@ function renderCompras(){
     <td><span class="badge badge-${comp.antecedentes==='No'?'green':comp.antecedentes==='Sí'?'red':'amber'}">${comp.antecedentes||'—'}</span></td>
     <td><span class="badge badge-${comp.prenda==='No'?'green':comp.prenda==='Sí'?'red':'amber'}">${comp.prenda||'—'}</span></td>
     <td>${citaBadge(comp.cita,comp.atendido)}</td>
+    <td>${comp.perdida?'<span class="badge badge-red" style="font-size:10px">❌ Perdida</span>':'<span class="badge badge-gray" style="font-size:10px">Activa</span>'}</td>
     <td style="font-size:11px;color:var(--text2)">${comp.creadoPor||'—'}</td>
     <td style="text-align:center">${
       comp.aprobado?`<span class="badge badge-green">✓ Aprobado</span>`:
@@ -6527,6 +6587,7 @@ function abrirModalCompra(id){
   }
   if(document.getElementById('mcompra-cita'))document.getElementById('mcompra-cita').value=comp?.cita||'';
   if(document.getElementById('mcompra-atendido'))document.getElementById('mcompra-atendido').checked=comp?.atendido||false;
+  if(document.getElementById('mcompra-perdida'))document.getElementById('mcompra-perdida').checked=comp?.perdida||false;
   openOv('ov-compra');
 }
 
@@ -6539,6 +6600,7 @@ async function guardarCompra(){
   const obj={id,aprobado:existing?.aprobado||false,creadoPor:existing?.creadoPor||getNombreUsuario(),fechaCreacion:existing?.fechaCreacion||new Date().toISOString().slice(0,10)};
   ['comprador','fecha','tipo','origen','marca','modelo','anio','estado','precio','color','obs','duenio','telefono','cedula','primercontacto','antecedentes','prenda','cita'].forEach(f=>{const el=document.getElementById('mcompra-'+f);if(el)obj[f]=el.value;});
   obj.atendido=document.getElementById('mcompra-atendido')?.checked||false;
+  obj.perdida=document.getElementById('mcompra-perdida')?.checked||false;
   contData.compras=contData.compras||[];
   const i=contData.compras.findIndex(c=>c.id===id);
   if(i>=0)contData.compras[i]=obj; else contData.compras.push(obj);
