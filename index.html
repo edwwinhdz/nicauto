@@ -4386,7 +4386,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-09-30-2200';
+const APP_VERSION='2026-09-30-2300';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5881,10 +5881,11 @@ function renderVtasTotals(data){
   const totCom=data.reduce((s,v)=>s+Number(v.comision||0),0);
   const totVenta=data.reduce((s,v)=>s+Number(v.precio||0),0);
   const totGan=data.reduce((s,v)=>{const vh=buscarVehiculoOConsig(v.vehiculoId);const r=vh?(vh.reparaciones||[]).reduce((sr,rp)=>sr+Number(rp.costo),0):0;const inv=Number(v.costo||0)+r;return s+Number(v.precio||0)-inv-Number(v.comision||0);},0);
-  // Reembolso: $218 por cada carro vendido, ÚNICAMENTE en ventas propias (no consignación) —
-  // se va acumulando y se suma al total de ventas
+  // Reembolso: $218 por cada carro vendido, ÚNICAMENTE en ventas propias (no consignación) Y
+  // únicamente si ese carro tiene de verdad ese gasto de alistamiento registrado — se va
+  // acumulando y se suma al total de ventas
   const REEMBOLSO_POR_CARRO=218;
-  const ventasPropias=data.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||'')));
+  const ventasPropias=data.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||''))&&tieneCargoAlistamiento(v.vehiculoId,REEMBOLSO_POR_CARRO));
   const totReembolso=ventasPropias.length*REEMBOLSO_POR_CARRO;
   const totVentaConReembolso=totVenta+totReembolso;
   // Reclamos de clientes: se conecta con los registros de la cuenta "Reclamo de cliente",
@@ -5949,7 +5950,7 @@ function calcularTotalesVentas(data){
   const totVenta=data.reduce((s,v)=>s+Number(v.precio||0),0);
   const totGan=data.reduce((s,v)=>{const vh=buscarVehiculoOConsig(v.vehiculoId);const r=vh?(vh.reparaciones||[]).reduce((sr,rp)=>sr+Number(rp.costo),0):0;const inv=Number(v.costo||0)+r;return s+Number(v.precio||0)-inv-Number(v.comision||0);},0);
   const REEMBOLSO_POR_CARRO=218;
-  const ventasPropias=data.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||'')));
+  const ventasPropias=data.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||''))&&tieneCargoAlistamiento(v.vehiculoId,REEMBOLSO_POR_CARRO));
   const totReembolso=ventasPropias.length*REEMBOLSO_POR_CARRO;
   const totVentaConReembolso=totVenta+totReembolso;
   const mesActualVtas=mesActualLocal();
@@ -11102,7 +11103,7 @@ async function cerrarEstadoResultado(desde,hasta){
   const ingresosVentas=vtasC.reduce((s,v)=>s+Number(v.precio),0);
   const costos=vtasC.reduce((s,v)=>s+Number(v.costo||0),0);
   const comisiones=vtasC.reduce((s,v)=>s+Number(v.comision||0),0);
-  const ventasPropiasRango=vtasC.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||'')));
+  const ventasPropiasRango=vtasC.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||''))&&tieneCargoAlistamiento(v.vehiculoId,218));
   const totReembolsoAlistamiento=ventasPropiasRango.length*218;
   const ingresos=ingresosVentas+totReembolsoAlistamiento;
   const gastosPeriodo=(contData.gastos||[]).filter(g=>!esCuentaDeBalanceOPatrimonio(g.cat));
@@ -11320,7 +11321,7 @@ function renderEstado(){
     return s+(Number(v.precio)-Number(v.costo||0)-rep-Number(v.comision||0));
   },0);
   const REEMBOLSO_POR_CARRO_ER=218;
-  const ventasPropiasRango=vtasC.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||'')));
+  const ventasPropiasRango=vtasC.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||''))&&tieneCargoAlistamiento(v.vehiculoId,REEMBOLSO_POR_CARRO_ER));
   const totReembolsoAlistamiento=ventasPropiasRango.length*REEMBOLSO_POR_CARRO_ER;
   // Vista normal: ingreso = precio de venta completo. Vista por Comisión: ingreso = SOLO la
   // ganancia real que deja cada venta (precio - costo - comisión) — para ver el negocio como
@@ -11436,7 +11437,7 @@ function renderEstado(){
         <span style="color:${utilNeta>=0?'var(--green)':'var(--red)'}">${fmtD(utilNeta)}</span>
       </div>
       <p style="font-size:11px;color:var(--text3);margin-top:.5rem"><i class="ti ti-arrows-move"></i> Podés <b>arrastrar</b> cualquier cuenta (↕️) entre "Gastos operativos" y "Gastos no operativos" para moverla donde corresponda.</p>
-      <p style="font-size:11px;color:var(--text3);margin-top:.25rem"><i class="ti ti-info-circle"></i> El Reembolso de alistamiento se calcula automático ($218 por cada carro propio vendido, igual que en el cuadro de Ventas del mes) — no es una transacción registrada a mano, por eso no tiene auxiliar clickeable.</p>
+      <p style="font-size:11px;color:var(--text3);margin-top:.25rem"><i class="ti ti-info-circle"></i> El Reembolso de alistamiento se calcula automático ($218 por cada carro propio vendido que tenga ese gasto de $218 realmente registrado en sus Reparaciones, igual que en el cuadro de Ventas del mes) — no es una transacción registrada a mano, por eso no tiene auxiliar clickeable.</p>
       <p style="font-size:11px;color:var(--text3);margin-top:.25rem"><i class="ti ti-info-circle"></i> Se muestran las cuentas de Mayor. Clic en cualquier cuenta para ver su auxiliar (el detalle de cada movimiento que la compone) en el rango de fechas seleccionado arriba.</p>
     </div></div>
   </div>
@@ -19205,6 +19206,14 @@ function esCategoriaReclamo(cat){
 }
 // TRUE si el gasto es un Reclamo post-venta: por su cuenta ("Reclamo de cliente" / "Reclamos de clientes")
 // o porque su descripción dice "Reclamo". Un Reclamo NUNCA es inversión: siempre es gasto operativo.
+// El reembolso de alistamiento ($218) solo aplica a los carros que de verdad tienen ese gasto
+// registrado en sus Reparaciones — no a todos los carros propios vendidos. Antes se contaban
+// todos, lo que inflaba el reembolso con carros que nunca tuvieron ese cargo.
+function tieneCargoAlistamiento(vehiculoId,monto){
+  const vh=buscarVehiculoOConsig(vehiculoId);
+  if(!vh)return false;
+  return(vh.reparaciones||[]).some(r=>Math.abs(Number(r.costo||0)-monto)<0.01);
+}
 function esGastoReclamo(g){
   return esCategoriaReclamo(g&&g.cat)||/\breclamos?\b/i.test(String((g&&g.desc)||''));
 }
