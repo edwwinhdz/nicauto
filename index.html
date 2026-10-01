@@ -4388,7 +4388,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-1500';
+const APP_VERSION='2026-10-01-1600';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5917,7 +5917,7 @@ async function cerrarMesVentasPorVendedor(){
     const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
     const margen=Number(vt.precio||0)-Number(vt.costo||0)-rep-Number(vt.comision||0);
     margenPorAgente[n]=(margenPorAgente[n]||0)+margen;margenTotalAgentes+=margen;
-    if(margen<600)malasPorAgente[n]=(malasPorAgente[n]||0)+1;
+    if(margen<600&&n!=='Gerencia'&&n!=='Sin agente asignado')malasPorAgente[n]=(malasPorAgente[n]||0)+1;
   });
   const filasAgentes=Object.entries(conteoAgentes).sort((a,b)=>b[1]-a[1]);
   const rankingPctAgentes=Object.entries(margenPorAgente).map(([n,m])=>[n,margenTotalAgentes>0?(m/margenTotalAgentes*100):0]).sort((a,b)=>b[1]-a[1]);
@@ -5951,7 +5951,7 @@ function verHistorialVentasPorVendedor(){
         ${(h.filasAgentesCompra||h.filasCompradoresPropias)?`<div style="width:100%;border-top:1px dashed var(--border);margin:.25rem 0"></div>
         <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Carros comprados (${h.totalVehiculosComprados??''})</td></tr>${(h.filasAgentesCompra||h.filasCompradoresPropias||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
         <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">% del margen generado</td></tr>${(h.rankingPctAgentes||h.rankingMargenCompradores||[]).map(([n,m])=>fila(n,m.toFixed(1)+'%')).join('')}</tbody></table>
-        ${h.malasFilasAgentes?`<table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px;color:var(--red)">Compras malas (&lt;$600)</td></tr>${(h.malasFilasAgentes||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>`:''}`:''}
+        ${h.malasFilasAgentes?`<table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px;color:var(--red)">Compras malas</td></tr>${(h.malasFilasAgentes||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>`:''}`:''}
       </div>
     </div>`).join(''):'<p style="text-align:center;color:var(--text3)">Todavía no hay meses cerrados.</p>'}
     <button class="btn" style="width:100%;margin-top:.5rem" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button>
@@ -6081,7 +6081,7 @@ function renderResumenCompradoresWord(){
     const margen=Number(vt.precio||0)-Number(vt.costo||0)-rep-Number(vt.comision||0);
     margenPorAgente[n]=(margenPorAgente[n]||0)+margen;
     margenTotal+=margen;
-    if(margen<600){
+    if(margen<600&&n!=='Gerencia'&&n!=='Sin agente asignado'){
       malasPorAgente[n]=(malasPorAgente[n]||0)+1;
       (malasDetalle[n]=malasDetalle[n]||[]).push({
         marca:vh?.marca||'',modelo:vh?.modelo||'',placa:vh?.placa||'—',fecha:vt.fecha||'',margen
@@ -6113,7 +6113,7 @@ function renderResumenCompradoresWord(){
   </table>`;
   const tablaMalas=()=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
-      <tr><td colspan="2" style="background:#C92A2A;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #C92A2A">⚠️ Compras malas (margen &lt; $600)</td></tr>
+      <tr><td colspan="2" style="background:#C92A2A;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #C92A2A">⚠️ Compras malas</td></tr>
       ${malasFilas.length?malasFilas.map(([n,c])=>`<tr onclick="verDetalleComprasMalas('${n.replace(/'/g,"\\'")}')" style="cursor:pointer">
         <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${n} <i class="ti ti-eye" style="font-size:11px;color:var(--text3)"></i></td>
         <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${c}</td>
