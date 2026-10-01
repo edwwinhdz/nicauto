@@ -683,6 +683,7 @@ body.no-delete .confirmDelete{display:none!important}
       <tfoot id="tfoot-vtas" style="background:var(--surface2);font-weight:700;font-size:12px"></tfoot>
     </table>
   </div>
+  <div id="ventas-resumen-word" style="margin-top:1rem"></div>
   <div id="caja-correccion-cierre"></div>
   <div id="historial-cierres-ventas"></div>
   </div><!-- end ventas-tab-registro -->
@@ -4386,7 +4387,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-09-30-2300';
+const APP_VERSION='2026-10-01-0930';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5873,6 +5874,136 @@ function imprimirDetalleInventarioPorEstado(){
 }
 
 // ======================== VENTAS TOTALS ========================
+// Conteo de unidades vendidas en el mes ACTUAL, por vendedor, separado en Ventas Propias y
+// Ventas Consignación — mismo estilo de tabla (amarillo/negro) que el de Inventario. Como
+// siempre se filtra por el mes de hoy (mesActualLocal()), se "reinicia" solo al llegar un mes
+// nuevo: no hace falta borrar ni guardar nada aparte.
+// Guarda una foto permanente del mes actual (quién vendió cuánto, propias y consignación, y el
+// ranking de margen) en el Historial. NO toca ni borra ninguna venta real — solo archiva el
+// resumen. El cuadro en pantalla sigue siendo en vivo y arranca solo en cero cuando empiece el
+// mes siguiente, porque siempre filtra por mesActualLocal().
+async function cerrarMesVentasPorVendedor(){
+  if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador o Coordinador puede cerrar el mes de Ventas por Vendedor.');return;}
+  const mes=mesActualLocal();
+  contData.historialVentasPorVendedor=contData.historialVentasPorVendedor||[];
+  if(contData.historialVentasPorVendedor.some(h=>h.mes===mes)){alert('Este mes ya se cerró antes. Revíselo en el Historial.');return;}
+  const ventasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha&&v.fecha.startsWith(mes));
+  const nombreVendedor=v=>{const vnd=clientes.find(c=>c.id===v.vendedorId);return vnd?normalizarNombrePizarra(vnd.nombre):'Sin vendedor';};
+  const contar=lista=>{const conteo={};lista.forEach(v=>{const n=nombreVendedor(v);conteo[n]=(conteo[n]||0)+1;});return Object.entries(conteo).sort((a,b)=>b[1]-a[1]);};
+  const propias=ventasMes.filter(v=>!/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const consig=ventasMes.filter(v=>/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const margenPorVendedor={};
+  propias.forEach(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
+    const precio=Number(v.precio||0);
+    if(precio<=0)return;
+    const margen=(precio-Number(v.costo||0)-rep-Number(v.comision||0))/precio*100;
+    const n=nombreVendedor(v);
+    if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0};
+    margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;
+  });
+  const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.suma/o.n]).sort((a,b)=>b[1]-a[1]);
+  if(!confirm(`¿Cerrar ${mes} y guardar esta foto en el Historial?\n\nPropias: ${propias.length} · Consignación: ${consig.length}\n\nEsto NO borra ni toca ninguna venta, solo archiva el resumen.`))return;
+  contData.historialVentasPorVendedor.push({
+    id:uid(),mes,fechaCierre:hoyLocal(),cerradoPor:getNombreUsuario(),
+    filasPropias:contar(propias),filasConsig:contar(consig),
+    totalPropias:propias.length,totalConsig:consig.length,rankingMargen
+  });
+  await saveOne('contable',{id:'main',...contData});
+  renderResumenVentasWord();
+}
+// Ventana con los meses ya cerrados, para consultar cualquier mes anterior.
+function verHistorialVentasPorVendedor(){
+  const lista=(contData.historialVentasPorVendedor||[]).slice().sort((a,b)=>b.mes.localeCompare(a.mes));
+  const div=document.createElement('div');
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  const fila=(label,n)=>`<tr><td style="padding:4px 8px;font-size:12px">${label}</td><td style="padding:4px 8px;font-size:12px;text-align:right;font-weight:700">${n}</td></tr>`;
+  div.innerHTML=`<div style="background:#fff;border-radius:var(--radius);max-width:560px;width:92%;max-height:80vh;overflow-y:auto;padding:1.25rem">
+    <h3 style="margin-bottom:.75rem"><i class="ti ti-history"></i> Historial — Ventas por Vendedor (${lista.length})</h3>
+    ${lista.length?lista.map(h=>`<div class="card" style="margin-bottom:.75rem">
+      <div class="card-head"><h3>${h.mes}</h3><span style="font-size:11px;color:var(--text3)">Cerrado por ${h.cerradoPor||'—'} el ${h.fechaCierre}</span></div>
+      <div style="padding:.75rem;display:flex;gap:16px;flex-wrap:wrap">
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Propias (${h.totalPropias})</td></tr>${(h.filasPropias||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Consignación (${h.totalConsig})</td></tr>${(h.filasConsig||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Margen</td></tr>${(h.rankingMargen||[]).map(([n,m])=>fila(n,m.toFixed(1)+'%')).join('')}</tbody></table>
+      </div>
+    </div>`).join(''):'<p style="text-align:center;color:var(--text3)">Todavía no hay meses cerrados.</p>'}
+    <button class="btn" style="width:100%;margin-top:.5rem" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button>
+  </div>`;
+  div.onclick=e=>{if(e.target===div)div.remove();};
+  document.body.appendChild(div);
+}
+function renderResumenVentasWord(){
+  const cont=document.getElementById('ventas-resumen-word');
+  if(!cont)return;
+  const mes=mesActualLocal();
+  const ventasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha&&v.fecha.startsWith(mes));
+  const nombreVendedor=v=>{
+    const vnd=clientes.find(c=>c.id===v.vendedorId);
+    return vnd?normalizarNombrePizarra(vnd.nombre):'Sin vendedor';
+  };
+  const contar=lista=>{
+    const conteo={};
+    lista.forEach(v=>{const n=nombreVendedor(v);conteo[n]=(conteo[n]||0)+1;});
+    return Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
+  };
+  const propias=ventasMes.filter(v=>!/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const consig=ventasMes.filter(v=>/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const filasPropias=contar(propias);
+  const filasConsig=contar(consig);
+  // Margen de ganancia promedio por vendedor, SOLO de ventas propias (ahí sí hay costo y
+  // reparaciones completos para calcularlo bien). Margen % = ganancia / precio de venta × 100,
+  // igual que en el resto del sistema.
+  const margenPorVendedor={};
+  propias.forEach(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
+    const precio=Number(v.precio||0);
+    if(precio<=0)return;
+    const ganancia=precio-Number(v.costo||0)-rep-Number(v.comision||0);
+    const margen=ganancia/precio*100;
+    const n=nombreVendedor(v);
+    if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0};
+    margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;
+  });
+  const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.suma/o.n]).sort((a,b)=>b[1]-a[1]);
+  const mejorMargen=rankingMargen[0]||null;
+  const filaW=(label,n)=>`<tr>
+    <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${label}</td>
+    <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${n}</td>
+  </tr>`;
+  const tabla=(titulo,filas,total,color)=>`<table style="max-width:280px;border-collapse:collapse">
+    <tbody>
+      <tr><td colspan="2" style="background:${color};color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid ${color}">${titulo}</td></tr>
+      ${filas.length?filas.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
+      ${filaW('TOTAL',total)}
+    </tbody>
+  </table>`;
+  const tablaMargen=()=>`<table style="max-width:280px;border-collapse:collapse">
+    <tbody>
+      <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejor margen (propias)</td></tr>
+      ${mejorMargen?filaW(mejorMargen[0],mejorMargen[1].toFixed(1)+'%'):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin datos todavía</td></tr>`}
+      ${rankingMargen.slice(1).map(([n,m])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%</td></tr>`).join('')}
+    </tbody>
+  </table>`;
+  const yaCerrado=(contData.historialVentasPorVendedor||[]).some(h=>h.mes===mes);
+  cont.innerHTML=`
+  <div class="card">
+    <div class="card-head"><h3><i class="ti ti-table"></i> Ventas del mes por vendedor — ${mes}</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="verHistorialVentasPorVendedor()"><i class="ti ti-history"></i> Historial</button>
+        ${yaCerrado?`<span class="badge badge-gray" title="Ya se guardó una foto de este mes en el Historial"><i class="ti ti-lock"></i> Mes cerrado</span>`
+          :`<button class="btn btn-sm btn-success" onclick="cerrarMesVentasPorVendedor()"><i class="ti ti-archive"></i> Cerrar mes</button>`}
+      </div>
+    </div>
+    <div style="padding:1rem;display:flex;gap:24px;flex-wrap:wrap">
+      ${tabla('Ventas Propias',filasPropias,propias.length,'#1971C2')}
+      ${tabla('Ventas Consignación',filasConsig,consig.length,'#495057')}
+      ${tablaMargen()}
+    </div>
+  </div>`;
+}
 function renderVtasTotals(data){
   const tfoot=document.getElementById('tfoot-vtas');
   if(!tfoot)return;
@@ -8849,6 +8980,7 @@ function renderVtas(){
   sel.innerHTML='<option value="">Todos los vendedores</option>'+clientes.filter(c=>c.rol==='vendedor').map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   sel.value=cur;
   renderVtasTotals(data);
+  renderResumenVentasWord();
 }
 // Corrección puntual: cambiar SOLO el vendedor de una venta, sin abrir el formulario completo
 // de edición. Se agregó porque el formulario completo exige re-seleccionar el vehículo, y si
@@ -8894,7 +9026,7 @@ function abrirModalVenta(id){
   sVend.innerHTML='<option value="">-- Seleccionar --</option>'+listaMixta.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   const sVeh=document.getElementById('mvt-vehiculo');
   const dispVeh=vehiculos.filter(x=>x.estado==='Disponible'||x.estado==='Reservado'||(v&&x.id===v.vehiculoId));
-  const consigs=(contData.consignacion||[]).filter(cs=>cs.estado!=='Vendido');
+  const consigs=(contData.consignacion||[]).filter(cs=>cs.estado!=='Vendido'||(v&&('CONSIG_'+cs.id)===v.vehiculoId));
   const gers=vehGerencia.filter(g=>g.estado!=='Vendido'||(v&&('VGER_'+g.id)===v.vehiculoId));
   sVeh.innerHTML='<option value="">-- Seleccionar vehículo --</option>'+
     (dispVeh.length?`<optgroup label="── Inventario NICAUTO ──">${dispVeh.map(x=>`<option value="${x.id}">${x.marca} ${x.modelo} ${x.anio} (${x.placa}) — ${fmtD(x.precio)}</option>`).join('')}</optgroup>`:'')+ 
