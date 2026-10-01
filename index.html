@@ -3536,6 +3536,19 @@ body.no-delete .confirmDelete{display:none!important}
 <script>
 // ======================== SUPABASE CONFIG ========================
 const SB_URL='https://cxcuewgfeubmedwniwtl.supabase.co';
+// Fecha de HOY y MES ACTUAL en hora LOCAL (la del navegador de quien usa el sistema, en la
+// práctica la de Nicaragua). ANTES se usaba new Date().toISOString(), que siempre da la fecha en
+// hora universal (UTC) — como Nicaragua está 6 horas detrás, el sistema cambiaba de "día" a eso
+// de las 6pm hora local en vez de a medianoche. Estas dos funciones arreglan eso de raíz.
+function hoyLocal(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function mesActualLocal(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4Y3Vld2dmZXVibWVkd25pd3RsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDAxODYsImV4cCI6MjA5Nzk3NjE4Nn0.nNF-noYAbqIuLO2YJTm7eaf-5KTjVCjjNRJWatRrgV4';
 const GEMINI_KEY='AIzaSyAQ.Ab8RN6LMjgVTdP0xarUrf9gW3IW3aNpySGIbSTUtUbk--KvJpQ';
 const GEMINI_URL=`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
@@ -3902,7 +3915,7 @@ let _respaldoYaChequeadoEnEstaSesion=false; // evita competir por recursos con e
 async function respaldarContableSiHaceFalta(){
   if(_respaldoDeHoyEnProceso||_respaldoYaChequeadoEnEstaSesion)return;
   _respaldoYaChequeadoEnEstaSesion=true; // esta sesión ya no lo va a volver a chequear
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const idRespaldo='backup_full_'+hoy;
   try{
     const yaExiste=await existeFilaSB('contable',idRespaldo);
@@ -4373,7 +4386,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-09-30-1100';
+const APP_VERSION='2026-09-30-2200';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5877,7 +5890,7 @@ function renderVtasTotals(data){
   // Reclamos de clientes: se conecta con los registros de la cuenta "Reclamo de cliente",
   // pero SOLO los del mes actual (no el histórico completo) — así el resultado refleja lo
   // que corresponde a este período, no reclamos de meses anteriores ya cerrados.
-  const mesActualVtas=new Date().toISOString().slice(0,7);
+  const mesActualVtas=mesActualLocal();
   const totReclamosVtas=(contData.gastos||[]).filter(g=>esGastoReclamo(g)&&(g.fecha||'').slice(0,7)===mesActualVtas).reduce((s,g)=>s+Number(g.monto||0),0);
   const totCostosFijos=getTotalCostosFijos();
   const totGanReembolso=totGan+totReembolso;
@@ -5939,7 +5952,7 @@ function calcularTotalesVentas(data){
   const ventasPropias=data.filter(v=>!/^(CONSIG_|VGER_)/.test(String(v.vehiculoId||'')));
   const totReembolso=ventasPropias.length*REEMBOLSO_POR_CARRO;
   const totVentaConReembolso=totVenta+totReembolso;
-  const mesActualVtas=new Date().toISOString().slice(0,7);
+  const mesActualVtas=mesActualLocal();
   const totReclamosVtas=(contData.gastos||[]).filter(g=>esGastoReclamo(g)&&(g.fecha||'').slice(0,7)===mesActualVtas).reduce((s,g)=>s+Number(g.monto||0),0);
   const totCostosFijos=getTotalCostosFijos();
   const totGanReembolso=totGan+totReembolso;
@@ -5957,7 +5970,7 @@ async function cerrarVentasDelMes(){
   const abiertas=ventas.filter(v=>v.estado==='Completada'&&!v.cerradoMes);
   if(!abiertas.length){alert('No hay ventas abiertas para cerrar.');return;}
   const meses=[...new Set(abiertas.map(v=>(v.fecha||'').slice(0,7)))].sort();
-  const mesSugerido=meses[0]||new Date().toISOString().slice(0,7);
+  const mesSugerido=meses[0]||mesActualLocal();
   const mesElegido=prompt(`¿Qué mes querés cerrar? (formato AAAA-MM)\n\nMeses con ventas pendientes de cerrar: ${meses.map(labelMes).join(', ')}`,mesSugerido);
   if(!mesElegido)return;
   const data=abiertas.filter(v=>(v.fecha||'').slice(0,7)===mesElegido);
@@ -5966,7 +5979,7 @@ async function cerrarVentasDelMes(){
   if(!confirm(`¿Cerrar "Ventas de ${labelMes(mesElegido)}" con ${data.length} venta(s)?\n\nTotal Resultado: ${fmtD(totales.totResultado)}\n\nEsto archiva el mes como historial — la lista principal va a quedar lista para el mes nuevo. Podés reabrirlo después para corregir si hace falta.`))return;
   contData.cierresVentasMensuales=contData.cierresVentasMensuales||[];
   contData.cierresVentasMensuales.push({
-    id:uid(),mes:mesElegido,mesLabel:labelMes(mesElegido),fechaCierre:new Date().toISOString().slice(0,10),
+    id:uid(),mes:mesElegido,mesLabel:labelMes(mesElegido),fechaCierre:hoyLocal(),
     ventaIds:data.map(v=>v.id),totales,cerradoPor:getNombreUsuario()
   });
   await saveOne('contable',{id:'main',...contData});
@@ -6107,7 +6120,7 @@ function diasDesde(fecha){
 function renderCalendarioLP(){
   const el=document.getElementById('lp-calendario-citas');
   if(!el)return;
-  const mes=new Date().toISOString().slice(0,7);
+  const mes=mesActualLocal();
   const mesLabelActual=new Date().toLocaleDateString('es-NI',{month:'long',year:'numeric'});
   el.innerHTML=`<div class="card">
     <div class="card-head"><h3><i class="ti ti-calendar-event"></i> Calendario de Citas — <span style="text-transform:capitalize">${mesLabelActual}</span></h3></div>
@@ -6276,7 +6289,7 @@ async function confirmarNoEncontrado(vid,origen,claveWindow,titulo){
   v.chequeoFisico.noEncontrado=true;
   v.chequeoFisico.noEncontradoJustificacion=justif.trim();
   v.chequeoFisico.noEncontradoPor=getNombreUsuario();
-  v.chequeoFisico.noEncontradoFecha=new Date().toISOString().slice(0,10);
+  v.chequeoFisico.noEncontradoFecha=hoyLocal();
   if(origen==='consig')await saveOne('contable',{id:'main',...contData});
   else await saveOne('vehiculos',v);
   const abierto=document.getElementById('ov-lista-faltantes-chequeo');
@@ -6391,7 +6404,7 @@ async function toggleChequeoFisicoConsig(cid,campo){
   if(!c.chequeoFisico)c.chequeoFisico={};
   const activo=!c.chequeoFisico[campo];
   c.chequeoFisico[campo]=activo;
-  if(activo){c.chequeoFisico[campo+'Por']=getNombreUsuario();c.chequeoFisico[campo+'Fecha']=new Date().toISOString().slice(0,10);}
+  if(activo){c.chequeoFisico[campo+'Por']=getNombreUsuario();c.chequeoFisico[campo+'Fecha']=hoyLocal();}
   else{delete c.chequeoFisico[campo+'Por'];delete c.chequeoFisico[campo+'Fecha'];}
   await saveOne('contable',{id:'main',...contData});
   renderChequeoFisicoConsignacion();
@@ -6401,7 +6414,7 @@ async function marcarCombustibleChequeoConsig(cid,valor){
   if(!c)return;
   if(!c.chequeoFisico)c.chequeoFisico={};
   if(c.chequeoFisico.combustible===valor){delete c.chequeoFisico.combustible;delete c.chequeoFisico.combustiblePor;delete c.chequeoFisico.combustibleFecha;}
-  else{c.chequeoFisico.combustible=valor;c.chequeoFisico.combustiblePor=getNombreUsuario();c.chequeoFisico.combustibleFecha=new Date().toISOString().slice(0,10);}
+  else{c.chequeoFisico.combustible=valor;c.chequeoFisico.combustiblePor=getNombreUsuario();c.chequeoFisico.combustibleFecha=hoyLocal();}
   await saveOne('contable',{id:'main',...contData});
   renderChequeoFisicoConsignacion();
 }
@@ -6449,10 +6462,10 @@ function renderResumenFirmaChequeo(data){
 // el día de hoy, firmado por quien hizo más checks — y deja todo en blanco para el próximo
 // chequeo (mañana u otro día).
 async function terminarChequeoFisico(firmante){
-  if(!confirm(`¿Terminar este chequeo y guardarlo en el historial?\n\nQueda firmado por: ${firmante}\nFecha: ${new Date().toISOString().slice(0,10)}\n\nDespués de esto, todas las casillas se limpian para empezar un chequeo nuevo.`))return;
+  if(!confirm(`¿Terminar este chequeo y guardarlo en el historial?\n\nQueda firmado por: ${firmante}\nFecha: ${hoyLocal()}\n\nDespués de esto, todas las casillas se limpian para empezar un chequeo nuevo.`))return;
   // En la foto del historial, los carros de Gerencia / Taller Externo / Prestado quedan con
   // Verificado, Llave y Encendido válidos, indicando "Automático (motivo)" en vez de una persona.
-  const hoyCF=new Date().toISOString().slice(0,10);
+  const hoyCF=hoyLocal();
   const cfParaHistorial=cf=>{
     const copia={...cf};
     const motivo=cfMotivoExento(cf);
@@ -6468,7 +6481,7 @@ async function terminarChequeoFisico(firmante){
   const snapshot=[...snapshotVehiculos,...snapshotConsig];
   if(!contData.historialChequeoFisico)contData.historialChequeoFisico=[];
   contData.historialChequeoFisico.unshift({
-    id:uid(),fecha:new Date().toISOString().slice(0,10),firmante,
+    id:uid(),fecha:hoyLocal(),firmante,
     totalVehiculos:snapshot.length,vehiculos:snapshot,
     cerradoPor:getNombreUsuario()
   });
@@ -6666,7 +6679,7 @@ async function toggleChequeoFisico(vid,campo){
   v.chequeoFisico[campo]=activo;
   if(activo){
     v.chequeoFisico[campo+'Por']=getNombreUsuario();
-    v.chequeoFisico[campo+'Fecha']=new Date().toISOString().slice(0,10);
+    v.chequeoFisico[campo+'Fecha']=hoyLocal();
   } else {
     v.chequeoFisico[campo+'Por']=null;
     v.chequeoFisico[campo+'Fecha']=null;
@@ -6687,7 +6700,7 @@ async function togglePrestadoChequeo(vid){
   } else {
     const nombre=prompt('¿A quién se le presta este vehículo?');
     if(nombre===null||!nombre.trim())return;
-    cf.prestado=true;cf.prestadoA=nombre.trim();cf.prestadoPor=getNombreUsuario();cf.prestadoFecha=new Date().toISOString().slice(0,10);
+    cf.prestado=true;cf.prestadoA=nombre.trim();cf.prestadoPor=getNombreUsuario();cf.prestadoFecha=hoyLocal();
   }
   await saveOne('vehiculos',v);
   renderChequeoFisico();
@@ -6704,7 +6717,7 @@ async function marcarCombustibleChequeo(vid,valor){
   } else {
     v.chequeoFisico.combustible=valor;
     v.chequeoFisico.combustiblePor=getNombreUsuario();
-    v.chequeoFisico.combustibleFecha=new Date().toISOString().slice(0,10);
+    v.chequeoFisico.combustibleFecha=hoyLocal();
   }
   await saveOne('vehiculos',v);
   renderChequeoFisico();
@@ -6904,7 +6917,7 @@ async function guardarReservaRapida(){
   const nueva={
     id:uid(),vehiculoId:vid,compradorId:'',nombreFactura:cliente,celularFactura:document.getElementById('resr-cel').value,
     vendedorId:(clientes.find(c=>c.nombre===vendedorNombre)||{}).id||'',
-    fecha:new Date().toISOString().slice(0,10),
+    fecha:hoyLocal(),
     precio:parseFloat(precio),anticipo:montoAnticipo,
     pago:document.getElementById('resr-pago').value,estado:'Pendiente',recibo,condicion,banco,
     registradoPor:getNombreUsuario()
@@ -7268,7 +7281,7 @@ function renderDash(){
   const totalPasCap=cxpPend;
   const capitalContable=totalActCap-totalPasCap;
   // Mes actual KPIs
-  const mesActual=new Date().toISOString().slice(0,7);
+  const mesActual=mesActualLocal();
   const vtasMes=vc.filter(v=>v.fecha&&v.fecha.startsWith(mesActual));
   const ingresosMes=vtasMes.reduce((s,v)=>s+Number(v.precio),0);
   const costosMes=vtasMes.reduce((s,v)=>s+Number(v.costo||0),0);
@@ -7502,7 +7515,7 @@ async function aplicarPlanGerencial(){
     await saveOne('vehiculos',vehiculos[vi]);
   }
   contData.planGerencialUltimo={
-    fecha:new Date().toISOString().slice(0,10),
+    fecha:hoyLocal(),
     porcentaje:pct,tipo,snapshot,
     aplicadoPor:getNombreUsuario(),
     deshecho:false
@@ -7666,7 +7679,7 @@ async function asignarVendedorVenta(vehiculoId,vendedorId){
       id:uid(),vehiculoId,compradorId:'',
       nombreFactura:nombreComprador||'',
       vendedorId,
-      fecha:new Date().toISOString().slice(0,10),
+      fecha:hoyLocal(),
       precio:Number(v.precio||0),costo:Number(v.costo||0),comision:0,
       pago:'Efectivo',estado:'Completada',
       recibo:consumirNumeroRecibo('venta'),
@@ -7919,7 +7932,7 @@ function guardarVehiculo(){
   // Partidas dobles contables
   if(esNuevo&&vals.mediopago&&vals.costo&&parseFloat(vals.costo)>0){
     const costo=parseFloat(vals.costo);
-    const fecha=vals.fechacompra||new Date().toISOString().slice(0,10);
+    const fecha=vals.fechacompra||hoyLocal();
     const desc=`${vals.marca} ${vals.modelo} ${vals.anio||''} — ${vals.placa||''} — ${vals.nombrecomprador||''}`;
     const comprobanteId=uid();
     contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Ingreso',medio:'Inventario',monto:costo,cat:'Entrada de inventario',ref:vals.recibo||'',persona:vals.nombrecomprador||'',vehId:id,desc:`DÉBITO INVENTARIO: ${desc}`});
@@ -7946,7 +7959,7 @@ function registrarBorrado(tipo,datosCompletos,descripcion){
   if(!contData.papeleraBorrados)contData.papeleraBorrados=[];
   contData.papeleraBorrados.unshift({
     id:uid(),tipo,datos:datosCompletos,descripcion,
-    borradoPor:getNombreUsuario(),fecha:new Date().toISOString().slice(0,10),
+    borradoPor:getNombreUsuario(),fecha:hoyLocal(),
     hora:new Date().toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'})
   });
   if(contData.papeleraBorrados.length>500)contData.papeleraBorrados=contData.papeleraBorrados.slice(0,500);
@@ -8116,7 +8129,7 @@ function editarReparacion(rid){
   const rep=(r.obj.reparaciones||[]).find(x=>x.id===rid);
   if(!rep)return;
   document.getElementById('mrep-rid').value=rid;
-  document.getElementById('mrep-fecha').value=rep.fecha||new Date().toISOString().slice(0,10);
+  document.getElementById('mrep-fecha').value=rep.fecha||hoyLocal();
   document.getElementById('mrep-tipo').value=rep.tipo||'Mecánica general';
   document.getElementById('mrep-desc').value=rep.desc||'';
   document.getElementById('mrep-taller').value=rep.taller||'';
@@ -8131,7 +8144,7 @@ function editarReparacion(rid){
 function cancelarEdicionReparacion(){
   document.getElementById('mrep-rid').value='';
   ['desc','taller','costo','factura'].forEach(f=>document.getElementById('mrep-'+f).value='');
-  document.getElementById('mrep-fecha').value=new Date().toISOString().slice(0,10);
+  document.getElementById('mrep-fecha').value=hoyLocal();
   document.getElementById('mrep-tipo').value='Mecánica general';
   document.getElementById('mrep-pago').value='Caja (efectivo)';
   const cxcTipoEl=document.getElementById('mrep-cxc-tipo');if(cxcTipoEl)cxcTipoEl.value='';
@@ -8506,7 +8519,7 @@ function clasificarMargen(m){
 }
 function renderKpiVentasCompras(){
   const cont=document.getElementById('ventas-tab-kpi');
-  const mesSel=cont.querySelector('#kpi-mes')?.value||new Date().toISOString().slice(0,7);
+  const mesSel=cont.querySelector('#kpi-mes')?.value||mesActualLocal();
   const vc=ventas.filter(v=>v.estado==='Completada'&&(v.fecha||'').slice(0,7)===mesSel);
   const filas=vc.map(v=>{
     const vh=buscarVehiculoPropioOGer(v.vehiculoId);
@@ -8599,7 +8612,7 @@ function renderKpiVentasCompras(){
 // pueda encontrar y corregir los casos exactos (checkbox sin marcar, vendedor no encontrado,
 // fecha faltante, o estado distinto a Completada).
 function abrirAuditoriaPizarra(){
-  const mesActual=new Date().toISOString().slice(0,7);
+  const mesActual=mesActualLocal();
   const filasVentas=ventas.map(v=>{
     const c=clientes.find(x=>x.id===v.compradorId);
     const vnd=clientes.find(x=>x.id===v.vendedorId);
@@ -8915,7 +8928,7 @@ function abrirModalVenta(id){
     const elCedulaFact=document.getElementById('mvt-cedula-factura');if(elCedulaFact)elCedulaFact.value=v.cedulaFactura||'';
     const liqV=document.getElementById('mvt-liquidacion');if(liqV)liqV.style.display='none';
   } else {
-    document.getElementById('mvt-fecha').value=new Date().toISOString().slice(0,10);
+    document.getElementById('mvt-fecha').value=hoyLocal();
     ['precio','costo','comision','notas','recibo'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
     document.getElementById('mvt-estado').value='Completada';
     if(document.getElementById('mvt-contacto'))document.getElementById('mvt-contacto').value='';
@@ -9069,7 +9082,7 @@ async function anularVentaCompletada(id){
 
   v.estado='Anulada';
   v.motivoCancelacion=motivo||'Venta anulada';
-  v.fechaAnulacion=new Date().toISOString().slice(0,10);
+  v.fechaAnulacion=hoyLocal();
   v.ajusteContableRealizado=false;
   await saveOne('ventas',v);
 
@@ -9105,7 +9118,7 @@ async function marcarAjusteContableVenta(id){
   if(!confirm('¿Confirmás que ya revisaste/ajustaste la contabilidad (Débito/Crédito de Inventario) de esta venta anulada?'))return;
   v.ajusteContableRealizado=true;
   v.ajusteContablePor=getNombreUsuario();
-  v.ajusteContableFecha=new Date().toISOString().slice(0,10);
+  v.ajusteContableFecha=hoyLocal();
   await saveOne('ventas',v);
   renderVtas();
 }
@@ -9126,7 +9139,7 @@ async function cancelarOtrasReservasDelVehiculo(vehiculoId,ventaGanadoraId){
       const vh=buscarVehiculoOConsig(vehiculoId);
       const descVeh=vh?`${vh.marca||''} ${vh.modelo||''} ${vh.anio||''}${vh.placa?' ('+vh.placa+')':''}`.trim():'';
       contData.cuentas=contData.cuentas||[];
-      contData.cuentas.push({id:uid(),fecha:new Date().toISOString().slice(0,10),vence:'',
+      contData.cuentas.push({id:uid(),fecha:hoyLocal(),vence:'',
         tipo:'CxP-ReservaFlotante',estado:'Pendiente',
         monto:anticipoPerdido,saldo:anticipoPerdido,
         persona:compradorNombre,vehId:vehiculoId,
@@ -9179,7 +9192,7 @@ async function guardarVenta(){
   const vehiculoId=document.getElementById('mvt-vehiculo').value;
   const precio=parseFloat(document.getElementById('mvt-precio').value||0);
   const costoInput=parseFloat(document.getElementById('mvt-costo').value||0);
-  const fecha=document.getElementById('mvt-fecha').value||new Date().toISOString().slice(0,10);
+  const fecha=document.getElementById('mvt-fecha').value||hoyLocal();
   if(!alertaSiFueraDeMes(fecha,'venta'))return;
   const estado=document.getElementById('mvt-estado').value;
   const comision=parseFloat(document.getElementById('mvt-comision').value||0);
@@ -9609,7 +9622,7 @@ function renderBit(){
 }
 function abrirModalBit(){
   document.getElementById('mbit-id').value='';
-  document.getElementById('mbit-fecha').value=new Date().toISOString().slice(0,10);
+  document.getElementById('mbit-fecha').value=hoyLocal();
   document.getElementById('mbit-tipo').value='Nota';
   document.getElementById('mbit-desc').value='';
   const s1=document.getElementById('mbit-p1');
@@ -9650,7 +9663,7 @@ function showContTab(t){
 function ensurePosicionFinanciera(){
   if(!contData.posicionFinanciera){
     contData.posicionFinanciera={
-      fechaCorte:new Date().toISOString().slice(0,10),
+      fechaCorte:hoyLocal(),
       categorias:[
         {id:uid(),nombre:'Venta',unidades:27,valor:269647.92},
         {id:uid(),nombre:'Gerencia',unidades:7,valor:57887.78},
@@ -9830,7 +9843,7 @@ async function reiniciarFondoPersonalConHistorial(clave,titulo){
   if(!confirm(`¿Reiniciar "${titulo}" para una cuenta nueva?\n\nSe van a archivar los ${filas.length} movimiento(s) actuales en el historial (podés verlos ahí cuando quieras), y la hoja va a quedar en blanco.`))return;
   const claveHist=clave+'Historial';
   if(!contData[claveHist])contData[claveHist]=[];
-  contData[claveHist].push({id:uid(),fechaCierre:new Date().toISOString().slice(0,10),cerradoPor:getNombreUsuario(),movimientos:[...filas]});
+  contData[claveHist].push({id:uid(),fechaCierre:hoyLocal(),cerradoPor:getNombreUsuario(),movimientos:[...filas]});
   contData[clave]=[];
   await saveOne('contable',{id:'main',...contData});
   alert('✅ Hoja reiniciada — los movimientos anteriores quedaron guardados en el Historial.');
@@ -9866,7 +9879,7 @@ function abrirModalFondoPersonal(clave,id){
   document.getElementById('mfp-id').value=f?f.id:'';
   document.getElementById('mfp-tipo').value=f?f.tipo:'Ingreso';
   document.getElementById('mfp-monto').value=f?f.monto:'';
-  document.getElementById('mfp-fechaingreso').value=f?f.fechaIngreso:new Date().toISOString().slice(0,10);
+  document.getElementById('mfp-fechaingreso').value=f?f.fechaIngreso:hoyLocal();
   document.getElementById('mfp-fechapago').value=f?f.fechaPago||'':'';
   document.getElementById('mfp-detalle').value=f?f.detalle||'':'';
   document.getElementById('mfp-clasif').value=f?f.clasificacion||'':'Inversión Vehículo';
@@ -10154,7 +10167,7 @@ function abrirModalRecibo(id){
   const r=id?(contData.recibos||[]).find(x=>x.id===id):null;
   document.getElementById('mrec-title').textContent=id?'Editar movimiento':'Nuevo recibo / transferencia';
   document.getElementById('mrec-id').value=id||'';
-  document.getElementById('mrec-fecha').value=r?r.fecha:new Date().toISOString().slice(0,10);
+  document.getElementById('mrec-fecha').value=r?r.fecha:hoyLocal();
   document.getElementById('mrec-tipo').value=r?r.tipo:'Ingreso';
   document.getElementById('mrec-medio').value=r?r.medio:'Caja (efectivo)';
   document.getElementById('mrec-monto').value=r?r.monto:'';
@@ -10262,7 +10275,7 @@ let _diarioLineaSeq=0;
 function getComprobantesDiario(){if(!contData.comprobantesDiario)contData.comprobantesDiario=[];return contData.comprobantesDiario;}
 function abrirModalDiario(){
   if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ No tenés permisos para registrar comprobantes de diario.');return;}
-  document.getElementById('mdia-fecha').value=new Date().toISOString().slice(0,10);
+  document.getElementById('mdia-fecha').value=hoyLocal();
   document.getElementById('mdia-numero').value='CD-'+String(getComprobantesDiario().length+1).padStart(3,'0');
   document.getElementById('mdia-concepto').value='';
   document.getElementById('mdia-lineas').innerHTML='';
@@ -10364,7 +10377,7 @@ async function guardarComprobanteDiario(){
   const id=uid();
   const efectos=lineas.map(l=>aplicarLineaDiario(l,fecha,numero,concepto));
   const sinAplicar=efectos.filter(e=>e.tipo==='sinAplicar');
-  getComprobantesDiario().push({id,numero,fecha,concepto,lineas,efectos,creadoPor:getNombreUsuario(),fechaRegistro:new Date().toISOString().slice(0,10)});
+  getComprobantesDiario().push({id,numero,fecha,concepto,lineas,efectos,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
   await saveOne('contable',{id:'main',...contData});
   closeOv('ov-diario');
   renderCaja();
@@ -10494,7 +10507,7 @@ function abrirModalCuenta(id,tipoDefault){
   const c=id?(contData.cuentas||[]).find(x=>x.id===id):null;
   document.getElementById('mcta-title').textContent=id?((MODO==='admin'||MODO==='coordinador')?'Editar cuenta':'Ver cuenta (comprobante)'):'Registrar cuenta';
   document.getElementById('mcta-id').value=id||'';
-  document.getElementById('mcta-fecha').value=c?c.fecha:new Date().toISOString().slice(0,10);
+  document.getElementById('mcta-fecha').value=c?c.fecha:hoyLocal();
   document.getElementById('mcta-vence').value=c?c.vence||'':'';
   document.getElementById('mcta-tipo').value=c?c.tipo:(tipoDefault||'CxC-Cliente');
   document.getElementById('mcta-estado').value=c?c.estado:'Pendiente';
@@ -10550,7 +10563,7 @@ async function registrarPagoCuenta(id){
   if(isNaN(monto)||monto<=0){alert('Ingresá un monto válido mayor a cero.');return;}
   if(monto>c.saldo+0.01&&!confirm(`El pago (${fmtD(monto)}) es MAYOR al saldo pendiente (${fmtD(c.saldo)}). ¿Continuar de todos modos?`))return;
   c.historialPagos=c.historialPagos||[];
-  c.historialPagos.push({fecha:new Date().toISOString().slice(0,10),monto,registradoPor:getNombreUsuario()});
+  c.historialPagos.push({fecha:hoyLocal(),monto,registradoPor:getNombreUsuario()});
   c.saldo=Math.max(0,parseFloat((c.saldo-monto).toFixed(2)));
   if(c.saldo===0)c.estado='Pagada';
   await saveOne('contable',{id:'main',...contData});
@@ -10565,7 +10578,7 @@ async function validarCxCRendicion(id){
   if(!confirm(`¿Validar esta Cuenta por Cobrar de ${fmtD(c.monto)} (${c.persona})?`))return;
   c.estado='Pendiente';
   c.validadoPor=getNombreUsuario();
-  c.fechaValidacion=new Date().toISOString().slice(0,10);
+  c.fechaValidacion=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   renderCuentas();
   alert('✅ Cuenta por Cobrar validada.');
@@ -10581,7 +10594,7 @@ async function agregarTodosEmpleadosCxC(){
   TODOS_USUARIOS.forEach(u=>{
     if(existentes.has(u.nombre))return;
     contData.cuentas.push({
-      id:uid(),fecha:new Date().toISOString().slice(0,10),vence:'',tipo:'CxC-Empleado',
+      id:uid(),fecha:hoyLocal(),vence:'',tipo:'CxC-Empleado',
       estado:'Pagada',monto:0,saldo:0,persona:u.nombre,desc:`Cuenta por cobrar — ${u.rol}`
     });
     agregados++;
@@ -10671,7 +10684,7 @@ function abrirModalGasto(id){
   const g=id?(contData.gastos||[]).find(x=>x.id===id):null;
   document.getElementById('mgto-title').textContent=id?'Editar gasto':'Registrar gasto';
   document.getElementById('mgto-id').value=id||'';
-  document.getElementById('mgto-fecha').value=g?g.fecha:new Date().toISOString().slice(0,10);
+  document.getElementById('mgto-fecha').value=g?g.fecha:hoyLocal();
   // Las cuentas contables nuevas que el Administrador crea en Catálogo (de cualquier tipo:
   // gasto, activo, pasivo o ingreso) se agregan aquí automáticamente, en un grupo aparte, para
   // poder usarlas al registrar un gasto real — antes esta lista era fija y solo incluía las de
@@ -11101,7 +11114,7 @@ async function cerrarEstadoResultado(desde,hasta){
   if(!confirm(`¿Cerrar y archivar el Estado de Resultado del ${desde} al ${hasta}?\n\nIngresos: ${fmtD(ingresos)}\nUtilidad Neta: ${fmtD(utilNeta)}\n\nEsto queda guardado como historial — podés volver a verlo cuando quieras.`))return;
   contData.estadosResultadoCerrados=contData.estadosResultadoCerrados||[];
   contData.estadosResultadoCerrados.push({id:uid(),desde,hasta,ingresos,costos,comisiones,gastosAdmin,gastosReclamo,gastosNoOp,totReembolsoAlistamiento,utilNeta,
-    fechaCierre:new Date().toISOString().slice(0,10),cerradoPor:getNombreUsuario()});
+    fechaCierre:hoyLocal(),cerradoPor:getNombreUsuario()});
   await saveOne('contable',{id:'main',...contData});
   alert('✅ Estado de Resultado archivado correctamente.');
   renderEstado();
@@ -11283,7 +11296,7 @@ function cuadreRendicionHTML(desde,hasta,totalesER){
 }
 
 function renderEstado(){
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const primerDiaMes=hoy.slice(0,8)+'01';
   const desde=document.getElementById('estado-fecha-desde')?.value||primerDiaMes;
   const hasta=document.getElementById('estado-fecha-hasta')?.value||hoy;
@@ -11985,7 +11998,7 @@ async function subirDocumentoPolitica(input){
   reader.onload=async function(){
     const nuevoDoc={
       id:uid(),nombre:file.name,tipo:file.type,tamano:file.size,data:reader.result,
-      subidoPor:getNombreUsuario(),fecha:new Date().toISOString().slice(0,10)
+      subidoPor:getNombreUsuario(),fecha:hoyLocal()
     };
     politicasDocsData.push(nuevoDoc);
     // Reintenta varias veces antes de darse por vencido — subir un archivo es justo el
@@ -12093,7 +12106,7 @@ async function enviarComentarioPolitica(){
   const texto=document.getElementById('pol-comentario-input').value.trim();
   if(!texto){alert('Escribí algo antes de enviar.');return;}
   const comentarios=getPoliticasComentarios();
-  comentarios.push({id:uid(),texto,nombre:getNombreUsuario(),fecha:new Date().toISOString().slice(0,10),leido:false});
+  comentarios.push({id:uid(),texto,nombre:getNombreUsuario(),fecha:hoyLocal(),leido:false});
   contData.politicasComentarios=comentarios;
   await saveOne('contable',{id:'main',...contData});
   document.getElementById('pol-comentario-input').value='';
@@ -12103,7 +12116,7 @@ async function marcarComentarioLeido(id){
   const c=getPoliticasComentarios().find(x=>x.id===id);
   if(!c)return;
   c.leido=!c.leido;
-  if(c.leido){c.leidoPor=getNombreUsuario();c.leidoFecha=new Date().toISOString().slice(0,10);}
+  if(c.leido){c.leidoPor=getNombreUsuario();c.leidoFecha=hoyLocal();}
   await saveOne('contable',{id:'main',...contData});
   renderPoliticas();
 }
@@ -12995,7 +13008,7 @@ async function guardarCuentaPersonalizada(){
   if(!codigo||!nombre){alert('El código y el nombre son obligatorios.');return;}
   contData.cuentasPersonalizadas=contData.cuentasPersonalizadas||[];
   if(!codigoOriginal&&contData.cuentasPersonalizadas.find(c=>c.codigo===codigo)){alert('Ya existe una cuenta con ese código.');return;}
-  const obj={codigo,nombre,tipo,esMayor,mayor,saldo,creadoPor:getNombreUsuario(),fecha:new Date().toISOString().slice(0,10)};
+  const obj={codigo,nombre,tipo,esMayor,mayor,saldo,creadoPor:getNombreUsuario(),fecha:hoyLocal()};
   const idx=contData.cuentasPersonalizadas.findIndex(c=>c.codigo===(codigoOriginal||codigo));
   if(idx>=0)contData.cuentasPersonalizadas[idx]=obj;else contData.cuentasPersonalizadas.push(obj);
   await saveOne('contable',{id:'main',...contData});
@@ -13054,7 +13067,7 @@ async function agregarNotaEF(){
   const texto=document.getElementById('mnef-texto').value.trim();
   if(!texto){alert('Escribí el análisis antes de guardar.');return;}
   contData.notasEstadosFinancieros=contData.notasEstadosFinancieros||[];
-  contData.notasEstadosFinancieros.push({id:uid(),autor,periodo,texto,fecha:new Date().toISOString().slice(0,10),creadoPor:getNombreUsuario()});
+  contData.notasEstadosFinancieros.push({id:uid(),autor,periodo,texto,fecha:hoyLocal(),creadoPor:getNombreUsuario()});
   await saveOne('contable',{id:'main',...contData});
   renderNotasEF();
 }
@@ -13357,7 +13370,7 @@ function abrirModalVehGer(id){
   ['marca','modelo','anio','color','placa','trans','uso','resp','costo','gastomes','fecha','km','ref','obs'].forEach(f=>{
     const el=document.getElementById('mvger-'+f);if(el)el.value=v?v[f]||'':'';
   });
-  if(!v){document.getElementById('mvger-fecha').value=new Date().toISOString().slice(0,10);document.getElementById('mvger-uso').value='Gerencia';}
+  if(!v){document.getElementById('mvger-fecha').value=hoyLocal();document.getElementById('mvger-uso').value='Gerencia';}
   cargarFotoGridExistenteGen('vger',v?.fotos);
   openOv('ov-vehger');
 }
@@ -13373,7 +13386,7 @@ function guardarVehGer(){
   if(i>=0)vehGerencia[i]=obj; else vehGerencia.push(obj);
   const medio=document.getElementById('mvger-medio').value;
   if(isNew&&medio&&vals.costo&&parseFloat(vals.costo)>0){
-    const recObj={id:uid(),fecha:vals.fecha||new Date().toISOString().slice(0,10),tipo:'Egreso',medio,
+    const recObj={id:uid(),fecha:vals.fecha||hoyLocal(),tipo:'Egreso',medio,
       monto:parseFloat(vals.costo),cat:'Gasto operativo',ref:vals.ref||'',persona:vals.resp||'',
       desc:`Adquisición vehículo ${vals.uso}: ${vals.marca} ${vals.modelo} ${vals.anio} (${vals.placa})`};
     contData.recibos.push(recObj);saveOne('contable',{id:'main',...contData});
@@ -13411,7 +13424,7 @@ function getRepFechas(){
   return{d,h,filtrar:v=>(!d||v.fecha>=d)&&(!h||v.fecha<=h)};
 }
 function renderReportes(){
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const priMes=hoy.slice(0,7)+'-01';
   if(!document.getElementById('rep-desde').value)document.getElementById('rep-desde').value=priMes;
   if(!document.getElementById('rep-hasta').value)document.getElementById('rep-hasta').value=hoy;
@@ -13580,7 +13593,7 @@ function renderDashChart(){
 function citaBadge(cita,atendido,resultado,liberado){
   if(liberado)return`<span class="badge badge-gray" style="font-size:10px">⏹️ LIBERADO</span>`;
   if(!cita)return'—';
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   if(resultado==='Atendido'||atendido)return`<span class="badge badge-green" style="font-size:10px">✅ Atendido</span>`;
   if(resultado==='No Aceptó')return`<span class="badge badge-red" style="font-size:10px">🚫 No Aceptó</span>`;
   if(cita<hoy)return`<span class="badge badge-red" style="font-size:10px">🔴 Vencida: ${cita}</span>`;
@@ -13661,7 +13674,7 @@ function abrirModalCtrlCliente(id){
     const el=document.getElementById('mctrcli-'+f);if(el)el.value=x?x[f]||'':'';
   });
   document.getElementById('mctrcli-vend').value=x?x.vendId||'':'';
-  if(!x){document.getElementById('mctrcli-fecha').value=new Date().toISOString().slice(0,10);document.getElementById('mctrcli-estado').value='Prospecto';}
+  if(!x){document.getElementById('mctrcli-fecha').value=hoyLocal();document.getElementById('mctrcli-estado').value='Prospecto';}
   // Resultado (req #3)
   setResultadoUICtrlCliente(x?x.resultado||'':'');
   // Comentarios (req #3)
@@ -14698,7 +14711,7 @@ function abrirMovAux(persona,nombre,tipo,editId=null){
       document.getElementById('aux-desc-extra').value=m.descExtra||'';
     }
   } else {
-    document.getElementById('aux-fecha').value=new Date().toISOString().slice(0,10);
+    document.getElementById('aux-fecha').value=hoyLocal();
     document.getElementById('aux-monto').value='';
     document.getElementById('aux-concepto').value='Venta de vehículo';
     document.getElementById('aux-concepto-sel').value='Venta de vehículo';
@@ -14997,7 +15010,7 @@ async function agregarNuevaReservaVehiculo(vid,origen){
   const v=lista[vi];
   v.reservas=v.reservas||[];
   if(v.reservas.length>=3){alert('Máximo 3 reservas por vehículo.');return;}
-  v.reservas.push({cliente:'',vendedor:'',celular:'',precioVenta:null,condicion:'Contado',banco:'',adelantos:[],fecha:new Date().toISOString().slice(0,10)});
+  v.reservas.push({cliente:'',vendedor:'',celular:'',precioVenta:null,condicion:'Contado',banco:'',adelantos:[],fecha:hoyLocal()});
   if(origen==='consig')await saveOne('contable',{id:'main',...contData});
   else await saveOne('vehiculos',v);
   verReservadoLP(vid,origen);
@@ -15016,7 +15029,7 @@ function agregarAdelantoReserva(i){
   div.innerHTML=`
     <div class="form-group" style="margin:0 0 6px"><label style="font-size:10px">No. Recibo</label><input class="rese-adel-recibo-${i}" placeholder="Ej. 276" style="padding:6px;font-size:12px"></div>
     <div class="form-group" style="margin:0 0 6px"><label style="font-size:10px">Monto (USD $)</label><input class="rese-adel-monto-${i}" type="text" inputmode="decimal" style="padding:6px;font-size:12px"></div>
-    <div class="form-group" style="margin:0 0 6px"><label style="font-size:10px">Fecha</label><input class="rese-adel-fecha-${i}" type="date" value="${new Date().toISOString().slice(0,10)}" style="padding:6px;font-size:12px"></div>
+    <div class="form-group" style="margin:0 0 6px"><label style="font-size:10px">Fecha</label><input class="rese-adel-fecha-${i}" type="date" value="${hoyLocal()}" style="padding:6px;font-size:12px"></div>
     <button class="btn btn-sm btn-danger" onclick="document.getElementById('rese-adel-${i}-${ai}').remove()" style="margin-bottom:6px" title="Quitar este adelanto"><i class="ti ti-x"></i></button>`;
   cont.appendChild(div);
   if(actuales+1>=3)document.getElementById(`rese-btn-add-${i}`).style.display='none';
@@ -15103,7 +15116,7 @@ async function cerrarMes(){
 
   const cierre={
     id:'cierre-'+mes,
-    mes,fechaCierre:new Date().toISOString().slice(0,10),
+    mes,fechaCierre:hoyLocal(),
     unidades:vtasMes.length,ingresos,costos,comisiones,
     gastosAdmin,gastosNoOp,utilBruta,utilOp,utilNeta
   };
@@ -15566,7 +15579,7 @@ async function solicitarLavadoMarketing(origen,id){
   if(!v)return;
   if(!confirm(`¿Solicitar lavado para "${v.marca} ${v.modelo}" antes de volver a publicarlo?`))return;
   v.marketingSolicitudLavado=true;
-  v.marketingSolicitudLavadoFecha=new Date().toISOString().slice(0,10);
+  v.marketingSolicitudLavadoFecha=hoyLocal();
   v.marketingPublicado=false; // vuelve a quedar pendiente de publicar hasta que se lave y se revise
   if(origen==='consignacion')await saveOne('contable',{id:'main',...contData});
   else await saveOne('vehiculos',v);
@@ -15579,7 +15592,7 @@ async function toggleMarketingPublicado(origen,vid){
   v.marketingPublicado=!v.marketingPublicado;
   if(v.marketingPublicado){
     v.marketingPublicadoPor=getNombreUsuario();
-    v.marketingPublicadoFecha=new Date().toISOString().slice(0,10);
+    v.marketingPublicadoFecha=hoyLocal();
   } else {
     v.marketingPublicadoPor=null;
     v.marketingPublicadoFecha=null;
@@ -15596,7 +15609,7 @@ async function toggleMarketingNoListo(origen,vid){
   v.marketingNoListo=!v.marketingNoListo;
   if(v.marketingNoListo){
     v.marketingNoListoPor=getNombreUsuario();
-    v.marketingNoListoFecha=new Date().toISOString().slice(0,10);
+    v.marketingNoListoFecha=hoyLocal();
   } else {
     v.marketingNoListoPor=null;
     v.marketingNoListoFecha=null;
@@ -15613,7 +15626,7 @@ async function toggleMarketingNoEsta(origen,vid){
   v.marketingNoEsta=!v.marketingNoEsta;
   if(v.marketingNoEsta){
     v.marketingNoEstaPor=getNombreUsuario();
-    v.marketingNoEstaFecha=new Date().toISOString().slice(0,10);
+    v.marketingNoEstaFecha=hoyLocal();
   } else {
     v.marketingNoEstaPor=null;
     v.marketingNoEstaFecha=null;
@@ -15643,7 +15656,7 @@ async function verificarYActivarMarketing(vehiculoId){
   if(!finalizado)return;
   let cambio=false;
   if(v.estado!=='Disponible'&&v.estado!=='Vendido'&&v.estado!=='Reservado'){v.estado='Disponible';cambio=true;}
-  if(!v.marketingFecha){v.marketingFecha=new Date().toISOString().slice(0,10);cambio=true;}
+  if(!v.marketingFecha){v.marketingFecha=hoyLocal();cambio=true;}
   if(cambio)await saveOne('vehiculos',v);
 }
 async function marcarLavadoHecho(origen,id){
@@ -15783,7 +15796,7 @@ function renderTaller(){
         const dias=r.fechaInicio?diasDesde(r.fechaInicio):null;
         const colorDias=dias===null?'':dias<=3?'var(--green)':dias<=7?'var(--amber)':'var(--red)';
         const esExterno=TALLER_PASOS_EXTERNOS.includes(r.paso);
-        const atrasado=esExterno&&r.fechaEstimada&&r.fechaEstimada<new Date().toISOString().slice(0,10);
+        const atrasado=esExterno&&r.fechaEstimada&&r.fechaEstimada<hoyLocal();
         return`<tr${atrasado?' style="background:var(--red-light)"':''}>
           <td style="font-weight:700;color:var(--text2);text-align:center">${idx+1}</td>
           <td style="font-weight:700;cursor:pointer" onclick="verHistorialTallerVehiculo('${r.vehiculoId}')">${r.vehiculoInfo||'—'}</td>
@@ -15901,7 +15914,7 @@ function renderTaller(){
   </div>
   ${(MODO==='admin'||MODO==='operaciones2')?renderKpiTaller(regs):''}`;
   const fechaEl=document.getElementById('tlr-fecha');
-  if(fechaEl&&!fechaEl.value)fechaEl.value=new Date().toISOString().slice(0,10);
+  if(fechaEl&&!fechaEl.value)fechaEl.value=hoyLocal();
   // Para cada vehículo, guarda su registro de Recepción (si ya lo tiene) con los pasos que
   // Jordan clasificó para ese carro — así el formulario sabe qué pasos ofrecer después.
   window._tallerRecepcionPorVehiculo={};
@@ -15965,11 +15978,11 @@ async function cerrarMesTaller(){
   const idsListos=Object.entries(porVehiculo).filter(([,lista])=>lista.some(r=>r.paso==='Finalizado')).map(([vid])=>vid);
   if(!idsListos.length){alert('No hay ningún vehículo "Listo" para archivar todavía.');return;}
   const registrosAArchivar=regs.filter(r=>idsListos.includes(r.vehiculoId));
-  const mesLabel=new Date().toISOString().slice(0,7);
+  const mesLabel=mesActualLocal();
   if(!confirm(`¿Hacer el Cierre de Mes de Taller?\n\nSe van a archivar ${idsListos.length} vehículo(s) ya "Listos" (${registrosAArchivar.length} registros en total) como historial de producción. Los vehículos que siguen en proceso NO se tocan, siguen activos.\n\nEsto no se puede deshacer.`))return;
   const historial=getTallerHistorialCierres();
   historial.push({
-    id:uid(),mes:mesLabel,fechaCierre:new Date().toISOString().slice(0,10),
+    id:uid(),mes:mesLabel,fechaCierre:hoyLocal(),
     registros:registrosAArchivar,
     vehiculosCount:idsListos.length,
     cerradoPor:getNombreUsuario()
@@ -16318,7 +16331,7 @@ async function cambiarProcesoDirectoTimeline(vehiculoId,paso,esActual){
     const activo=regs.find(r=>r.vehiculoId===vehiculoId&&r.paso===paso&&!r.fechaFin);
     if(!activo)return;
     if(!confirm(`¿Marcar "${activo.paso}" como Terminado?`))return;
-    activo.fechaFin=new Date().toISOString().slice(0,10);
+    activo.fechaFin=hoyLocal();
     await saveOne('contable',{id:'main',...contData});
     if(paso==='Finalizado')await verificarYActivarMarketing(vehiculoId);
     renderTaller();
@@ -16364,7 +16377,7 @@ async function terminarPasoDesdeTimeline(regId){
   const r=getTallerRegistros().find(x=>x.id===regId);
   if(!r)return;
   if(!confirm(`¿Marcar "${r.paso}" como Terminado en ${r.vehiculoInfo}?`))return;
-  r.fechaFin=new Date().toISOString().slice(0,10);
+  r.fechaFin=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   if(r.paso==='Finalizado')await verificarYActivarMarketing(r.vehiculoId);
   renderTaller();
@@ -16433,7 +16446,7 @@ function cambiarQuienSoyTaller(v){safeStorage.setItem('taller_quien_soy',v);rend
 async function terminarPasoTallerRapido(regId){
   const r=getTallerRegistros().find(x=>x.id===regId);
   if(!r)return;
-  r.fechaFin=new Date().toISOString().slice(0,10);
+  r.fechaFin=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   if(r.paso==='Finalizado')await verificarYActivarMarketing(r.vehiculoId);
   renderTaller();
@@ -16445,7 +16458,7 @@ async function iniciarPasoTallerRapido(vehiculoId,paso,trabajadorForzado){
   const regs=getTallerRegistros();
   // Ya NO se cierra automáticamente el paso anterior — un vehículo puede tener varios procesos
   // abiertos a la vez, en cualquier orden, y cada uno se cierra por separado cuando corresponda.
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   // Para los pasos "Externos" (trabajo con proveedor de afuera), se pide la fecha estimada de
   // entrega — así se puede ver si el proveedor está atrasando el carro.
   let fechaEstimada=null;
@@ -16480,7 +16493,7 @@ function getLavadosRudy(){if(!contData.lavadosRudy)contData.lavadosRudy=[];retur
 // esta semana" en el historial, así el historial siempre se puede consultar.
 async function cierreSemanaLavadoRudy(){
   if(MODO!=='admin'&&MODO!=='operaciones2'){alert('⛔ No tenés permiso para esto.');return;}
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const lunes=(()=>{const d=new Date(hoy+'T12:00:00');const dia=d.getDay();d.setDate(d.getDate()+(dia===0?-6:1-dia));return d.toISOString().slice(0,10);})();
   const regs=getLavadosRudy().filter(r=>r.fecha>=lunes&&r.fecha<=hoy);
   if(!regs.length){alert('No hay ningún lavado registrado esta semana todavía.');return;}
@@ -16494,7 +16507,7 @@ async function cierreSemanaLavadoRudy(){
   renderTaller();
 }
 async function registrarLavadoRudy(categoria){
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const regs=getLavadosRudy();
   regs.push({id:uid(),fecha:hoy,categoria,registradoPor:getNombreUsuario()});
   contData.lavadosRudy=regs;
@@ -16502,7 +16515,7 @@ async function registrarLavadoRudy(categoria){
   renderTaller();
 }
 async function quitarUltimoLavadoRudy(categoria){
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const regs=getLavadosRudy();
   // Quita el ÚLTIMO registro de hoy en esa categoría (por si se apretó de más por error).
   for(let i=regs.length-1;i>=0;i--){
@@ -16517,7 +16530,7 @@ async function quitarUltimoLavadoRudy(categoria){
 }
 function renderRegistroLavadoRudy(){
   const regs=getLavadosRudy();
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const lunes=(()=>{const d=new Date(hoy+'T12:00:00');const dia=d.getDay();d.setDate(d.getDate()+(dia===0?-6:1-dia));return d.toISOString().slice(0,10);})();
   const hoyEntrega=regs.filter(r=>r.fecha===hoy&&r.categoria==='entrega').length;
   const hoyPiso=regs.filter(r=>r.fecha===hoy&&r.categoria==='piso').length;
@@ -16631,7 +16644,7 @@ async function finalizarAhoraTaller(){
   const vehiculoId=document.getElementById('mtler-vid').value;
   if(!confirm('¿Finalizar este vehículo ahora mismo?\n\nSe cierra cualquier paso que esté abierto y el carro pasa directo a "Listos".'))return;
   const regs=getTallerRegistros();
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const abierto=regs.filter(r=>r.vehiculoId===vehiculoId&&!r.fechaFin).sort((a,b)=>(b.fechaInicio||'').localeCompare(a.fechaInicio||''))[0];
   if(abierto)abierto.fechaFin=hoy;
   const v=vehiculos.find(x=>x.id===vehiculoId);
@@ -16774,7 +16787,7 @@ async function guardarTallerRegistro(){
     vehiculoInfo:v?`${v.marca} ${v.modelo} ${v.anio} — ${v.placa}`:'Vehículo',
     trabajador,paso,fechaInicio:fecha,fechaFin:paso==='Finalizado'?fecha:null,bitacora,
     pasosAsignados,fechaEstimada,
-    creadoPor:getNombreUsuario(),fechaRegistro:new Date().toISOString().slice(0,10)
+    creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()
   });
   contData.tallerRegistros=regs;
   await saveOne('contable',{id:'main',...contData});
@@ -16824,7 +16837,7 @@ function getObservacionesTaller(){if(!contData.tallerObservaciones)contData.tall
 async function guardarObservacionTaller(vehiculoId){
   const texto=document.getElementById('tlr-observaciones').value;
   const notas=getObservacionesTaller();
-  notas[vehiculoId]={texto,actualizadoPor:getNombreUsuario(),fecha:new Date().toISOString().slice(0,10)};
+  notas[vehiculoId]={texto,actualizadoPor:getNombreUsuario(),fecha:hoyLocal()};
   contData.tallerObservaciones=notas;
   await saveOne('contable',{id:'main',...contData});
   alert('✅ Observación guardada.');
@@ -16846,7 +16859,7 @@ function abrirModalTarea(id){
   const t=id?getTareas().find(x=>x.id===id):null;
   document.getElementById('mtarea-id').value=id||'';
   document.getElementById('mtarea-title').textContent=id?'Editar tarea':'Nueva tarea';
-  document.getElementById('mtarea-fecha').value=t?t.fecha:new Date().toISOString().slice(0,10);
+  document.getElementById('mtarea-fecha').value=t?t.fecha:hoyLocal();
   document.getElementById('mtarea-tipo').value=t?t.tipo:'Mecánica';
   document.getElementById('mtarea-desc').value=t?t.desc||'':'';
   document.getElementById('mtarea-estado').value=t?t.estado:'Pendiente';
@@ -16935,7 +16948,7 @@ async function cerrarSemanaOperaciones(){
     id:uid(),lunes:lunesStr,domingo:domingoStr,
     tareas:tareasSemana,
     resumenTaller:filasResumen,
-    cerradoPor:getNombreUsuario(),fechaCierre:new Date().toISOString().slice(0,10)
+    cerradoPor:getNombreUsuario(),fechaCierre:hoyLocal()
   });
   contData.tareasOps=(contData.tareasOps||[]).filter(t=>!(t.fecha>=lunesStr&&t.fecha<=domingoStr));
   await saveOne('contable',{id:'main',...contData});
@@ -17054,7 +17067,7 @@ function abrirModalTareaDia(fecha){
 }
 
 function renderOpsResumen(){
-  const mesActual=new Date().toISOString().slice(0,7);
+  const mesActual=mesActualLocal();
   const selMes=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:1rem">
     <label style="font-size:12px;font-weight:500">Mes:</label>
     <input type="month" id="ops-mes-sel" value="${mesActual}" onchange="renderOpsResumenMes(this.value)" style="padding:5px;border:1px solid var(--border);border-radius:var(--radius)">
@@ -17483,7 +17496,7 @@ function renderMiMeta(){
   // Solo aplica a vendedores individuales
   if(MODO!=='vendedor'){el.innerHTML='';return;}
   const miNombre=getNombreUsuario();
-  const mesActual=new Date().toISOString().slice(0,7);
+  const mesActual=mesActualLocal();
   contData.metasVentas=contData.metasVentas||{};
   const registro=contData.metasVentas[miNombre];
   const meta=(registro&&registro.mes===mesActual)?Number(registro.meta||0):0;
@@ -17507,7 +17520,7 @@ function renderMiMeta(){
 }
 function editarMetaVenta(){
   const miNombre=getNombreUsuario();
-  const mesActual=new Date().toISOString().slice(0,7);
+  const mesActual=mesActualLocal();
   const actual=contData.metasVentas?.[miNombre]?.mes===mesActual?contData.metasVentas[miNombre].meta:'';
   const nueva=prompt('¿Cuántos vehículos querés vender este mes?',actual||'');
   if(nueva===null||nueva.trim()===''||isNaN(parseInt(nueva)))return;
@@ -18238,7 +18251,7 @@ function renderCompras(){
   else if(comprasTab==='aprobado')data=data.filter(c=>c.aprobado);
   // Orden: 1) nuevas/activas primero (más recientes arriba), 2) vencidas (cita ya pasada sin
   // resolver) en medio, 3) cerradas/ya apartadas y perdidas al final.
-  const hoy=new Date().toISOString().slice(0,10);
+  const hoy=hoyLocal();
   const grupoOrden=c=>{
     if(c.estadop==='Cerrada'||c.estadop==='Perdida')return 2; // ya apartados / cerrados
     if(c.cita&&c.cita<hoy&&!c.atendido)return 1; // vencidas
@@ -18254,7 +18267,7 @@ function renderCompras(){
   const norvinTotal=comprasData.filter(c=>c.comprador==='Norvin').reduce((s,c)=>s+Number(c.precio||0),0);
   const alonsoTotal=comprasData.filter(c=>c.comprador==='Alonso').reduce((s,c)=>s+Number(c.precio||0),0);
   const gerenciaTotal=comprasData.filter(c=>c.comprador==='Gerencia').reduce((s,c)=>s+Number(c.precio||0),0);
-  const mesActualCompras=new Date().toISOString().slice(0,7);
+  const mesActualCompras=mesActualLocal();
   const inversionMesActual=comprasData.filter(c=>(c.fecha||'').startsWith(mesActualCompras)).reduce((s,c)=>s+Number(c.precio||0),0);
   document.getElementById('compras-stats').innerHTML=`
     <div class="stat-card"><div class="stat-label">Total solicitudes</div><div class="stat-value stat-blue">${comprasData.length}</div></div>
@@ -18336,11 +18349,11 @@ function abrirModalCompra(id){
   if(!comp)document.getElementById('mcompra-trans').value='AT';
   toggleBancoGravamen('mcompra');
   if(!comp){
-    document.getElementById('mcompra-fecha').value=new Date().toISOString().slice(0,10);
+    document.getElementById('mcompra-fecha').value=hoyLocal();
     document.getElementById('mcompra-estado').value='7';
     document.getElementById('mcompra-tipo').value='Directa';
     document.getElementById('mcompra-origen').value='Referido';
-    document.getElementById('mcompra-primercontacto').value=new Date().toISOString().slice(0,10);
+    document.getElementById('mcompra-primercontacto').value=hoyLocal();
     document.getElementById('mcompra-estcivil').value='Soltero/a';
   }
   if(document.getElementById('mcompra-cita'))document.getElementById('mcompra-cita').value=comp?.cita||'';
@@ -18394,7 +18407,7 @@ async function guardarCompra(){
   if(!telefono){alert('⚠️ El número de teléfono es requerido');document.getElementById('mcompra-telefono').focus();return;}
   const id=document.getElementById('mcompra-id').value||uid();
   const existing=(contData.compras||[]).find(c=>c.id===id);
-  const obj={id,aprobado:existing?.aprobado||false,creadoPor:existing?.creadoPor||getNombreUsuario(),fechaCreacion:existing?.fechaCreacion||new Date().toISOString().slice(0,10)};
+  const obj={id,aprobado:existing?.aprobado||false,creadoPor:existing?.creadoPor||getNombreUsuario(),fechaCreacion:existing?.fechaCreacion||hoyLocal()};
   ['comprador','fecha','tipo','origen','marca','modelo','anio','trans','estado','precio','color','obs','duenio','telefono','cedula','primercontacto','antecedentes','prenda','bancogravamen','cita','profesion','estcivil'].forEach(f=>{const el=document.getElementById('mcompra-'+f);if(el)obj[f]=el.value;});
   if(!alertaSiFueraDeMes(obj.fecha,'compra'))return;
   obj.atendido=document.getElementById('mcompra-atendido')?.checked||false;
@@ -18420,12 +18433,12 @@ async function aprobarCompra(id){
   const idx=(contData.compras||[]).findIndex(c=>c.id===id);if(idx<0)return;
   contData.compras[idx].aprobado=true;
   contData.compras[idx].rechazado=false;
-  contData.compras[idx].fechaAprobacion=new Date().toISOString().slice(0,10);
+  contData.compras[idx].fechaAprobacion=hoyLocal();
   const comp=contData.compras[idx];
   contData.legales=contData.legales||[];
   if(!(contData.legales||[]).find(l=>l.compraId===id)){
     contData.legales.push({id:uid(),compraId:id,vehiculoId:'',tipo:'Compra',estado:'Pendiente',
-      fechaCierre:new Date().toISOString().slice(0,10),vendedor:comp.comprador,prendado:comp.prenda==='Sí',
+      fechaCierre:hoyLocal(),vendedor:comp.comprador,prendado:comp.prenda==='Sí',
       notas:`Dueño: ${comp.duenio||'—'} | Cédula: ${comp.cedula||'—'} | Antecedentes: ${comp.antecedentes||'—'} | Prenda: ${comp.prenda||'—'}`,
       precioCerrado:comp.precio||'',metodoPago:'',fechaVenta:comp.fecha||'',
       vehiculoDesc:`${comp.marca} ${comp.modelo} ${comp.anio||''}`});
@@ -18447,7 +18460,7 @@ async function rechazarCompra(id){
   contData.compras[idx].rechazado=true;
   contData.compras[idx].aprobado=false;
   contData.compras[idx].motivoRechazo=motivo||'';
-  contData.compras[idx].fechaRechazo=new Date().toISOString().slice(0,10);
+  contData.compras[idx].fechaRechazo=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   alert('Solicitud rechazada.');renderCompras();
 }
@@ -18736,7 +18749,7 @@ function abrirModalConsig(id){
   const v=id?(contData.consignacion||[]).find(x=>x.id===id):null;
   document.getElementById('mconsig-id').value=id||'';
   ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','comision','estado','fecha','obs'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)el.value=v?v[f]||'':'';});
-  if(!v)document.getElementById('mconsig-fecha').value=new Date().toISOString().slice(0,10);
+  if(!v)document.getElementById('mconsig-fecha').value=hoyLocal();
   cargarFotoGridExistenteGen('consig',v?.fotos);
   openOv('ov-consig');
 }
@@ -18893,7 +18906,7 @@ function escriturar(legalId){
   const idx=(contData.legales||[]).findIndex(l=>l.id===legalId);
   if(idx<0)return;
   contData.legales[idx].estado='En Proceso';
-  contData.legales[idx].fechaInicio=new Date().toISOString().slice(0,10);
+  contData.legales[idx].fechaInicio=hoyLocal();
   saveOne('contable',{id:'main',...contData});
   renderLegal();
 }
@@ -18903,7 +18916,7 @@ function marcarEscriturado(legalId){
   const idx=(contData.legales||[]).findIndex(l=>l.id===legalId);
   if(idx<0)return;
   contData.legales[idx].estado='Escriturado';
-  contData.legales[idx].fechaEscritura=new Date().toISOString().slice(0,10);
+  contData.legales[idx].fechaEscritura=hoyLocal();
   saveOne('contable',{id:'main',...contData});
   renderLegal();
 }
@@ -18938,7 +18951,7 @@ function ensureCostosFijos(){
 // Convierte cada línea de la hoja de Costos Fijos en un gasto REAL del mes actual (con fecha),
 // para que salarios, alquiler, etc. aparezcan reflejados en el Estado de Resultado — evita
 // registrar el mismo mes dos veces.
-function _mesCostosFijosActual(){return new Date().toISOString().slice(0,7);}
+function _mesCostosFijosActual(){return mesActualLocal();}
 function _yaRegistroCostosFijosEsteMes(){
   return (contData.gastos||[]).some(g=>g.origenCostoFijo&&g.mesCostoFijo===_mesCostosFijosActual());
 }
@@ -18958,7 +18971,7 @@ async function registrarCostosFijosDelMes(){
       id:uid(),fecha,cat:l.concepto||'Costo fijo',monto:Number(l.monto||0),
       medio:'Costos Fijos',beneficiario:l.concepto||'',desc:`Costo fijo mensual (${mes}) — ${l.cat||''}`,
       origenCostoFijo:true,mesCostoFijo:mes,
-      creadoPor:getNombreUsuario(),fechaRegistro:new Date().toISOString().slice(0,10)
+      creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()
     });
   });
   await saveOne('contable',{id:'main',...contData});
@@ -18980,7 +18993,7 @@ function renderCostosFijos(){
     <span><i class="ti ti-info-circle" style="color:var(--amber)"></i> Costos fijos mensuales del negocio (alquiler, salarios, servicios, etc.). ${puedeEditar?'Podés editar libremente.':'Solo el Administrador puede modificar esta hoja.'}</span>
     ${MODO==='admin'?`<button class="btn btn-sm btn-success" onclick="registrarCostosFijosDelMes()"><i class="ti ti-plug-connected"></i> Registrar este mes en Estado de Resultado</button>`:''}
   </div>
-  ${_yaRegistroCostosFijosEsteMes()?`<div style="background:var(--green-light);color:var(--green);border-radius:var(--radius);padding:.6rem .875rem;margin-bottom:1rem;font-size:12px"><i class="ti ti-check"></i> Los costos fijos de ${new Date().toISOString().slice(0,7)} ya están registrados en Estado de Resultado.</div>`:''}
+  ${_yaRegistroCostosFijosEsteMes()?`<div style="background:var(--green-light);color:var(--green);border-radius:var(--radius);padding:.6rem .875rem;margin-bottom:1rem;font-size:12px"><i class="ti ti-check"></i> Los costos fijos de ${mesActualLocal()} ya están registrados en Estado de Resultado.</div>`:''}
   <div class="card" style="overflow-x:auto">
     <table class="tbl">
       <thead><tr><th style="width:40px">#</th><th>Concepto</th><th style="width:200px">Clasificación</th><th style="width:160px">Monto (USD $)</th></tr></thead>
@@ -19216,7 +19229,7 @@ function getRendicionConfig(){
   // perder los anteriores.
   if(!Array.isArray(contData.rendicionConfig.fondosRecibidos)){
     const montoViejo=Number(contData.rendicionConfig.fondoRecibido||0);
-    contData.rendicionConfig.fondosRecibidos=montoViejo>0?[{id:uid(),monto:montoViejo,fecha:new Date().toISOString().slice(0,10),nota:'Monto anterior (migrado automáticamente)'}]:[];
+    contData.rendicionConfig.fondosRecibidos=montoViejo>0?[{id:uid(),monto:montoViejo,fecha:hoyLocal(),nota:'Monto anterior (migrado automáticamente)'}]:[];
   }
   return contData.rendicionConfig;
 }
@@ -19334,7 +19347,7 @@ async function guardarProveedorTaller(){
     const p=proveedores.find(x=>x.id===id);
     if(p){Object.assign(p,{nombre,nombreComercial,celular,correo,tipo,costos});}
   } else {
-    proveedores.push({id:uid(),nombre,nombreComercial,celular,correo,tipo,costos,creadoPor:getNombreUsuario(),fecha:new Date().toISOString().slice(0,10)});
+    proveedores.push({id:uid(),nombre,nombreComercial,celular,correo,tipo,costos,creadoPor:getNombreUsuario(),fecha:hoyLocal()});
   }
   contData.proveedoresTaller=proveedores;
   await saveOne('contable',{id:'main',...contData});
@@ -19425,7 +19438,7 @@ function abrirModalOrdenServicio(id){
   document.getElementById('mos-titulo').textContent=o?`${soloLectura?'Ver':'Editar'} ${fmtOS(o.numero)}`:'Nueva Orden de Servicio';
   const selVeh=document.getElementById('mos-vehiculo');
   selVeh.innerHTML='<option value="">-- Seleccionar vehículo --</option>'+vehiculos.map(v=>`<option value="${v.id}" ${o?.vehiculoId===v.id?'selected':''}>${v.marca} ${v.modelo} ${v.anio} — ${v.placa}</option>`).join('');
-  document.getElementById('mos-fechasolicitud').value=o?.fechaSolicitud||new Date().toISOString().slice(0,10);
+  document.getElementById('mos-fechasolicitud').value=o?.fechaSolicitud||hoyLocal();
   document.getElementById('mos-diastrabajo').value=o?.diasTrabajo||'';
   document.getElementById('mos-fechaentrega').value=o?.fechaEntrega||'';
   document.getElementById('mos-estado').value=o?.estado||'Revisión';
@@ -19516,10 +19529,10 @@ async function guardarOrdenServicio(){
     trabajos:[..._osTrabajosTemp],
     comentarios:document.getElementById('mos-comentarios').value,
     creadoPor:existente?.creadoPor||getNombreUsuario(),
-    fecha:existente?.fecha||new Date().toISOString().slice(0,10)
+    fecha:existente?.fecha||hoyLocal()
   };
   if(puedeAprobarOS()&&existente&&existente.estado!==estadoNuevo&&(estadoNuevo==='Aprobado'||estadoNuevo==='Denegado')){
-    obj.aprobadoPor=getNombreUsuario();obj.fechaAprobacion=new Date().toISOString().slice(0,10);
+    obj.aprobadoPor=getNombreUsuario();obj.fechaAprobacion=hoyLocal();
   } else if(existente){obj.aprobadoPor=existente.aprobadoPor;obj.fechaAprobacion=existente.fechaAprobacion;}
   const idx=ordenes.findIndex(o=>o.id===obj.id);
   if(idx>=0)ordenes[idx]=obj;else ordenes.push(obj);
@@ -19536,7 +19549,7 @@ async function aprobarOrdenServicioDirecto(id){
   if(!confirm(`¿Aprobar ${fmtOS(o.numero)}?`))return;
   o.estado='Aprobado';
   o.aprobadoPor=getNombreUsuario();
-  o.fechaAprobacion=new Date().toISOString().slice(0,10);
+  o.fechaAprobacion=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   renderOrdenesServicio();
 }
@@ -19609,7 +19622,7 @@ function renderRegistroDirectoGastos(){
     <p style="font-size:11px;color:var(--text3);padding:0 1rem .5rem"><i class="ti ti-info-circle"></i> Estos gastos NO llevan número de rendición — van directo al Estado de Resultado, cuenta por cuenta, pero necesitan que el Administrador los valide primero.</p>
     <div style="padding:0 1rem 1rem">
       <div class="form-row">
-        <div class="form-group"><label style="font-size:11px">Fecha</label><input type="date" id="rdg-fecha" value="${new Date().toISOString().slice(0,10)}" style="padding:7px"></div>
+        <div class="form-group"><label style="font-size:11px">Fecha</label><input type="date" id="rdg-fecha" value="${hoyLocal()}" style="padding:7px"></div>
         <div class="form-group"><label style="font-size:11px">Cuenta</label><select id="rdg-cuenta" style="padding:7px">${catsDisponibles.map(c=>`<option>${c}</option>`).join('')}</select></div>
       </div>
       <div class="form-row">
@@ -19645,7 +19658,7 @@ async function guardarRegistroDirectoGasto(){
   if(!fecha){alert('La fecha es obligatoria.');return;}
   if(monto<=0){alert('Ingresá un monto válido.');return;}
   const regs=getRegistroDirectoGastos();
-  regs.push({id:uid(),fecha,cuenta,monto,proveedor,desc,validado:false,creadoPor:getNombreUsuario(),fechaRegistro:new Date().toISOString().slice(0,10)});
+  regs.push({id:uid(),fecha,cuenta,monto,proveedor,desc,validado:false,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
   contData.registroDirectoGastos=regs;
   await saveOne('contable',{id:'main',...contData});
   document.getElementById('rdg-monto').value='';
@@ -19670,7 +19683,7 @@ async function validarRegistroDirectoGasto(id){
   });
   r.validado=true;
   r.validadoPor=getNombreUsuario();
-  r.fechaValidacion=new Date().toISOString().slice(0,10);
+  r.fechaValidacion=hoyLocal();
   r.gastoId=gastoId;
   await saveOne('contable',{id:'main',...contData});
   renderRendicionCuentas();
@@ -20131,7 +20144,7 @@ async function validarTodosPendientesRendicionCerrada(historialId){
     m.montoUSD=parseFloat(montoUSD.toFixed(2));
     m.tasaUsada=tasa;
     m.validadoPor=getNombreUsuario();
-    m.fechaValidacion=new Date().toISOString().slice(0,10);
+    m.fechaValidacion=hoyLocal();
   });
   const ok=await saveOneConReintentos('contable',{id:'main',...contData});
   if(!ok){
@@ -20185,7 +20198,7 @@ async function validarYRegistrarRendicionHistorialUSD(historialId,movId){
   m.montoUSD=parseFloat(montoUSD.toFixed(2));
   m.tasaUsada=tasa;
   m.validadoPor=getNombreUsuario();
-  m.fechaValidacion=new Date().toISOString().slice(0,10);
+  m.fechaValidacion=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   abrirValidarRendicionCerrada(historialId);
   alert(`✅ Registrado en Contabilidad: $${fmt(montoUSD)} USD`);
@@ -20329,7 +20342,7 @@ async function validarTodosPendientesRendicionActiva(){
     m.montoUSD=parseFloat(montoUSD.toFixed(2));
     m.tasaUsada=tasa;
     m.validadoPor=getNombreUsuario();
-    m.fechaValidacion=new Date().toISOString().slice(0,10);
+    m.fechaValidacion=hoyLocal();
   });
   const ok=await saveOneConReintentos('contable',{id:'main',...contData});
   if(!ok){
@@ -20387,7 +20400,7 @@ async function validarYRegistrarRendicionUSD(movId){
   m.montoUSD=parseFloat(montoUSD.toFixed(2));
   m.tasaUsada=tasa;
   m.validadoPor=getNombreUsuario();
-  m.fechaValidacion=new Date().toISOString().slice(0,10);
+  m.fechaValidacion=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   renderRendicionCuentas();
   alert(`✅ Registrado en Contabilidad: $${fmt(montoUSD)} USD`);
@@ -20411,7 +20424,7 @@ async function agregarFondoRecibido(){
   const nota=prompt('Nota (opcional) — ej. "Depósito Banpro", "Efectivo de Edwin"…','')||'';
   const cfg=getRendicionConfig();
   cfg.fondosRecibidos=cfg.fondosRecibidos||[];
-  cfg.fondosRecibidos.push({id:uid(),monto,fecha:new Date().toISOString().slice(0,10),nota,registradoPor:getNombreUsuario()});
+  cfg.fondosRecibidos.push({id:uid(),monto,fecha:hoyLocal(),nota,registradoPor:getNombreUsuario()});
   contData.rendicionConfig=cfg;
   await saveOne('contable',{id:'main',...contData});
   renderRendicionCuentas();
@@ -20465,7 +20478,7 @@ async function cerrarRendicion(){
   contData.rendicionHistorial=contData.rendicionHistorial||[];
   contData.rendicionHistorial.push({
     id:'rendicion-'+numActual+'-'+uid(),
-    numero:numActual,fechaCierre:new Date().toISOString().slice(0,10),
+    numero:numActual,fechaCierre:hoyLocal(),
     saldoInicial,fondoRecibido,fondosRecibidos:[...(cfg.fondosRecibidos||[])],totalGastos,saldoFinal,
     movs:[...movs]
   });
@@ -20620,7 +20633,7 @@ function abrirModalCajaChica(id){
   if(m&&m.registradoContable){alert('Este gasto ya fue validado y registrado en Contabilidad — no se puede editar. Si es un error, pedile al Administrador que lo elimine y lo vuelvas a registrar.');return;}
   document.getElementById('mccm-title').textContent=m?'Editar gasto — Caja Chica Menor':'Nuevo gasto — Caja Chica Menor';
   document.getElementById('mccm-id').value=m?m.id:'';
-  document.getElementById('mccm-fecha').value=m?m.fecha:new Date().toISOString().slice(0,10);
+  document.getElementById('mccm-fecha').value=m?m.fecha:hoyLocal();
   document.getElementById('mccm-monto').value=m?m.monto:'';
   document.getElementById('mccm-desc').value=m?m.desc||'':'';
   document.getElementById('mccm-clasif').value=m?m.clasif||'Gastos Operativos':'Gastos Operativos';
@@ -20690,7 +20703,7 @@ async function validarYRegistrarCajaChicaUSD(movId){
   m.montoUSD=parseFloat(montoUSD.toFixed(2));
   m.tasaUsada=TASA_CAJA_CHICA;
   m.validadoPor=getNombreUsuario();
-  m.fechaValidacion=new Date().toISOString().slice(0,10);
+  m.fechaValidacion=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   renderCajaChicaMenor();
   alert(`✅ Registrado en Contabilidad: $${fmt(montoUSD)} USD`);
@@ -20712,7 +20725,7 @@ async function agregarFondoCajaChica(){
   const nota=prompt('Nota (opcional) — ej. "Depósito Banpro", "Efectivo de Edwin"…','')||'';
   const cfg=getCajaChicaConfig();
   cfg.fondosRecibidos=cfg.fondosRecibidos||[];
-  cfg.fondosRecibidos.push({id:uid(),monto,fecha:new Date().toISOString().slice(0,10),nota,registradoPor:getNombreUsuario()});
+  cfg.fondosRecibidos.push({id:uid(),monto,fecha:hoyLocal(),nota,registradoPor:getNombreUsuario()});
   contData.cajaChicaConfig=cfg;
   await saveOne('contable',{id:'main',...contData});
   renderCajaChicaMenor();
@@ -20741,7 +20754,7 @@ async function cerrarCajaChica(){
   contData.cajaChicaHistorial=contData.cajaChicaHistorial||[];
   contData.cajaChicaHistorial.push({
     id:'cajachica-'+numActual+'-'+uid(),
-    numero:numActual,fechaCierre:new Date().toISOString().slice(0,10),
+    numero:numActual,fechaCierre:hoyLocal(),
     saldoInicial,fondoRecibido,fondosRecibidos:[...(cfg.fondosRecibidos||[])],totalGastos,saldoFinal,
     movs:[...movs]
   });
@@ -20857,7 +20870,7 @@ function abrirModalRendicion(id,histNumero){
   const m=histNumero?(contData.rendicionHistorial||[]).find(h=>h.numero===histNumero)?.movs?.find(x=>x.id===id):(id?getRendicionMovs().find(x=>x.id===id):null);
   document.getElementById('mrend-id').value=id||'';
   document.getElementById('mrend-title').textContent=histNumero?`Editar gasto — Rendición #${histNumero} (cerrada)`:(id?'Editar gasto':'Nuevo gasto');
-  document.getElementById('mrend-fecha').value=m?m.fecha:new Date().toISOString().slice(0,10);
+  document.getElementById('mrend-fecha').value=m?m.fecha:hoyLocal();
   // Selector de placa conectado al inventario real, buscable escribiendo placa/marca/modelo/dueño (req #8, #22)
   const datalistPlaca=document.getElementById('mrend-placa-list');
   datalistPlaca.innerHTML=vehiculos.map(v=>`<option value="${v.placa}">${v.marca} ${v.modelo} ${v.anio} — ${v.placa}</option>`).join('')
@@ -21316,7 +21329,7 @@ async function confirmarCierreVenta(){
   const vi=vehiculos.findIndex(x=>x.id===vid);
   if(vi<0)return;
   vehiculos[vi].cierreVenta=true;
-  vehiculos[vi].cierreFecha=new Date().toISOString().slice(0,10);
+  vehiculos[vi].cierreFecha=hoyLocal();
   vehiculos[vi].cierreVendedor=getNombreUsuario();
   // Collect generales de ley
   const generales={
@@ -21332,7 +21345,7 @@ async function confirmarCierreVenta(){
   if(!yaExiste){
     contData.legales.push({
       id:uid(),vehiculoId:vid,estado:'Pendiente',
-      fechaCierre:new Date().toISOString().slice(0,10),
+      fechaCierre:hoyLocal(),
       vendedor:vehiculos[vi].cierreVendedor,
       prendado:false,notas:'',
       ventaId:vta?.id||'',
@@ -22116,7 +22129,7 @@ async function solicitarPermisoRRHH(){
   const tipo=document.getElementById('mperm-tipo').value;
   const detalle=document.getElementById('mperm-detalle').value;
   const obj={id:uid(),solicitante:getNombreUsuario(),tipo,detalle,
-    fechaSolicitud:new Date().toISOString().slice(0,10),ts:Date.now(),estado:'Pendiente'};
+    fechaSolicitud:hoyLocal(),ts:Date.now(),estado:'Pendiente'};
   if(tipo==='Vacación'){
     const fechaSalida=document.getElementById('mperm-fechasalida').value;
     const fechaRetorno=document.getElementById('mperm-fecharetorno').value;
@@ -22141,7 +22154,7 @@ async function autorizarPermisoRRHH(id,aprobar){
   if(!p)return;
   p.estado=aprobar?'Aprobado':'Denegado';
   p.autorizadoPor=getNombreUsuario();
-  p.fechaAutorizacion=new Date().toISOString().slice(0,10);
+  p.fechaAutorizacion=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   renderPermisosRRHH();
 }
@@ -22611,7 +22624,7 @@ function abrirConsigDesdeLP(vid){
     document.getElementById('mconsig-km').value=v.km||0;
     document.getElementById('mconsig-precioA').value=v.precio||'';
     document.getElementById('mconsig-precioB').value=v.precioB||'';
-    document.getElementById('mconsig-fecha').value=new Date().toISOString().slice(0,10);
+    document.getElementById('mconsig-fecha').value=hoyLocal();
   },150);
 }
 
@@ -22734,7 +22747,7 @@ async function actualizarLinCom(pi,li,campo,val){
 async function cerrarPlanillaComision(pi){
   if(!confirm('¿Cerrar este período? No se podrá editar después.'))return;
   contData.planillaComisiones[pi].cerrada=true;
-  contData.planillaComisiones[pi].fechaCierre=new Date().toISOString().slice(0,10);
+  contData.planillaComisiones[pi].fechaCierre=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   renderPlanillaComisionesRRHH();
 }
@@ -22742,7 +22755,7 @@ async function cerrarPlanillaComision(pi){
 async function pagarPlanillaComision(pi){
   if(!confirm('¿Marcar esta planilla como pagada?'))return;
   contData.planillaComisiones[pi].pagada=true;
-  contData.planillaComisiones[pi].fechaPago=new Date().toISOString().slice(0,10);
+  contData.planillaComisiones[pi].fechaPago=hoyLocal();
   await saveOne('contable',{id:'main',...contData});
   renderPlanillaComisionesRRHH();
 }
@@ -23166,7 +23179,7 @@ function renderPizMarcas(){
   filas=fusionarDuplicadosPizarra(filas,['ventas','compras','reservas','citas']);
 
   const diaHoy=new Date().getDate();
-  const esMesActual=mes===new Date().toISOString().slice(0,7);
+  const esMesActual=mes===mesActualLocal();
   filas=filas.map(f=>{
     const grupo=grupoDe(f.nombre);
     const cantidadRef=grupo===1?f.compras:f.ventas;
@@ -23284,7 +23297,7 @@ function renderPizMarcas(){
 function renderComprasProcedenciaBox(){
   const box=document.getElementById('compras-procedencia-box');
   if(!box)return;
-  if(window._compProcMes===undefined)window._compProcMes=new Date().toISOString().slice(0,7);
+  if(window._compProcMes===undefined)window._compProcMes=mesActualLocal();
   const mes=window._compProcMes; // '' = todo el historial
   const orden=['Grupo Q','Deshon','Local','Particular','Importado'];
   const cuenta={};let total=0;
@@ -23339,7 +23352,7 @@ function renderComprasAprobadosBox(){
 function renderCalendarioCompras(){
   const el=document.getElementById('compras-calendario');
   if(!el)return;
-  const mes=new Date().toISOString().slice(0,7);
+  const mes=mesActualLocal();
   const mesLabelActual=new Date().toLocaleDateString('es-NI',{month:'long',year:'numeric'});
   el.innerHTML=`<div class="card">
     <div class="card-head"><h3><i class="ti ti-calendar-event"></i> Calendario de Citas — Compras — <span style="text-transform:capitalize">${mesLabelActual}</span></h3></div>
