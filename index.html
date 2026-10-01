@@ -684,6 +684,7 @@ body.no-delete .confirmDelete{display:none!important}
     </table>
   </div>
   <div id="ventas-resumen-word" style="margin-top:1rem"></div>
+  <div id="ventas-resumen-compradores-word" style="margin-top:1rem"></div>
   <div id="caja-correccion-cierre"></div>
   <div id="historial-cierres-ventas"></div>
   </div><!-- end ventas-tab-registro -->
@@ -4387,7 +4388,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-1000';
+const APP_VERSION='2026-10-01-1100';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5904,14 +5905,32 @@ async function cerrarMesVentasPorVendedor(){
     margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;
   });
   const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.suma/o.n]).sort((a,b)=>b[1]-a[1]);
-  if(!confirm(`¿Cerrar ${mes} y guardar esta foto en el Historial?\n\nPropias: ${propias.length} · Consignación: ${consig.length}\n\nEsto NO borra ni toca ninguna venta, solo archiva el resumen.`))return;
+  // Mismo cierre, también guarda el desglose por COMPRADOR (mismo mes, mismo botón, para no
+  // duplicar el trabajo de cerrar dos veces).
+  const nombreComprador=v=>{const comp=clientes.find(c=>c.id===v.compradorId);return comp?comp.nombre:(v.nombreFactura||'Sin comprador');};
+  const contarComp=lista=>{const conteo={};lista.forEach(v=>{const n=nombreComprador(v);conteo[n]=(conteo[n]||0)+1;});return Object.entries(conteo).sort((a,b)=>b[1]-a[1]);};
+  const mejorPorComprador={};
+  propias.forEach(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
+    const precio=Number(v.precio||0);
+    if(precio<=0)return;
+    const margen=(precio-Number(v.costo||0)-rep-Number(v.comision||0))/precio*100;
+    const n=nombreComprador(v);
+    if(!mejorPorComprador[n]||margen>mejorPorComprador[n])mejorPorComprador[n]=margen;
+  });
+  const rankingMargenCompradores=Object.entries(mejorPorComprador).sort((a,b)=>b[1]-a[1]);
+  if(!confirm(`¿Cerrar ${mes} y guardar esta foto en el Historial?\n\nPropias: ${propias.length} · Consignación: ${consig.length}\n\nEsto NO borra ni toca ninguna venta, solo archiva el resumen (vendedores y compradores).`))return;
   contData.historialVentasPorVendedor.push({
     id:uid(),mes,fechaCierre:hoyLocal(),cerradoPor:getNombreUsuario(),
     filasPropias:contar(propias),filasConsig:contar(consig),
-    totalPropias:propias.length,totalConsig:consig.length,rankingMargen
+    totalPropias:propias.length,totalConsig:consig.length,rankingMargen,
+    filasCompradoresPropias:contarComp(propias),filasCompradoresConsig:contarComp(consig),
+    rankingMargenCompradores
   });
   await saveOne('contable',{id:'main',...contData});
   renderResumenVentasWord();
+  renderResumenCompradoresWord();
 }
 // Ventana con los meses ya cerrados, para consultar cualquier mes anterior.
 function verHistorialVentasPorVendedor(){
@@ -5924,9 +5943,13 @@ function verHistorialVentasPorVendedor(){
     ${lista.length?lista.map(h=>`<div class="card" style="margin-bottom:.75rem">
       <div class="card-head"><h3>${h.mes}</h3><span style="font-size:11px;color:var(--text3)">Cerrado por ${h.cerradoPor||'—'} el ${h.fechaCierre}</span></div>
       <div style="padding:.75rem;display:flex;gap:16px;flex-wrap:wrap">
-        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Propias (${h.totalPropias})</td></tr>${(h.filasPropias||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
-        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Consignación (${h.totalConsig})</td></tr>${(h.filasConsig||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
-        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Margen</td></tr>${(h.rankingMargen||[]).map(([n,m])=>fila(n,m.toFixed(1)+'%')).join('')}</tbody></table>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Vendedores — Propias (${h.totalPropias})</td></tr>${(h.filasPropias||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Vendedores — Consignación (${h.totalConsig})</td></tr>${(h.filasConsig||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Margen vendedores</td></tr>${(h.rankingMargen||[]).map(([n,m])=>fila(n,m.toFixed(1)+'%')).join('')}</tbody></table>
+        ${(h.filasCompradoresPropias||h.filasCompradoresConsig)?`<div style="width:100%;border-top:1px dashed var(--border);margin:.25rem 0"></div>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Compradores — Propias</td></tr>${(h.filasCompradoresPropias||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Compradores — Consignación</td></tr>${(h.filasCompradoresConsig||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
+        <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Mejor margen por comprador</td></tr>${(h.rankingMargenCompradores||[]).map(([n,m])=>fila(n,m.toFixed(1)+'%')).join('')}</tbody></table>`:''}
       </div>
     </div>`).join(''):'<p style="text-align:center;color:var(--text3)">Todavía no hay meses cerrados.</p>'}
     <button class="btn" style="width:100%;margin-top:.5rem" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button>
@@ -5995,8 +6018,8 @@ function renderResumenVentasWord(){
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-table"></i> Ventas por vendedor</h3>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="month" value="${mes}" style="font-size:12px;padding:3px 6px" onchange="window._ventasResumenMes=this.value;renderResumenVentasWord()">
-        <button class="btn btn-sm" onclick="window._ventasResumenMes=mesActualLocal();renderResumenVentasWord()" title="Volver al mes de hoy">Hoy</button>
+        <input type="month" value="${mes}" style="font-size:12px;padding:3px 6px" onchange="window._ventasResumenMes=this.value;renderResumenVentasWord();renderResumenCompradoresWord()">
+        <button class="btn btn-sm" onclick="window._ventasResumenMes=mesActualLocal();renderResumenVentasWord();renderResumenCompradoresWord()" title="Volver al mes de hoy">Hoy</button>
         <button class="btn btn-sm" onclick="verHistorialVentasPorVendedor()"><i class="ti ti-history"></i> Historial</button>
         ${yaCerrado?`<span class="badge badge-gray" title="Ya se guardó una foto de este mes en el Historial"><i class="ti ti-lock"></i> Mes cerrado</span>`
           :`<button class="btn btn-sm btn-success" onclick="cerrarMesVentasPorVendedor()"><i class="ti ti-archive"></i> Cerrar mes</button>`}
@@ -6005,6 +6028,73 @@ function renderResumenVentasWord(){
     <div style="padding:1rem;display:flex;gap:24px;flex-wrap:wrap">
       ${tabla('Ventas Propias',filasPropias,propias.length,'#1971C2')}
       ${tabla('Ventas Consignación',filasConsig,consig.length,'#495057')}
+      ${tablaMargen()}
+    </div>
+  </div>`;
+}
+// Mismo reporte, pero por COMPRADOR en vez de vendedor: cuántos carros le compró cada cliente
+// este mes (propias y consignación por separado), y cuál comprador se llevó la compra con mejor
+// margen de ganancia (la ganancia de NICAUTO en esa venta, no algo que el comprador vea). Usa
+// el mismo mes seleccionado arriba, para que los dos cuadros siempre muestren el mismo período.
+function renderResumenCompradoresWord(){
+  const cont=document.getElementById('ventas-resumen-compradores-word');
+  if(!cont)return;
+  if(!window._ventasResumenMes)window._ventasResumenMes=mesActualLocal();
+  const mes=window._ventasResumenMes;
+  const ventasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha&&v.fecha.startsWith(mes));
+  const nombreComprador=v=>{
+    const comp=clientes.find(c=>c.id===v.compradorId);
+    return comp?comp.nombre:(v.nombreFactura||'Sin comprador');
+  };
+  const contar=lista=>{
+    const conteo={};
+    lista.forEach(v=>{const n=nombreComprador(v);conteo[n]=(conteo[n]||0)+1;});
+    return Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
+  };
+  const propias=ventasMes.filter(v=>!/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const consig=ventasMes.filter(v=>/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const filasPropias=contar(propias);
+  const filasConsig=contar(consig);
+  // Mejor margen por comprador: se toma la MEJOR compra individual de cada comprador (no un
+  // promedio), porque la mayoría compra un solo carro a la vez. Solo ventas propias, igual que
+  // en el reporte de vendedores, porque ahí sí hay costo y reparaciones completos.
+  const mejorPorComprador={};
+  propias.forEach(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
+    const precio=Number(v.precio||0);
+    if(precio<=0)return;
+    const margen=(precio-Number(v.costo||0)-rep-Number(v.comision||0))/precio*100;
+    const n=nombreComprador(v);
+    if(!mejorPorComprador[n]||margen>mejorPorComprador[n])mejorPorComprador[n]=margen;
+  });
+  const rankingMargen=Object.entries(mejorPorComprador).sort((a,b)=>b[1]-a[1]);
+  const mejorMargen=rankingMargen[0]||null;
+  const filaW=(label,n)=>`<tr>
+    <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${label}</td>
+    <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${n}</td>
+  </tr>`;
+  const tabla=(titulo,filas,total,color)=>`<table style="max-width:280px;border-collapse:collapse">
+    <tbody>
+      <tr><td colspan="2" style="background:${color};color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid ${color}">${titulo}</td></tr>
+      ${filas.length?filas.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin compras todavía este mes</td></tr>`}
+      ${filaW('TOTAL',total)}
+    </tbody>
+  </table>`;
+  const tablaMargen=()=>`<table style="max-width:280px;border-collapse:collapse">
+    <tbody>
+      <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Compra con mejor margen</td></tr>
+      ${mejorMargen?filaW(mejorMargen[0],mejorMargen[1].toFixed(1)+'%'):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin datos todavía</td></tr>`}
+      ${rankingMargen.slice(1).map(([n,m])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%</td></tr>`).join('')}
+    </tbody>
+  </table>`;
+  cont.innerHTML=`
+  <div class="card">
+    <div class="card-head"><h3><i class="ti ti-table"></i> Compras por comprador — ${mes}</h3></div>
+    <p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> Usa el mismo mes seleccionado arriba, y se cierra junto con el cuadro de vendedores (mismo botón "Cerrar mes").</p>
+    <div style="padding:1rem;display:flex;gap:24px;flex-wrap:wrap">
+      ${tabla('Compradores — Propias',filasPropias,propias.length,'#1971C2')}
+      ${tabla('Compradores — Consignación',filasConsig,consig.length,'#495057')}
       ${tablaMargen()}
     </div>
   </div>`;
@@ -8986,6 +9076,7 @@ function renderVtas(){
   sel.value=cur;
   renderVtasTotals(data);
   renderResumenVentasWord();
+  renderResumenCompradoresWord();
 }
 // Corrección puntual: cambiar SOLO el vendedor de una venta, sin abrir el formulario completo
 // de edición. Se agregó porque el formulario completo exige re-seleccionar el vehículo, y si
