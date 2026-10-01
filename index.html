@@ -4387,7 +4387,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-0930';
+const APP_VERSION='2026-10-01-1000';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5884,7 +5884,7 @@ function imprimirDetalleInventarioPorEstado(){
 // mes siguiente, porque siempre filtra por mesActualLocal().
 async function cerrarMesVentasPorVendedor(){
   if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador o Coordinador puede cerrar el mes de Ventas por Vendedor.');return;}
-  const mes=mesActualLocal();
+  const mes=window._ventasResumenMes||mesActualLocal();
   contData.historialVentasPorVendedor=contData.historialVentasPorVendedor||[];
   if(contData.historialVentasPorVendedor.some(h=>h.mes===mes)){alert('Este mes ya se cerró antes. Revíselo en el Historial.');return;}
   const ventasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha&&v.fecha.startsWith(mes));
@@ -5937,7 +5937,10 @@ function verHistorialVentasPorVendedor(){
 function renderResumenVentasWord(){
   const cont=document.getElementById('ventas-resumen-word');
   if(!cont)return;
-  const mes=mesActualLocal();
+  // Mes que se está mostrando/cerrando. Por defecto el de hoy, pero se puede cambiar con el
+  // selector de abajo para consultar o cerrar un mes anterior que no se cerró a tiempo.
+  if(!window._ventasResumenMes)window._ventasResumenMes=mesActualLocal();
+  const mes=window._ventasResumenMes;
   const ventasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha&&v.fecha.startsWith(mes));
   const nombreVendedor=v=>{
     const vnd=clientes.find(c=>c.id===v.vendedorId);
@@ -5990,8 +5993,10 @@ function renderResumenVentasWord(){
   const yaCerrado=(contData.historialVentasPorVendedor||[]).some(h=>h.mes===mes);
   cont.innerHTML=`
   <div class="card">
-    <div class="card-head"><h3><i class="ti ti-table"></i> Ventas del mes por vendedor — ${mes}</h3>
-      <div style="display:flex;gap:6px">
+    <div class="card-head"><h3><i class="ti ti-table"></i> Ventas por vendedor</h3>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="month" value="${mes}" style="font-size:12px;padding:3px 6px" onchange="window._ventasResumenMes=this.value;renderResumenVentasWord()">
+        <button class="btn btn-sm" onclick="window._ventasResumenMes=mesActualLocal();renderResumenVentasWord()" title="Volver al mes de hoy">Hoy</button>
         <button class="btn btn-sm" onclick="verHistorialVentasPorVendedor()"><i class="ti ti-history"></i> Historial</button>
         ${yaCerrado?`<span class="badge badge-gray" title="Ya se guardó una foto de este mes en el Historial"><i class="ti ti-lock"></i> Mes cerrado</span>`
           :`<button class="btn btn-sm btn-success" onclick="cerrarMesVentasPorVendedor()"><i class="ti ti-archive"></i> Cerrar mes</button>`}
