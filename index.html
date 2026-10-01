@@ -4373,7 +4373,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-09-30-1000';
+const APP_VERSION='2026-09-30-1100';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -12266,7 +12266,8 @@ function normalizarNombrePizarra(nombreCrudo){
     const primerNombre=partes[0],apellido=partes[partes.length-1];
     const coincideCompleto=limpioLower.includes(primerNombre)&&limpioLower.includes(apellido);
     const coincideSoloNombre=limpioLower===primerNombre;
-    if(coincideCompleto||coincideSoloNombre){
+    const coincideSoloApellido=apellido!==primerNombre&&limpioLower===apellido;
+    if(coincideCompleto||coincideSoloNombre||coincideSoloApellido){
       return canonico==='Edwin Hernández'?'Gerencia':canonico;
     }
   }
