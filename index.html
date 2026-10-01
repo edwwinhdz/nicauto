@@ -4388,7 +4388,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-1300';
+const APP_VERSION='2026-10-01-1500';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5917,7 +5917,7 @@ async function cerrarMesVentasPorVendedor(){
     const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
     const margen=Number(vt.precio||0)-Number(vt.costo||0)-rep-Number(vt.comision||0);
     margenPorAgente[n]=(margenPorAgente[n]||0)+margen;margenTotalAgentes+=margen;
-    if(margen<800)malasPorAgente[n]=(malasPorAgente[n]||0)+1;
+    if(margen<600)malasPorAgente[n]=(malasPorAgente[n]||0)+1;
   });
   const filasAgentes=Object.entries(conteoAgentes).sort((a,b)=>b[1]-a[1]);
   const rankingPctAgentes=Object.entries(margenPorAgente).map(([n,m])=>[n,margenTotalAgentes>0?(m/margenTotalAgentes*100):0]).sort((a,b)=>b[1]-a[1]);
@@ -5951,7 +5951,7 @@ function verHistorialVentasPorVendedor(){
         ${(h.filasAgentesCompra||h.filasCompradoresPropias)?`<div style="width:100%;border-top:1px dashed var(--border);margin:.25rem 0"></div>
         <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">Carros comprados (${h.totalVehiculosComprados??''})</td></tr>${(h.filasAgentesCompra||h.filasCompradoresPropias||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>
         <table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px">% del margen generado</td></tr>${(h.rankingPctAgentes||h.rankingMargenCompradores||[]).map(([n,m])=>fila(n,m.toFixed(1)+'%')).join('')}</tbody></table>
-        ${h.malasFilasAgentes?`<table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px;color:var(--red)">Compras malas (&lt;$800)</td></tr>${(h.malasFilasAgentes||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>`:''}`:''}
+        ${h.malasFilasAgentes?`<table style="min-width:160px"><tbody><tr><td colspan="2" style="font-weight:700;font-size:12px;padding:4px 8px;color:var(--red)">Compras malas (&lt;$600)</td></tr>${(h.malasFilasAgentes||[]).map(([n,c])=>fila(n,c)).join('')}</tbody></table>`:''}`:''}
       </div>
     </div>`).join(''):'<p style="text-align:center;color:var(--text3)">Todavía no hay meses cerrados.</p>'}
     <button class="btn" style="width:100%;margin-top:.5rem" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button>
@@ -6038,6 +6038,22 @@ function renderResumenVentasWord(){
 // Erick, Gerencia...), NO por el cliente que compra en Ventas. Usa el mismo campo y la misma
 // regla de nombres (normalizarNombrePizarra) que ya usa Pizarra en su columna "Compras", para
 // que los números siempre coincidan entre los dos lugares.
+// Muestra los vehículos exactos detrás de una "compra mala" de un agente — marca, modelo,
+// placa y el margen real que dejó esa venta, para poder revisar el caso puntual.
+function verDetalleComprasMalas(nombreAgente){
+  const lista=(window._comprasMalasDetalle||{})[nombreAgente]||[];
+  const div=document.createElement('div');
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  div.innerHTML=`<div style="background:#fff;border-radius:var(--radius);max-width:480px;width:92%;max-height:75vh;overflow-y:auto;padding:1.25rem">
+    <h3 style="margin-bottom:.75rem"><i class="ti ti-alert-triangle" style="color:var(--red)"></i> Compras malas — ${nombreAgente} (${lista.length})</h3>
+    ${lista.length?`<table class="tbl" style="font-size:12px"><thead><tr><th>Vehículo</th><th>Placa</th><th>Fecha venta</th><th>Margen</th></tr></thead><tbody>
+      ${lista.map(v=>`<tr><td style="font-weight:700">${v.marca} ${v.modelo}</td><td>${v.placa}</td><td>${v.fecha}</td><td style="color:var(--red);font-weight:700">${fmtD(v.margen)}</td></tr>`).join('')}
+    </tbody></table>`:'<p style="text-align:center;color:var(--text3)">Sin datos.</p>'}
+    <button class="btn" style="width:100%;margin-top:1rem" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button>
+  </div>`;
+  div.onclick=e=>{if(e.target===div)div.remove();};
+  document.body.appendChild(div);
+}
 function renderResumenCompradoresWord(){
   const cont=document.getElementById('ventas-resumen-compradores-word');
   if(!cont)return;
@@ -6056,6 +6072,7 @@ function renderResumenCompradoresWord(){
   const margenPorAgente={};
   let margenTotal=0;
   const malasPorAgente={};
+  const malasDetalle={};
   ventasMes.forEach(vt=>{
     const vh=buscarVehiculoOConsig(vt.vehiculoId);
     const n=nombreAgente(vh);
@@ -6064,8 +6081,14 @@ function renderResumenCompradoresWord(){
     const margen=Number(vt.precio||0)-Number(vt.costo||0)-rep-Number(vt.comision||0);
     margenPorAgente[n]=(margenPorAgente[n]||0)+margen;
     margenTotal+=margen;
-    if(margen<800)malasPorAgente[n]=(malasPorAgente[n]||0)+1;
+    if(margen<600){
+      malasPorAgente[n]=(malasPorAgente[n]||0)+1;
+      (malasDetalle[n]=malasDetalle[n]||[]).push({
+        marca:vh?.marca||'',modelo:vh?.modelo||'',placa:vh?.placa||'—',fecha:vt.fecha||'',margen
+      });
+    }
   });
+  window._comprasMalasDetalle=malasDetalle;
   const filas=Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
   const rankingPct=Object.entries(margenPorAgente).map(([n,m])=>[n,margenTotal>0?(m/margenTotal*100):0]).sort((a,b)=>b[1]-a[1]);
   const mejorPct=rankingPct[0]||null;
@@ -6090,8 +6113,11 @@ function renderResumenCompradoresWord(){
   </table>`;
   const tablaMalas=()=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
-      <tr><td colspan="2" style="background:#C92A2A;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #C92A2A">⚠️ Compras malas (margen &lt; $800)</td></tr>
-      ${malasFilas.length?malasFilas.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna compra mala todavía</td></tr>`}
+      <tr><td colspan="2" style="background:#C92A2A;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #C92A2A">⚠️ Compras malas (margen &lt; $600)</td></tr>
+      ${malasFilas.length?malasFilas.map(([n,c])=>`<tr onclick="verDetalleComprasMalas('${n.replace(/'/g,"\\'")}')" style="cursor:pointer">
+        <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${n} <i class="ti ti-eye" style="font-size:11px;color:var(--text3)"></i></td>
+        <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${c}</td>
+      </tr>`).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna compra mala todavía</td></tr>`}
     </tbody>
   </table>`;
   cont.innerHTML=`
@@ -9139,6 +9165,7 @@ function abrirModalVenta(id){
     document.getElementById('mvt-precio').value=parseFloat(v.precio||0).toFixed(2);
     document.getElementById('mvt-costo').value=parseFloat(v.costo||0).toFixed(2);
     document.getElementById('mvt-fecha').value=v.fecha||'';
+    window._fechaOriginalVenta=v.fecha||'';
     document.getElementById('mvt-estado').value=v.estado||'Completada';
     document.getElementById('mvt-comision').value=parseFloat(v.comision||0).toFixed(2);
     document.getElementById('mvt-notas').value=v.notas||'';
@@ -9164,6 +9191,7 @@ function abrirModalVenta(id){
     const liqV=document.getElementById('mvt-liquidacion');if(liqV)liqV.style.display='none';
   } else {
     document.getElementById('mvt-fecha').value=hoyLocal();
+    window._fechaOriginalVenta=null;
     ['precio','costo','comision','notas','recibo'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
     document.getElementById('mvt-estado').value='Completada';
     if(document.getElementById('mvt-contacto'))document.getElementById('mvt-contacto').value='';
@@ -9393,7 +9421,7 @@ function alertaSiFueraDeMes(fecha,tipoOperacion){
   // Nicaragua — sobre todo de noche. Eso disparaba un confirm() de menos, que si el navegador
   // tenía los diálogos bloqueados, cancelaba el guardado en silencio, sin avisar nada.
   if(fecha.slice(0,7)===mesActual)return true;
-  return confirm(`⚠️ La fecha que ingresaste (${fecha}) no corresponde al mes actual (${mesActual}).\n\n¿Confirmás que esta ${tipoOperacion||'operación'} realmente es de esa fecha?`);
+  return confirm(`⚠️ Está guardando esta ${tipoOperacion||'operación'} con fecha ${fecha}, que es de un mes distinto al actual (${mesActual}).\n\nSi toca "Aceptar", se guarda tal cual con la fecha ${fecha} (NO se cambia a hoy). Si no está seguro, toque "Cancelar" y revise la fecha antes de guardar.`);
 }
 // Cuando una venta tiene banco + monto financiado, se crea sola una Cuenta por Cobrar — Bancos
 // vinculada (origenVentaId) para llevar el control del crédito. Si ya existía (por una edición
@@ -9428,7 +9456,11 @@ async function guardarVenta(){
   const precio=parseFloat(document.getElementById('mvt-precio').value||0);
   const costoInput=parseFloat(document.getElementById('mvt-costo').value||0);
   const fecha=document.getElementById('mvt-fecha').value||hoyLocal();
-  if(!alertaSiFueraDeMes(fecha,'venta'))return;
+  // Si está EDITANDO una venta y no tocó el campo Fecha, no hace falta preguntar nada — la fecha
+  // sigue siendo la misma que ya estaba guardada. Solo se pregunta si la fecha es nueva o si la
+  // cambió a mano.
+  const fechaSinCambios=window._fechaOriginalVenta&&fecha===window._fechaOriginalVenta;
+  if(!fechaSinCambios&&!alertaSiFueraDeMes(fecha,'venta'))return;
   const estado=document.getElementById('mvt-estado').value;
   const comision=parseFloat(document.getElementById('mvt-comision').value||0);
   const notas=document.getElementById('mvt-notas').value;
