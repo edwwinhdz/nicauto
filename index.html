@@ -4388,7 +4388,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-1200';
+const APP_VERSION='2026-10-01-1300';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5905,31 +5905,29 @@ async function cerrarMesVentasPorVendedor(){
     margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;
   });
   const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.suma/o.n]).sort((a,b)=>b[1]-a[1]);
-  // Mismo cierre, también guarda el reporte de AGENTES DE COMPRA (mismo mes, mismo botón, para
-  // no duplicar el trabajo de cerrar dos veces).
-  const vehiculosMes=vehiculos.filter(v=>v.fechacompra&&v.fechacompra.startsWith(mes));
-  const nombreAgente=v=>{const n=normalizarNombrePizarra(v.agentecompra||'');return n&&n!=='Gerencia'?n:(n==='Gerencia'?'Gerencia':'Sin agente asignado');};
+  // Mismo cierre, también guarda el reporte de AGENTES DE COMPRA, basado en los carros VENDIDOS
+  // este mes (no en cuándo se compraron) — mismo mes, mismo botón, para no cerrar dos veces.
+  const nombreAgente=v=>{const n=normalizarNombrePizarra((v&&v.agentecompra)||'');return n&&n!=='Gerencia'?n:(n==='Gerencia'?'Gerencia':'Sin agente asignado');};
   const conteoAgentes={};
-  vehiculosMes.forEach(v=>{const n=nombreAgente(v);conteoAgentes[n]=(conteoAgentes[n]||0)+1;});
-  const filasAgentes=Object.entries(conteoAgentes).sort((a,b)=>b[1]-a[1]);
   const margenPorAgente={};let margenTotalAgentes=0;const malasPorAgente={};
-  vehiculosMes.forEach(v=>{
-    const vt=ventas.find(x=>x.estado==='Completada'&&x.vehiculoId===v.id);
-    if(!vt)return;
-    const rep=(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0);
+  propias.forEach(vt=>{
+    const vh=buscarVehiculoOConsig(vt.vehiculoId);
+    const n=nombreAgente(vh);
+    conteoAgentes[n]=(conteoAgentes[n]||0)+1;
+    const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
     const margen=Number(vt.precio||0)-Number(vt.costo||0)-rep-Number(vt.comision||0);
-    const n=nombreAgente(v);
     margenPorAgente[n]=(margenPorAgente[n]||0)+margen;margenTotalAgentes+=margen;
     if(margen<800)malasPorAgente[n]=(malasPorAgente[n]||0)+1;
   });
+  const filasAgentes=Object.entries(conteoAgentes).sort((a,b)=>b[1]-a[1]);
   const rankingPctAgentes=Object.entries(margenPorAgente).map(([n,m])=>[n,margenTotalAgentes>0?(m/margenTotalAgentes*100):0]).sort((a,b)=>b[1]-a[1]);
   const malasFilasAgentes=Object.entries(malasPorAgente).sort((a,b)=>b[1]-a[1]);
-  if(!confirm(`¿Cerrar ${mes} y guardar esta foto en el Historial?\n\nVentas propias: ${propias.length} · Consignación: ${consig.length} · Carros comprados: ${vehiculosMes.length}\n\nEsto NO borra ni toca ninguna venta ni compra, solo archiva el resumen (vendedores y agentes de compra).`))return;
+  if(!confirm(`¿Cerrar ${mes} y guardar esta foto en el Historial?\n\nVentas propias: ${propias.length} · Consignación: ${consig.length}\n\nEsto NO borra ni toca ninguna venta ni compra, solo archiva el resumen (vendedores y agentes de compra).`))return;
   contData.historialVentasPorVendedor.push({
     id:uid(),mes,fechaCierre:hoyLocal(),cerradoPor:getNombreUsuario(),
     filasPropias:contar(propias),filasConsig:contar(consig),
     totalPropias:propias.length,totalConsig:consig.length,rankingMargen,
-    filasAgentesCompra:filasAgentes,totalVehiculosComprados:vehiculosMes.length,
+    filasAgentesCompra:filasAgentes,totalVehiculosComprados:propias.length,
     rankingPctAgentes,malasFilasAgentes
   });
   await saveOne('contable',{id:'main',...contData});
@@ -6045,31 +6043,30 @@ function renderResumenCompradoresWord(){
   if(!cont)return;
   if(!window._ventasResumenMes)window._ventasResumenMes=mesActualLocal();
   const mes=window._ventasResumenMes;
-  const vehiculosMes=vehiculos.filter(v=>v.fechacompra&&v.fechacompra.startsWith(mes));
+  // Base: los carros VENDIDOS este mes (no los comprados este mes) — para cada venta, se busca
+  // quién había comprado ese carro para NICAUTO (Agente de Compra), sin importar en qué mes se
+  // compró. Así el margen y las "compras malas" se calculan con el 100% de las ventas del mes,
+  // no solo con los carros que de casualidad ya se vendieron de entre los comprados este mes.
+  const ventasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha&&v.fecha.startsWith(mes)&&!/^CONSIG_/.test(String(v.vehiculoId||'')));
   const nombreAgente=v=>{
-    const n=normalizarNombrePizarra(v.agentecompra||'');
+    const n=normalizarNombrePizarra((v&&v.agentecompra)||'');
     return n&&n!=='Gerencia'?n:(n==='Gerencia'?'Gerencia':'Sin agente asignado');
   };
   const conteo={};
-  vehiculosMes.forEach(v=>{const n=nombreAgente(v);conteo[n]=(conteo[n]||0)+1;});
-  const filas=Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
-  // Margen generado: de los carros comprados este mes que YA SE VENDIERON, cuánto margen (en
-  // dólares) dejó cada agente, y qué % representa eso del margen total generado entre todos —
-  // así se compara quién consiguió las mejores compras, no solo quién compró más unidades.
   const margenPorAgente={};
   let margenTotal=0;
   const malasPorAgente={};
-  vehiculosMes.forEach(v=>{
-    const vt=ventas.find(x=>x.estado==='Completada'&&x.vehiculoId===v.id);
-    if(!vt)return; // todavía no se ha vendido, no se puede saber su margen real
-    const rep=(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0);
+  ventasMes.forEach(vt=>{
+    const vh=buscarVehiculoOConsig(vt.vehiculoId);
+    const n=nombreAgente(vh);
+    conteo[n]=(conteo[n]||0)+1;
+    const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
     const margen=Number(vt.precio||0)-Number(vt.costo||0)-rep-Number(vt.comision||0);
-    const n=nombreAgente(v);
     margenPorAgente[n]=(margenPorAgente[n]||0)+margen;
     margenTotal+=margen;
-    // Compra mala: la venta de ese carro dejó menos de $800 de margen.
-    if(margen<800){malasPorAgente[n]=(malasPorAgente[n]||0)+1;}
+    if(margen<800)malasPorAgente[n]=(malasPorAgente[n]||0)+1;
   });
+  const filas=Object.entries(conteo).sort((a,b)=>b[1]-a[1]);
   const rankingPct=Object.entries(margenPorAgente).map(([n,m])=>[n,margenTotal>0?(m/margenTotal*100):0]).sort((a,b)=>b[1]-a[1]);
   const mejorPct=rankingPct[0]||null;
   const malasFilas=Object.entries(malasPorAgente).sort((a,b)=>b[1]-a[1]);
@@ -6080,16 +6077,15 @@ function renderResumenCompradoresWord(){
   const tabla=(titulo,filasL,total,color)=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
       <tr><td colspan="2" style="background:${color};color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid ${color}">${titulo}</td></tr>
-      ${filasL.length?filasL.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin compras todavía este mes</td></tr>`}
+      ${filasL.length?filasL.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
       ${filaW('TOTAL',total)}
     </tbody>
   </table>`;
   const tablaPct=()=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
       <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 % del margen generado</td></tr>
-      ${mejorPct?filaW(mejorPct[0],mejorPct[1].toFixed(1)+'%'):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía de estos carros</td></tr>`}
+      ${mejorPct?filaW(mejorPct[0],mejorPct[1].toFixed(1)+'%'):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
       ${rankingPct.slice(1).map(([n,m])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%</td></tr>`).join('')}
-      <tr><td colspan="2" style="padding:4px 10px;font-size:10px;color:var(--text3);border-top:1px dashed var(--border)">Solo cuenta carros de este mes que YA se vendieron</td></tr>
     </tbody>
   </table>`;
   const tablaMalas=()=>`<table style="max-width:280px;border-collapse:collapse">
@@ -6101,9 +6097,9 @@ function renderResumenCompradoresWord(){
   cont.innerHTML=`
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-table"></i> Compras por Agente — ${mes}</h3></div>
-    <p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> Usa el mismo mes seleccionado arriba, y se cierra junto con el cuadro de vendedores (mismo botón "Cerrar mes").</p>
+    <p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> De los carros VENDIDOS este mes, quién los había comprado. Usa el mismo mes seleccionado arriba, y se cierra junto con el cuadro de vendedores (mismo botón "Cerrar mes").</p>
     <div style="padding:1rem;display:flex;gap:24px;flex-wrap:wrap">
-      ${tabla('Carros comprados',filas,vehiculosMes.length,'#1971C2')}
+      ${tabla('Carros vendidos (por comprador)',filas,ventasMes.length,'#1971C2')}
       ${tablaPct()}
       ${tablaMalas()}
     </div>
