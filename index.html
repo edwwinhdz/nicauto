@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-2130';
+const APP_VERSION='2026-10-02-1500';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -4962,7 +4962,7 @@ async function intentarLogin(){
         lastMensajesHash=hashArr(mensajes);
         lastContableHash=JSON.stringify(contData).length+'_'+(contData.compras?.length||0);
         try{updatePermisosBadge();}catch(e){}
-        setInterval(realtimeSync,20000); // Ajustado para reducir consumo de datos (egress) de Supabase
+        setInterval(realtimeSync,60000); // Subido de 20s a 60s el 2026-10-02 para bajar el consumo de Egress de Supabase (estaba al 151% del límite del plan)
       },1000);
     }).catch(e=>console.error('Load error:',e));
   }catch(err){
@@ -24046,7 +24046,7 @@ function restaurarSesionSiExiste(){
         lastMensajesHash=hashArr(mensajes);
         lastContableHash=JSON.stringify(contData).length+'_'+(contData.compras?.length||0);
         try{updatePermisosBadge();}catch(e){}
-        setInterval(realtimeSync,20000); // Ajustado para reducir consumo de datos (egress) de Supabase
+        setInterval(realtimeSync,60000); // Subido de 20s a 60s el 2026-10-02 para bajar el consumo de Egress de Supabase (estaba al 151% del límite del plan)
       },1000);
     }).catch(e=>{console.error('Load error al restaurar sesión:',e);try{mostrarLogin();}catch(e2){}});
   }catch(err){
