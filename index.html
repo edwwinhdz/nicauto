@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-2000';
+const APP_VERSION='2026-10-01-2130';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5909,7 +5909,7 @@ async function cerrarMesVentasPorVendedor(){
   // Mismo cierre, también guarda el reporte de AGENTES DE COMPRA — mismo mes, mismo botón, para
   // no cerrar dos veces. "Carros comprados" es por fecha de COMPRA; el margen y las compras
   // malas son por fecha de VENTA (igual que en pantalla).
-  const nombreAgente=v=>{const n=normalizarNombrePizarra((v&&v.agentecompra)||'');return n&&n!=='Gerencia'?n:(n==='Gerencia'?'Gerencia':'Sin agente asignado');};
+  const nombreAgente=v=>{if(v&&String(v.id||'').length&&(vehGerencia||[]).some(g=>g.id===v.id))return 'Gerencia';const n=normalizarNombrePizarra((v&&v.agentecompra)||'');return n&&n!=='Gerencia'?n:(n==='Gerencia'?'Gerencia':'Sin agente asignado');};
   const vehiculosComprados=vehiculos.filter(v=>v.fechacompra&&v.fechacompra.startsWith(mes));
   const conteoAgentes={};
   vehiculosComprados.forEach(v=>{const n=nombreAgente(v);conteoAgentes[n]=(conteoAgentes[n]||0)+1;});
@@ -6068,6 +6068,7 @@ function renderResumenCompradoresWord(){
   // hayan vendido.
   const vehiculosComprados=vehiculos.filter(v=>v.fechacompra&&v.fechacompra.startsWith(mes));
   const nombreAgente=v=>{
+    if(v&&String(v.id||'').length&&(vehGerencia||[]).some(g=>g.id===v.id))return 'Gerencia';
     const n=normalizarNombrePizarra((v&&v.agentecompra)||'');
     return n&&n!=='Gerencia'?n:(n==='Gerencia'?'Gerencia':'Sin agente asignado');
   };
@@ -13674,7 +13675,7 @@ function renderCatalogo(){
 // ======================== INVENTARIO GERENCIA / TALLER ========================
 function renderInvGer(){
   const q=(document.getElementById('invger-q').value||'').toLowerCase();
-  const dataFiltrada=vehGerencia.filter(v=>!q||(v.marca+v.modelo+v.placa).toLowerCase().includes(q));
+  const dataFiltrada=vehGerencia.filter(v=>v.estado!=='Vendido'&&(!q||(v.marca+v.modelo+v.placa).toLowerCase().includes(q)));
   const filaVeh=(v,idx)=>{
     const totRep=(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0);
     const costoTotal=Number(v.costo||0)+totRep;
