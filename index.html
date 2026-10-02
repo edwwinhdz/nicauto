@@ -685,6 +685,7 @@ body.no-delete .confirmDelete{display:none!important}
   </div>
   <div id="ventas-resumen-word" style="margin-top:1rem"></div>
   <div id="ventas-resumen-compradores-word" style="margin-top:1rem"></div>
+  <div id="ventas-resumen-local-consig-word" style="margin-top:1rem"></div>
   <div id="caja-correccion-cierre"></div>
   <div id="historial-cierres-ventas"></div>
   </div><!-- end ventas-tab-registro -->
@@ -4388,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-1700';
+const APP_VERSION='2026-10-01-1900';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -6135,6 +6136,104 @@ function renderResumenCompradoresWord(){
       ${tablaMalas()}
     </div>
   </div>`;
+}
+// "Ventas locales Nicauto" = total de ventas propias del mes (un solo número, sin desglose).
+// "Ventas Consignación" = desglosada por DUEÑO del vehículo (quién lo había consignado), NO por
+// el vendedor que lo vendió — porque lo que se quiere ver aquí es a quién se le vendieron los
+// carros de cada dueño, no quién de NICAUTO hizo la venta. Usa el mismo mes de arriba.
+function renderResumenLocalConsigWord(){
+  const cont=document.getElementById('ventas-resumen-local-consig-word');
+  if(!cont)return;
+  if(!window._ventasResumenMes)window._ventasResumenMes=mesActualLocal();
+  const mes=window._ventasResumenMes;
+  const ventasMes=ventas.filter(v=>v.estado==='Completada'&&v.fecha&&v.fecha.startsWith(mes));
+  const propias=ventasMes.filter(v=>!/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const consig=ventasMes.filter(v=>/^CONSIG_/.test(String(v.vehiculoId||'')));
+  const conteoDuenos={};
+  consig.forEach(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const n=(vh&&vh.duenio)?vh.duenio:'Sin dueño especificado';
+    conteoDuenos[n]=(conteoDuenos[n]||0)+1;
+  });
+  const filasDuenos=Object.entries(conteoDuenos).sort((a,b)=>b[1]-a[1]);
+  // Mejores ventas (ganancia ≥ $2,000) y malas ventas (ganancia < $500), con quién la hizo. Solo
+  // ventas propias, porque ahí sí hay costo y reparaciones completos para calcular la ganancia real.
+  const nombreVend=v=>{const vnd=clientes.find(c=>c.id===v.vendedorId);return vnd?normalizarNombrePizarra(vnd.nombre):'Sin vendedor';};
+  const buenas=[],malasV=[];
+  propias.forEach(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
+    const ganancia=Number(v.precio||0)-Number(v.costo||0)-rep-Number(v.comision||0);
+    const item={vendedor:nombreVend(v),marca:vh?.marca||'',modelo:vh?.modelo||'',placa:vh?.placa||'—',ganancia};
+    if(ganancia>=2000)buenas.push(item);
+    if(ganancia<500)malasV.push(item);
+  });
+  buenas.sort((a,b)=>b.ganancia-a.ganancia);
+  malasV.sort((a,b)=>a.ganancia-b.ganancia);
+  window._ventasBuenasDetalle=buenas;
+  window._ventasMalasDetalle=malasV;
+  const filaVenta=(it,color)=>`<tr><td style="padding:3px 6px;font-size:11px">${it.vendedor}</td><td style="padding:3px 6px;font-size:11px;color:${color};font-weight:700;text-align:right">${fmtD(it.ganancia)}</td></tr>`;
+  const filaW=(label,n)=>`<tr>
+    <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${label}</td>
+    <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${n}</td>
+  </tr>`;
+  cont.innerHTML=`
+  <div class="card">
+    <div class="card-head"><h3><i class="ti ti-table"></i> Ventas Nicauto vs Consignación — ${mes}</h3></div>
+    <p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> Consignación aquí se desglosa por el DUEÑO del vehículo, no por el vendedor. Usa el mismo mes seleccionado arriba.</p>
+    <div style="padding:1rem;display:flex;gap:24px;flex-wrap:wrap">
+      <table style="max-width:280px;border-collapse:collapse">
+        <tbody>
+          <tr><td colspan="2" style="background:#1971C2;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #1971C2">Ventas locales Nicauto</td></tr>
+          <tr><td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">TOTAL</td><td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${propias.length}</td></tr>
+        </tbody>
+      </table>
+      <table style="max-width:280px;border-collapse:collapse">
+        <tbody>
+          <tr><td colspan="2" style="background:#495057;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #495057">Ventas Consignación — por dueño</td></tr>
+          ${filasDuenos.length?filasDuenos.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
+          ${filaW('TOTAL',consig.length)}
+        </tbody>
+      </table>
+      <table style="max-width:280px;border-collapse:collapse">
+        <tbody>
+          <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">Total General</td></tr>
+          ${filaW('Nicauto + Consignación',propias.length+consig.length)}
+        </tbody>
+      </table>
+      <table style="max-width:260px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('buenas')">
+        <tbody>
+          <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejores ventas (≥ $2,000) <i class="ti ti-eye" style="font-size:11px"></i></td></tr>
+          ${buenas.length?buenas.slice(0,8).map(it=>filaVenta(it,'#2F9E44')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
+          ${buenas.length>8?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">+${buenas.length-8} más — click para ver todas</td></tr>`:''}
+        </tbody>
+      </table>
+      <table style="max-width:260px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('malas')">
+        <tbody>
+          <tr><td colspan="2" style="background:#C92A2A;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #C92A2A">⚠️ Malas ventas (&lt; $500) <i class="ti ti-eye" style="font-size:11px"></i></td></tr>
+          ${malasV.length?malasV.slice(0,8).map(it=>filaVenta(it,'#C92A2A')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
+          ${malasV.length>8?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">+${malasV.length-8} más — click para ver todas</td></tr>`:''}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+// Lista completa (vehículo, placa, vendedor y ganancia) de las mejores o peores ventas del mes.
+function verDetalleVentasBuenasMalas(tipo){
+  const lista=tipo==='buenas'?(window._ventasBuenasDetalle||[]):(window._ventasMalasDetalle||[]);
+  const titulo=tipo==='buenas'?'🏆 Mejores ventas (≥ $2,000)':'⚠️ Malas ventas (< $500)';
+  const color=tipo==='buenas'?'var(--green)':'var(--red)';
+  const div=document.createElement('div');
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  div.innerHTML=`<div style="background:#fff;border-radius:var(--radius);max-width:520px;width:92%;max-height:75vh;overflow-y:auto;padding:1.25rem">
+    <h3 style="margin-bottom:.75rem">${titulo} (${lista.length})</h3>
+    ${lista.length?`<table class="tbl" style="font-size:12px"><thead><tr><th>Vendedor</th><th>Vehículo</th><th>Placa</th><th>Ganancia</th></tr></thead><tbody>
+      ${lista.map(it=>`<tr><td style="font-weight:700">${it.vendedor}</td><td>${it.marca} ${it.modelo}</td><td>${it.placa}</td><td style="color:${color};font-weight:700">${fmtD(it.ganancia)}</td></tr>`).join('')}
+    </tbody></table>`:'<p style="text-align:center;color:var(--text3)">Sin datos.</p>'}
+    <button class="btn" style="width:100%;margin-top:1rem" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button>
+  </div>`;
+  div.onclick=e=>{if(e.target===div)div.remove();};
+  document.body.appendChild(div);
 }
 function renderVtasTotals(data){
   const tfoot=document.getElementById('tfoot-vtas');
@@ -9114,6 +9213,7 @@ function renderVtas(){
   renderVtasTotals(data);
   renderResumenVentasWord();
   renderResumenCompradoresWord();
+  renderResumenLocalConsigWord();
 }
 // Corrección puntual: cambiar SOLO el vendedor de una venta, sin abrir el formulario completo
 // de edición. Se agregó porque el formulario completo exige re-seleccionar el vehículo, y si
