@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-01-1900';
+const APP_VERSION='2026-10-01-2000';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5936,6 +5936,7 @@ async function cerrarMesVentasPorVendedor(){
   await saveOne('contable',{id:'main',...contData});
   renderResumenVentasWord();
   renderResumenCompradoresWord();
+  renderResumenLocalConsigWord();
 }
 // Ventana con los meses ya cerrados, para consultar cualquier mes anterior.
 function verHistorialVentasPorVendedor(){
@@ -6023,8 +6024,8 @@ function renderResumenVentasWord(){
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-table"></i> Ventas por vendedor</h3>
       <div style="display:flex;gap:6px;align-items:center">
-        <input type="month" value="${mes}" style="font-size:12px;padding:3px 6px" onchange="window._ventasResumenMes=this.value;renderResumenVentasWord();renderResumenCompradoresWord()">
-        <button class="btn btn-sm" onclick="window._ventasResumenMes=mesActualLocal();renderResumenVentasWord();renderResumenCompradoresWord()" title="Volver al mes de hoy">Hoy</button>
+        <input type="month" value="${mes}" style="font-size:12px;padding:3px 6px" onchange="window._ventasResumenMes=this.value;renderResumenVentasWord();renderResumenCompradoresWord();renderResumenLocalConsigWord()">
+        <button class="btn btn-sm" onclick="window._ventasResumenMes=mesActualLocal();renderResumenVentasWord();renderResumenCompradoresWord();renderResumenLocalConsigWord()" title="Volver al mes de hoy">Hoy</button>
         <button class="btn btn-sm" onclick="verHistorialVentasPorVendedor()"><i class="ti ti-history"></i> Historial</button>
         ${yaCerrado?`<span class="badge badge-gray" title="Ya se guardó una foto de este mes en el Historial"><i class="ti ti-lock"></i> Mes cerrado</span>`
           :`<button class="btn btn-sm btn-success" onclick="cerrarMesVentasPorVendedor()"><i class="ti ti-archive"></i> Cerrar mes</button>`}
@@ -6181,34 +6182,34 @@ function renderResumenLocalConsigWord(){
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-table"></i> Ventas Nicauto vs Consignación — ${mes}</h3></div>
     <p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> Consignación aquí se desglosa por el DUEÑO del vehículo, no por el vendedor. Usa el mismo mes seleccionado arriba.</p>
-    <div style="padding:1rem;display:flex;gap:24px;flex-wrap:wrap">
-      <table style="max-width:280px;border-collapse:collapse">
+    <div style="padding:1rem;display:flex;gap:10px;flex-wrap:wrap">
+      <table style="flex:1 1 180px;max-width:200px;min-width:160px;border-collapse:collapse">
         <tbody>
           <tr><td colspan="2" style="background:#1971C2;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #1971C2">Ventas locales Nicauto</td></tr>
           <tr><td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">TOTAL</td><td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${propias.length}</td></tr>
         </tbody>
       </table>
-      <table style="max-width:280px;border-collapse:collapse">
+      <table style="flex:1 1 180px;max-width:200px;min-width:160px;border-collapse:collapse">
         <tbody>
           <tr><td colspan="2" style="background:#495057;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #495057">Ventas Consignación — por dueño</td></tr>
           ${filasDuenos.length?filasDuenos.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
           ${filaW('TOTAL',consig.length)}
         </tbody>
       </table>
-      <table style="max-width:280px;border-collapse:collapse">
+      <table style="flex:1 1 180px;max-width:200px;min-width:160px;border-collapse:collapse">
         <tbody>
           <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">Total General</td></tr>
           ${filaW('Nicauto + Consignación',propias.length+consig.length)}
         </tbody>
       </table>
-      <table style="max-width:260px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('buenas')">
+      <table style="flex:1 1 180px;max-width:200px;min-width:160px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('buenas')">
         <tbody>
           <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejores ventas (≥ $2,000) <i class="ti ti-eye" style="font-size:11px"></i></td></tr>
           ${buenas.length?buenas.slice(0,8).map(it=>filaVenta(it,'#2F9E44')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
           ${buenas.length>8?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">+${buenas.length-8} más — click para ver todas</td></tr>`:''}
         </tbody>
       </table>
-      <table style="max-width:260px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('malas')">
+      <table style="flex:1 1 180px;max-width:200px;min-width:160px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('malas')">
         <tbody>
           <tr><td colspan="2" style="background:#C92A2A;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #C92A2A">⚠️ Malas ventas (&lt; $500) <i class="ti ti-eye" style="font-size:11px"></i></td></tr>
           ${malasV.length?malasV.slice(0,8).map(it=>filaVenta(it,'#C92A2A')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
