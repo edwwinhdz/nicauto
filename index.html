@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-02-1500';
+const APP_VERSION='2026-10-02-1600';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11481,13 +11481,15 @@ async function cerrarEstadoResultado(desde,hasta){
   const ingresos=ingresosVentas+totReembolsoAlistamiento;
   const gastosPeriodo=(contData.gastos||[]).filter(g=>!esCuentaDeBalanceOPatrimonio(g.cat));
   const gastosAdminCatsFull=getGastosAdminCatsCompleto();
-  const gastosAdmin=gastosPeriodo.filter(g=>gastosAdminCatsFull.includes(g.cat)&&!esGastoReclamo(g)&&enRango(g.fecha)).reduce((s,g)=>s+g.monto,0);
+  const gastosFinancierosCatsFull=getGastosFinancierosCatsCompleto();
+  const gastosAdmin=gastosPeriodo.filter(g=>gastosAdminCatsFull.includes(g.cat)&&!esGastoReclamo(g)&&!gastosFinancierosCatsFull.includes(g.cat)&&enRango(g.fecha)).reduce((s,g)=>s+g.monto,0);
+  const gastosFinancieros=gastosPeriodo.filter(g=>gastosFinancierosCatsFull.includes(g.cat)&&!esGastoReclamo(g)&&enRango(g.fecha)).reduce((s,g)=>s+g.monto,0);
   const gastosReclamo=gastosPeriodo.filter(g=>esGastoReclamo(g)&&enRango(g.fecha)).reduce((s,g)=>s+g.monto,0);
-  const gastosNoOp=gastosPeriodo.filter(g=>!gastosAdminCatsFull.includes(g.cat)&&!esGastoReclamo(g)&&enRango(g.fecha)).reduce((s,g)=>s+g.monto,0);
-  const utilNeta=ingresos-costos-comisiones-gastosAdmin-gastosReclamo-gastosNoOp;
+  const gastosNoOp=gastosPeriodo.filter(g=>!gastosAdminCatsFull.includes(g.cat)&&!esGastoReclamo(g)&&!gastosFinancierosCatsFull.includes(g.cat)&&enRango(g.fecha)).reduce((s,g)=>s+g.monto,0);
+  const utilNeta=ingresos-costos-comisiones-gastosAdmin-gastosFinancieros-gastosReclamo-gastosNoOp;
   if(!confirm(`¿Cerrar y archivar el Estado de Resultado del ${desde} al ${hasta}?\n\nIngresos: ${fmtD(ingresos)}\nUtilidad Neta: ${fmtD(utilNeta)}\n\nEsto queda guardado como historial — podés volver a verlo cuando quieras.`))return;
   contData.estadosResultadoCerrados=contData.estadosResultadoCerrados||[];
-  contData.estadosResultadoCerrados.push({id:uid(),desde,hasta,ingresos,costos,comisiones,gastosAdmin,gastosReclamo,gastosNoOp,totReembolsoAlistamiento,utilNeta,
+  contData.estadosResultadoCerrados.push({id:uid(),desde,hasta,ingresos,costos,comisiones,gastosAdmin,gastosFinancieros,gastosReclamo,gastosNoOp,totReembolsoAlistamiento,utilNeta,
     fechaCierre:hoyLocal(),cerradoPor:getNombreUsuario()});
   await saveOne('contable',{id:'main',...contData});
   alert('✅ Estado de Resultado archivado correctamente.');
@@ -11709,19 +11711,23 @@ function renderEstado(){
   // gasto del período acá; es un movimiento de Balance, no de Estado de Resultado.
   const gastosPeriodo=(contData.gastos||[]).filter(g=>!esCuentaDeBalanceOPatrimonio(g.cat));
   const gastosAdminCatsFull=getGastosAdminCatsCompleto();
-  // Reclasificación manual por cuenta (arrastrar y soltar entre "Gastos operativos" y "Gastos
-  // no operativos") — si una cuenta tiene un ajuste guardado acá, ese manda por encima de la
-  // clasificación automática de siempre.
+  const gastosFinancierosCatsFull=getGastosFinancierosCatsCompleto();
+  // Reclasificación manual por cuenta (arrastrar y soltar entre secciones) — si una cuenta tiene
+  // un ajuste guardado acá, ese manda por encima de la clasificación automática de siempre.
   const overrides=contData.clasificacionCuentasER||{};
   const esAdminCuenta=cat=>overrides[cat]?overrides[cat]==='operativo':gastosAdminCatsFull.includes(cat);
-  const gastosAdmin=gastosPeriodo.filter(g=>esAdminCuenta(g.cat)&&!esGastoReclamo(g)&&enRango(g.fecha));
+  const esFinancieroCuenta=cat=>overrides[cat]?overrides[cat]==='financiero':gastosFinancierosCatsFull.includes(cat);
+  const gastosFinancieros=gastosPeriodo.filter(g=>!esGastoReclamo(g)&&esFinancieroCuenta(g.cat)&&enRango(g.fecha));
+  const gastosAdmin=gastosPeriodo.filter(g=>!esGastoReclamo(g)&&!esFinancieroCuenta(g.cat)&&esAdminCuenta(g.cat)&&enRango(g.fecha));
   const gastosReclamo=gastosPeriodo.filter(g=>esGastoReclamo(g)&&enRango(g.fecha));
-  const gastosNoOp=gastosPeriodo.filter(g=>!esAdminCuenta(g.cat)&&!esGastoReclamo(g)&&enRango(g.fecha));
+  const gastosNoOp=gastosPeriodo.filter(g=>!esGastoReclamo(g)&&!esFinancieroCuenta(g.cat)&&!esAdminCuenta(g.cat)&&enRango(g.fecha));
   const totAdmin=gastosAdmin.reduce((s,g)=>s+g.monto,0);
+  const totFinanciero=gastosFinancieros.reduce((s,g)=>s+g.monto,0);
   const totReclamo=gastosReclamo.reduce((s,g)=>s+g.monto,0);
   const totNoOp=gastosNoOp.reduce((s,g)=>s+g.monto,0);
   const utilOp=utilBruta-(vistaComision?0:comisiones)-totAdmin;
-  const utilNeta=utilOp-totNoOp-totReclamo;
+  const utilFinanciera=utilOp-totFinanciero;
+  const utilNeta=utilFinanciera-totNoOp-totReclamo;
   const mb=ingresos>0?((utilBruta/ingresos)*100).toFixed(1):0;
   const mn=ingresos>0?((utilNeta/ingresos)*100).toFixed(1):0;
   const r=(l,v,cls='')=>`<div class="contable-row ${cls}"><span>${l}</span><span>${v}</span></div>`;
@@ -11739,6 +11745,7 @@ function renderEstado(){
     return Object.entries(map).sort((a,b)=>b[1]-a[1]); // de mayor a menor monto
   };
   const gastosAdminPorCuenta=agruparPorCuenta(gastosAdmin);
+  const gastosFinancierosPorCuenta=agruparPorCuenta(gastosFinancieros);
   const gastosNoOpPorCuenta=agruparPorCuenta(gastosNoOp);
   document.getElementById('cont-estado').innerHTML=`
   ${pendientesValidarRendicion().cantidad?(()=>{const p=pendientesValidarRendicion();return`<div style="background:var(--amber-light);border:1px solid #FFDEAB;border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -11796,6 +11803,12 @@ function renderEstado(){
       </div>
       <div class="contable-row subtotal"><span>Total gastos operativos</span><span>(${fmtD(totAdmin)})</span></div>
       <div class="contable-row total"><span>Utilidad operativa</span><span>${fmtD(utilOp)}</span></div>
+      <h4 style="margin-top:1rem">Gastos Financieros</h4>
+      <div id="er-drop-financiero" ondragover="event.preventDefault();this.style.background='var(--amber-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaEnSeccion(event,'financiero')" style="border-radius:6px;min-height:36px;transition:background .15s">
+      ${gastosFinancierosPorCuenta.length?gastosFinancierosPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos financieros (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`}
+      </div>
+      <div class="contable-row subtotal"><span>Total Gastos Financieros</span><span>(${fmtD(totFinanciero)})</span></div>
+      <div class="contable-row total"><span>Utilidad Financiera</span><span>${fmtD(utilFinanciera)}</span></div>
       <h4 style="margin-top:1rem">Gastos no operativos</h4>
       <div id="er-drop-nooperativo" ondragover="event.preventDefault();this.style.background='var(--red-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaEnSeccion(event,'no-operativo')" style="border-radius:6px;min-height:36px;transition:background .15s">
       ${gastosReclamo.length?`<div style="margin-bottom:6px;background:var(--amber-light);border-radius:4px;padding:4px">
@@ -11809,7 +11822,7 @@ function renderEstado(){
         <span>UTILIDAD NETA <small style="font-weight:400">(margen ${mn}%)</small></span>
         <span style="color:${utilNeta>=0?'var(--green)':'var(--red)'}">${fmtD(utilNeta)}</span>
       </div>
-      <p style="font-size:11px;color:var(--text3);margin-top:.5rem"><i class="ti ti-arrows-move"></i> Podés <b>arrastrar</b> cualquier cuenta (↕️) entre "Gastos operativos" y "Gastos no operativos" para moverla donde corresponda.</p>
+      <p style="font-size:11px;color:var(--text3);margin-top:.5rem"><i class="ti ti-arrows-move"></i> Podés <b>arrastrar</b> cualquier cuenta (↕️) entre "Gastos operativos", "Gastos Financieros" y "Gastos no operativos" para moverla donde corresponda.</p>
       <p style="font-size:11px;color:var(--text3);margin-top:.25rem"><i class="ti ti-info-circle"></i> El Reembolso de alistamiento se calcula automático ($218 por cada carro propio vendido que tenga ese gasto de $218 realmente registrado en sus Reparaciones, igual que en el cuadro de Ventas del mes) — no es una transacción registrada a mano, por eso no tiene auxiliar clickeable.</p>
       <p style="font-size:11px;color:var(--text3);margin-top:.25rem"><i class="ti ti-info-circle"></i> Se muestran las cuentas de Mayor. Clic en cualquier cuenta para ver su auxiliar (el detalle de cada movimiento que la compone) en el rango de fechas seleccionado arriba.</p>
     </div></div>
@@ -19555,6 +19568,14 @@ function getGastosOperativosCatsCompleto(){
   const pers=(contData.cuentasPersonalizadas||[]).filter(c=>c.tipo==='gasto'&&c.mayor==='6000').map(c=>c.nombre);
   return[...base,...pers];
 }
+// Gastos Financieros: intereses de préstamos, intereses de tarjeta de crédito, comisiones
+// bancarias — van en un bloque aparte en el Estado de Resultado, entre Utilidad Operativa y
+// Utilidad No Operativa, con su propio subtotal y "Utilidad Financiera".
+function getGastosFinancierosCatsCompleto(){
+  const base=['Intereses de préstamo','Intereses tarjeta crédito','Comisiones bancarias','Otros gastos no operativos'];
+  const pers=(contData.cuentasPersonalizadas||[]).filter(c=>c.tipo==='gasto'&&c.mayor==='7000').map(c=>c.nombre);
+  return[...base,...pers];
+}
 
 // ======================== HELPERS: cuentas de Balance y Reclamos (Estado de Resultado) ========================
 // Normaliza el nombre de una cuenta (sin tildes, sin guiones largos, minúsculas) para poder
@@ -19997,7 +20018,7 @@ function renderRegistroDirectoGastos(){
   const regs=getRegistroDirectoGastos().slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   const pendientes=regs.filter(r=>!r.validado).length;
   const cuentasBalanceEIngresoPers=(contData.cuentasPersonalizadas||[]).filter(c=>c.tipo==='activo'||c.tipo==='pasivo'||c.tipo==='ingreso').map(c=>c.nombre);
-  const catsDisponibles=[...getGastosAdminCatsCompleto(),...getGastosOperativosCatsCompleto(),...cuentasBalanceEIngresoPers];
+  const catsDisponibles=[...getGastosAdminCatsCompleto(),...getGastosOperativosCatsCompleto(),...getGastosFinancierosCatsCompleto(),...cuentasBalanceEIngresoPers];
   return`
   <div class="card" style="margin-bottom:1rem;border:2px solid var(--purple)">
     <div class="card-head"><h3 style="color:var(--purple)"><i class="ti ti-receipt-2"></i> Registro Directo de Gastos ${pendientes?`<span class="badge badge-amber" style="margin-left:6px">${pendientes} sin validar</span>`:''}</h3></div>
