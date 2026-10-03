@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-02-1600';
+const APP_VERSION='2026-10-03-1000';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -6058,6 +6058,27 @@ function verDetalleComprasMalas(nombreAgente){
   div.onclick=e=>{if(e.target===div)div.remove();};
   document.body.appendChild(div);
 }
+// Ajuste manual de "Carros comprados" por agente — para compras reales que NO se cargan como
+// vehículo en Inventario (por ejemplo, un carro que se compró pero no se va a comercializar
+// aquí). Se guarda aparte, por mes, y solo SUMA al conteo que ya se ve — nunca crea ningún
+// vehículo "fantasma" en Inventario, ni afecta el margen ni las compras malas.
+async function ajustarComprasAgente(agenteDefault){
+  if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ No tenés permisos para hacer este ajuste.');return;}
+  const mes=window._ventasResumenMes||mesActualLocal();
+  const agente=agenteDefault||prompt('¿Para qué agente es el ajuste? (nombre exacto, ej. "Norvin Orozco")');
+  if(!agente)return;
+  const actual=((contData.ajustesComprasAgente||{})[mes]||{})[agente]||0;
+  const val=prompt(`Ajuste manual de "Carros comprados" para ${agente}, en ${mes}.\n\nEste número se SUMA al conteo real (no reemplaza nada, no crea ningún vehículo en Inventario). Use un número negativo para restar.\n\nAjuste actual: ${actual}`,actual);
+  if(val===null)return;
+  const n=parseInt(val,10);
+  if(isNaN(n)){alert('Ingresá un número entero.');return;}
+  contData.ajustesComprasAgente=contData.ajustesComprasAgente||{};
+  contData.ajustesComprasAgente[mes]=contData.ajustesComprasAgente[mes]||{};
+  if(n===0)delete contData.ajustesComprasAgente[mes][agente];
+  else contData.ajustesComprasAgente[mes][agente]=n;
+  await saveOne('contable',{id:'main',...contData});
+  renderResumenCompradoresWord();
+}
 function renderResumenCompradoresWord(){
   const cont=document.getElementById('ventas-resumen-compradores-word');
   if(!cont)return;
@@ -6074,6 +6095,13 @@ function renderResumenCompradoresWord(){
   };
   const conteo={};
   vehiculosComprados.forEach(v=>{const n=nombreAgente(v);conteo[n]=(conteo[n]||0)+1;});
+  // Ajustes manuales: compras reales que no se cargan como vehículo en Inventario (por ejemplo,
+  // un carro comprado pero que no se va a comercializar aquí). Se SUMAN al conteo, sin crear
+  // ningún vehículo "fantasma" — por eso NO afectan el margen ni las compras malas, solo el
+  // número de "Carros comprados".
+  const ajustesCompras=(contData.ajustesComprasAgente||{})[mes]||{};
+  Object.entries(ajustesCompras).forEach(([n,aj])=>{if(aj)conteo[n]=(conteo[n]||0)+aj;});
+  const totalConAjustes=vehiculosComprados.length+Object.values(ajustesCompras).reduce((s,n)=>s+n,0);
   // "% del margen generado" y "Compras malas" siguen por FECHA DE VENTA (cuando el carro se
   // vendió este mes), sin importar cuándo se compró — para que el margen se pueda calcular
   // con el 100% de las ventas del mes, no solo con los que coinciden compra y venta en el mismo mes.
@@ -6105,10 +6133,13 @@ function renderResumenCompradoresWord(){
     <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${label}</td>
     <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${n}</td>
   </tr>`;
-  const tabla=(titulo,filasL,total,color)=>`<table style="max-width:280px;border-collapse:collapse">
+  const tabla=(titulo,filasL,total,color,conAjuste)=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
-      <tr><td colspan="2" style="background:${color};color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid ${color}">${titulo}</td></tr>
-      ${filasL.length?filasL.map(([n,c])=>filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
+      <tr><td colspan="2" style="background:${color};color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid ${color}">${titulo}${conAjuste?` <i class="ti ti-adjustments" style="cursor:pointer;font-size:12px" title="Ajuste manual" onclick="ajustarComprasAgente()"></i>`:''}</td></tr>
+      ${filasL.length?filasL.map(([n,c])=>conAjuste?`<tr>
+        <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${n}${ajustesCompras[n]?` <span style="color:var(--text3);font-weight:400">(${ajustesCompras[n]>0?'+':''}${ajustesCompras[n]} manual)</span>`:''} <i class="ti ti-pencil" style="font-size:10px;color:var(--text3);cursor:pointer" onclick="ajustarComprasAgente('${n.replace(/'/g,"\\'")}')"></i></td>
+        <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${c}</td>
+      </tr>`:filaW(n,c)).join(''):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
       ${filaW('TOTAL',total)}
     </tbody>
   </table>`;
@@ -6133,7 +6164,7 @@ function renderResumenCompradoresWord(){
     <div class="card-head"><h3><i class="ti ti-table"></i> Compras por Agente — ${mes}</h3></div>
     <p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> "Carros comprados" es por fecha de compra. "% de margen" y "Compras malas" son por fecha de venta. Usa el mismo mes seleccionado arriba, y se cierra junto con el cuadro de vendedores (mismo botón "Cerrar mes").</p>
     <div style="padding:1rem;display:flex;gap:24px;flex-wrap:wrap">
-      ${tabla('Carros comprados',filas,vehiculosComprados.length,'#1971C2')}
+      ${tabla('Carros comprados',filas,totalConAjustes,'#1971C2',true)}
       ${tablaPct()}
       ${tablaMalas()}
     </div>
