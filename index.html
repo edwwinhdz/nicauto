@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1130';
+const APP_VERSION='2026-10-03-1200';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11545,6 +11545,40 @@ async function guardarDetalleVentaEstado(ventaId){
   renderEstado();
   alert('✅ Cambios guardados.');
 }
+// Imprime el Estado de Resultado tal como se ve en pantalla (el rango de fechas que esté
+// puesto arriba, por ejemplo todo septiembre) en una hoja aparte, lista para imprimir o guardar
+// como PDF. Copia el mismo contenido ya calculado, sin los botones ni los campos de fecha.
+function imprimirEstadoResultado(desde,hasta){
+  const cont=document.getElementById('cont-estado');
+  if(!cont){alert('No hay nada que imprimir todavía.');return;}
+  const html2=`<!DOCTYPE html><html><head><title>Estado de Resultado — ${desde} al ${hasta}</title>
+    <style>
+      body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#212529}
+      .titulo-print{background:#1971C2;color:#fff;text-align:center;font-weight:800;font-size:20px;letter-spacing:.03em;padding:14px;text-transform:uppercase;border-radius:8px;margin-bottom:1.25rem}
+      .contable-row{display:flex;justify-content:space-between;padding:4px 10px;font-size:13px}
+      .contable-row.subtotal{font-weight:700;border-top:1px solid #DEE2E6;margin-top:4px}
+      .contable-row.total{font-weight:800;background:#F1F3F5;border-radius:4px;padding:6px 10px;margin:4px 0}
+      h4{margin:1rem 0 .25rem;font-size:13px;text-transform:uppercase;color:#495057}
+      input,button,.btn,[id^="er-drop-"] i.ti-eye,i.ti-pencil{display:none !important}
+      [id^="er-drop-"]{border:none !important}
+      table{border-collapse:collapse;width:100%}
+      td,th{padding:4px 8px;font-size:12px;border-bottom:1px solid #DEE2E6}
+      .card{display:none} /* el historial de cierres no hace falta en la hoja impresa */
+      .fecha-print{text-align:center;font-size:11px;color:#868E96;margin-top:1rem}
+      @media print{@page{margin:10mm}}
+    </style>
+  </head><body>
+    <div class="titulo-print">Estado de Resultado — Del ${desde} al ${hasta}</div>
+    ${cont.innerHTML}
+    <div class="fecha-print">Generado desde NICAUTO el ${new Date().toLocaleDateString('es-NI')}</div>
+  </body></html>`;
+  const win2=window.open('','_blank','width=900,height=1000');
+  if(!win2){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win2.document.open();
+  win2.document.write(html2);
+  win2.document.close();
+  win2.onload=()=>{win2.focus();win2.print();};
+}
 async function cerrarEstadoResultado(desde,hasta){
   if(MODO!=='admin'){alert('⛔ Solo el Administrador puede cerrar el Estado de Resultado.');return;}
   const enRango=fecha=>!fecha||(fecha>=desde&&fecha<=hasta);
@@ -11837,6 +11871,7 @@ function renderEstado(){
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${MODO==='admin'?`<button class="btn" onclick="corregirCategoriasRendicionAntiguas()" style="color:var(--purple);border-color:var(--purple)" title="Corrige gastos viejos de Rendición que quedaron mal clasificados"><i class="ti ti-tool"></i>Corregir cuentas de Rendición</button>`:''}
+      <button class="btn" onclick="imprimirEstadoResultado('${desde}','${hasta}')"><i class="ti ti-printer"></i>Imprimir</button>
       ${MODO==='admin'?`<button class="btn btn-success" onclick="cerrarEstadoResultado('${desde}','${hasta}')"><i class="ti ti-archive"></i>Cerrar y archivar este período</button>`:''}
     </div>
   </div>
