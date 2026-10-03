@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1000';
+const APP_VERSION='2026-10-03-1100';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -6026,6 +6026,7 @@ function renderResumenVentasWord(){
       <div style="display:flex;gap:6px;align-items:center">
         <input type="month" value="${mes}" style="font-size:12px;padding:3px 6px" onchange="window._ventasResumenMes=this.value;renderResumenVentasWord();renderResumenCompradoresWord();renderResumenLocalConsigWord()">
         <button class="btn btn-sm" onclick="window._ventasResumenMes=mesActualLocal();renderResumenVentasWord();renderResumenCompradoresWord();renderResumenLocalConsigWord()" title="Volver al mes de hoy">Hoy</button>
+        <button class="btn btn-sm" onclick="imprimirReportesVentasCompras()"><i class="ti ti-printer"></i> Imprimir</button>
         <button class="btn btn-sm" onclick="verHistorialVentasPorVendedor()"><i class="ti ti-history"></i> Historial</button>
         ${yaCerrado?`<span class="badge badge-gray" title="Ya se guardó una foto de este mes en el Historial"><i class="ti ti-lock"></i> Mes cerrado</span>`
           :`<button class="btn btn-sm btn-success" onclick="cerrarMesVentasPorVendedor()"><i class="ti ti-archive"></i> Cerrar mes</button>`}
@@ -6252,6 +6253,40 @@ function renderResumenLocalConsigWord(){
   </div>`;
 }
 // Lista completa (vehículo, placa, vendedor y ganancia) de las mejores o peores ventas del mes.
+// Imprime juntos los 3 cuadros estilo Word (Ventas por vendedor, Compras por Agente, Ventas
+// Nicauto vs Consignación) en una sola hoja — simplemente copia el HTML que ya está dibujado en
+// pantalla en esos 3 cuadros, así el formato impreso queda idéntico a lo que se ve.
+function imprimirReportesVentasCompras(){
+  const ids=['ventas-resumen-word','ventas-resumen-compradores-word','ventas-resumen-local-consig-word'];
+  const bloques=ids.map(id=>document.getElementById(id)?.innerHTML||'').filter(Boolean);
+  if(!bloques.length){alert('No hay nada que imprimir todavía.');return;}
+  const mes=window._ventasResumenMes||mesActualLocal();
+  const html2=`<!DOCTYPE html><html><head><title>Reportes de Ventas y Compras — ${mes}</title>
+    <style>
+      body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      .titulo-print{background:#1971C2;color:#fff;text-align:center;font-weight:800;font-size:20px;letter-spacing:.03em;padding:14px;text-transform:uppercase;border-radius:8px;margin-bottom:1.25rem}
+      .card{border:1px solid #DEE2E6;border-radius:8px;margin-bottom:1.25rem;page-break-inside:avoid;overflow:hidden}
+      .card-head{padding:10px 14px;font-weight:700;font-size:15px;border-bottom:1px solid #DEE2E6;display:flex;justify-content:space-between;align-items:center}
+      .card-head button,.card-head i.ti-adjustments,.card-head input[type="month"],.btn{display:none !important}
+      table{border-collapse:collapse}
+      td{font-size:12px}
+      i.ti-pencil,i.ti-eye{display:none !important}
+      p{font-size:11px;color:#868E96;padding:0 14px .5rem;margin:0}
+      .fecha-print{text-align:center;font-size:11px;color:#868E96;margin-top:1rem}
+      @media print{@page{margin:10mm}}
+    </style>
+  </head><body>
+    <div class="titulo-print">Reportes de Ventas y Compras — ${mes}</div>
+    ${bloques.join('')}
+    <div class="fecha-print">Generado desde NICAUTO el ${new Date().toLocaleDateString('es-NI')}</div>
+  </body></html>`;
+  const win2=window.open('','_blank','width=900,height=1000');
+  if(!win2){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win2.document.open();
+  win2.document.write(html2);
+  win2.document.close();
+  win2.onload=()=>{win2.focus();win2.print();};
+}
 function verDetalleVentasBuenasMalas(tipo){
   const lista=tipo==='buenas'?(window._ventasBuenasDetalle||[]):(window._ventasMalasDetalle||[]);
   const titulo=tipo==='buenas'?'🏆 Mejores ventas (≥ $2,000)':'⚠️ Malas ventas (< $500)';
