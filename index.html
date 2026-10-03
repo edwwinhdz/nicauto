@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1100';
+const APP_VERSION='2026-10-03-1130';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -6204,9 +6204,19 @@ function renderResumenLocalConsigWord(){
   });
   buenas.sort((a,b)=>b.ganancia-a.ganancia);
   malasV.sort((a,b)=>a.ganancia-b.ganancia);
+  // El detalle individual (cada venta por separado) queda guardado para cuando hace click y
+  // quiere ver el desglose completo — pero el cuadro en pantalla SUMA por vendedor, para que no
+  // salga el mismo nombre repetido varias veces.
   window._ventasBuenasDetalle=buenas;
   window._ventasMalasDetalle=malasV;
-  const filaVenta=(it,color)=>`<tr><td style="padding:3px 6px;font-size:11px">${it.vendedor}</td><td style="padding:3px 6px;font-size:11px;color:${color};font-weight:700;text-align:right">${fmtD(it.ganancia)}</td></tr>`;
+  const sumarPorVendedor=lista=>{
+    const suma={};
+    lista.forEach(it=>{suma[it.vendedor]=(suma[it.vendedor]||0)+it.ganancia;});
+    return Object.entries(suma);
+  };
+  const buenasPorVendedor=sumarPorVendedor(buenas).sort((a,b)=>b[1]-a[1]);
+  const malasPorVendedor=sumarPorVendedor(malasV).sort((a,b)=>a[1]-b[1]);
+  const filaVenta=(vendedor,monto,color)=>`<tr><td style="padding:3px 6px;font-size:11px">${vendedor}</td><td style="padding:3px 6px;font-size:11px;color:${color};font-weight:700;text-align:right">${fmtD(monto)}</td></tr>`;
   const filaW=(label,n)=>`<tr>
     <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${label}</td>
     <td style="background:#000;color:#fff;padding:6px 16px;font-weight:800;font-size:14px;text-align:center;border:1px solid #000">${n}</td>
@@ -6238,15 +6248,15 @@ function renderResumenLocalConsigWord(){
       <table style="flex:1 1 180px;max-width:200px;min-width:160px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('buenas')">
         <tbody>
           <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejores ventas (≥ $2,000) <i class="ti ti-eye" style="font-size:11px"></i></td></tr>
-          ${buenas.length?buenas.slice(0,8).map(it=>filaVenta(it,'#2F9E44')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
-          ${buenas.length>8?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">+${buenas.length-8} más — click para ver todas</td></tr>`:''}
+          ${buenasPorVendedor.length?buenasPorVendedor.slice(0,8).map(([v,m])=>filaVenta(v,m,'#2F9E44')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
+          ${buenasPorVendedor.length>8?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">+${buenasPorVendedor.length-8} más — click para ver todas</td></tr>`:''}
         </tbody>
       </table>
       <table style="flex:1 1 180px;max-width:200px;min-width:160px;border-collapse:collapse;cursor:pointer" onclick="verDetalleVentasBuenasMalas('malas')">
         <tbody>
           <tr><td colspan="2" style="background:#C92A2A;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #C92A2A">⚠️ Malas ventas (&lt; $500) <i class="ti ti-eye" style="font-size:11px"></i></td></tr>
-          ${malasV.length?malasV.slice(0,8).map(it=>filaVenta(it,'#C92A2A')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
-          ${malasV.length>8?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">+${malasV.length-8} más — click para ver todas</td></tr>`:''}
+          ${malasPorVendedor.length?malasPorVendedor.slice(0,8).map(([v,m])=>filaVenta(v,m,'#C92A2A')).join(''):'<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Ninguna todavía</td></tr>'}
+          ${malasPorVendedor.length>8?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">+${malasPorVendedor.length-8} más — click para ver todas</td></tr>`:''}
         </tbody>
       </table>
     </div>
