@@ -4395,7 +4395,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1500';
+const APP_VERSION='2026-10-03-1600';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -22296,7 +22296,7 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
   const esAuxiliarDeGasto=!['caja','banco','inventario','ventas','ingresos','costoventas','comisiones'].includes(cuenta)&&!cuenta.startsWith('CxC')&&!cuenta.startsWith('CxP');
 
   const total=movimientos.reduce((s,m)=>s+(m.signo==='+'?m.monto:-m.monto),0);
-  window._auxiliarActual={titulo,movimientos,cuenta,desde,hasta}; // para Imprimir/Excel
+  window._auxiliarActual={titulo,movimientos,cuenta,desde,hasta,esAuxiliarDeGasto}; // para Imprimir/Excel
   document.getElementById('auxiliar-title').innerHTML=`<i class="ti ti-list-details" style="color:var(--blue)"></i> ${titulo}${(desde||hasta)?` <span style="font-size:11px;font-weight:400;color:var(--text2)">(${desde||'inicio'} a ${hasta||'hoy'})</span>`:''}`;
   const puedeEditarVenta=(cuenta==='ventas'||cuenta==='ingresos'||cuenta==='costoventas')&&(MODO==='admin'||MODO==='coordinador');
   const puedeReclasificar=esAuxiliarDeGasto&&(MODO==='admin'||MODO==='coordinador');
@@ -22315,11 +22315,12 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
     ${puedeReclasificar?`<p style="font-size:11px;color:var(--text3);margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Si algún gasto quedó en la cuenta equivocada, cambiala directo en el desplegable de esa fila.</p>`:''}
     <div style="max-height:420px;overflow-y:auto">
       <table class="tbl" style="font-size:12px">
-        <thead><tr><th>Fecha</th><th>Descripción</th>${puedeReclasificar?'<th style="width:220px">Cuenta contable</th>':'<th>Categoría</th>'}<th style="text-align:right">Monto</th>${cuenta.startsWith('Cx')?'<th>Estado</th>':''}${hayAcciones?'<th>Acciones</th>':''}</tr></thead>
+        <thead><tr><th>Fecha</th><th>Descripción</th>${puedeReclasificar?'<th style="width:180px">Cuenta contable</th>':'<th>Categoría</th>'}${esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th>':''}<th style="text-align:right">Monto</th>${cuenta.startsWith('Cx')?'<th>Estado</th>':''}${hayAcciones?'<th>Acciones</th>':''}</tr></thead>
         <tbody>${movimientos.length?movimientos.map((m,i)=>`<tr>
           <td>${m.fecha||'—'}</td>
           <td>${m.desc||m.persona||'—'}</td>
           ${puedeReclasificar?`<td><select style="width:100%;padding:4px;font-size:11px" onchange="reasignarCuentaGastoDesdeAuxiliar('${m.id}',this.value,'${desde}','${hasta}')">${opcionesCuentaGastoPlano(m.cat)}</select></td>`:`<td style="font-size:11px;color:var(--text2)">${m.cat||'—'}</td>`}
+          ${esAuxiliarDeGasto?`<td style="font-size:11px;color:var(--text2)">${m.beneficiario||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.medio||'—'}</td>`:''}
           <td style="text-align:right;font-weight:700;color:${m.color};white-space:nowrap">${m.signo}${fmtD(m.monto)}</td>
           ${cuenta.startsWith('Cx')?`<td><span class="badge badge-${m.estado==='Pagada'?'green':'amber'}" style="font-size:10px">${m.estado||'—'}</span></td>`:''}
           ${(cuenta.startsWith('Cx')&&MODO==='admin')?`<td><button class="btn btn-sm" onclick="closeOv('ov-auxiliar');${m.esGastoCxC?'abrirModalGasto':'abrirModalCuenta'}('${m.id}')" title="Editar como contador"><i class="ti ti-edit"></i></button></td>`
@@ -22329,10 +22330,10 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
                 <button class="btn btn-sm" onclick="closeOv('ov-auxiliar');abrirModalGasto('${m.id}')" title="Editar este gasto"><i class="ti ti-edit"></i></button>
                 <button class="btn btn-sm btn-danger" onclick="eliminarGastoDesdeAuxiliar('${m.id}','${cuenta}','${desde}','${hasta}')" title="Eliminar este gasto"><i class="ti ti-trash"></i></button>
               </div></td>`:''}
-        </tr>`).join(''):`<tr><td colspan="5"><div class="empty" style="padding:1.5rem"><p>Sin movimientos</p></div></td></tr>`}
+        </tr>`).join(''):`<tr><td colspan="${esAuxiliarDeGasto?7:5}"><div class="empty" style="padding:1.5rem"><p>Sin movimientos</p></div></td></tr>`}
         </tbody>
         <tfoot><tr style="background:var(--surface2);font-weight:700">
-          <td colspan="${cuenta.startsWith('Cx')?3:3}" style="text-align:right;padding:8px">SALDO:</td>
+          <td colspan="${esAuxiliarDeGasto?5:3}" style="text-align:right;padding:8px">SALDO:</td>
           <td style="padding:8px;text-align:right;font-weight:800;color:${total>=0?'var(--green)':'var(--red)'}">${fmtD(Math.abs(total))}</td>
           ${cuenta.startsWith('Cx')?'<td></td>':''}
           ${hayAcciones?'<td></td>':''}
@@ -22357,7 +22358,7 @@ function eliminarGastoDesdeAuxiliar(id,cuenta,desde,hasta){
 function imprimirAuxiliarCuenta(){
   const a=window._auxiliarActual;if(!a)return;
   const total=a.movimientos.reduce((s,m)=>s+(m.signo==='+'?m.monto:-m.monto),0);
-  const filas=a.movimientos.map(m=>`<tr><td>${m.fecha||'—'}</td><td>${m.desc||m.persona||'—'}</td><td>${m.cat||'—'}</td><td style="text-align:right">${m.signo}${fmtD(m.monto)}</td></tr>`).join('');
+  const filas=a.movimientos.map(m=>`<tr><td>${m.fecha||'—'}</td><td>${m.desc||m.persona||'—'}</td><td>${m.cat||'—'}</td>${a.esAuxiliarDeGasto?`<td>${m.beneficiario||'—'}</td><td>${m.medio||'—'}</td>`:''}<td style="text-align:right">${m.signo}${fmtD(m.monto)}</td></tr>`).join('');
   const html=`<!DOCTYPE html><html><head><title>${a.titulo}</title><style>
     body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;color:#212529}
     h2{margin:0 0 4px}
@@ -22369,9 +22370,9 @@ function imprimirAuxiliarCuenta(){
   </style></head><body>
     <h2>${a.titulo}</h2>
     <p style="color:#666;font-size:12px">${a.desde||a.hasta?`Período: ${a.desde||'inicio'} a ${a.hasta||'hoy'}`:'Acumulado global'} — Impreso el ${new Date().toLocaleDateString('es-NI')}</p>
-    <table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th style="text-align:right">Monto</th></tr></thead>
+    <table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th>${a.esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th>':''}<th style="text-align:right">Monto</th></tr></thead>
     <tbody>${filas}</tbody>
-    <tfoot><tr><td colspan="3" style="text-align:right">SALDO:</td><td style="text-align:right">${fmtD(Math.abs(total))}</td></tr></tfoot>
+    <tfoot><tr><td colspan="${a.esAuxiliarDeGasto?5:3}" style="text-align:right">SALDO:</td><td style="text-align:right">${fmtD(Math.abs(total))}</td></tr></tfoot>
     </table>
   </body></html>`;
   const win=window.open('','_blank');
@@ -22382,8 +22383,13 @@ function imprimirAuxiliarCuenta(){
 // Exporta a Excel la lista de movimientos que se está viendo ahora mismo en el Auxiliar de Cuenta.
 async function exportExcelAuxiliarCuenta(){
   const a=window._auxiliarActual;if(!a)return;
-  const rows=[['Fecha','Descripción','Categoría','Monto']];
-  a.movimientos.forEach(m=>rows.push([m.fecha||'',m.desc||m.persona||'',m.cat||'',(m.signo==='-'?-1:1)*Number(m.monto||0)]));
+  const rows=a.esAuxiliarDeGasto?[['Fecha','Descripción','Categoría','Proveedor','Forma de pago','Monto']]:[['Fecha','Descripción','Categoría','Monto']];
+  a.movimientos.forEach(m=>{
+    const fila=[m.fecha||'',m.desc||m.persona||'',m.cat||''];
+    if(a.esAuxiliarDeGasto)fila.push(m.beneficiario||'',m.medio||'');
+    fila.push((m.signo==='-'?-1:1)*Number(m.monto||0));
+    rows.push(fila);
+  });
   const nombreArchivo='auxiliar_'+(a.cuenta||'cuenta').replace(/[^a-z0-9]/gi,'_').toLowerCase();
   await exportarExcelConFormato(rows,nombreArchivo,'Auxiliar');
 }
