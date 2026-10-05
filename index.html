@@ -4395,7 +4395,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1600';
+const APP_VERSION='2026-10-03-1700';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -20881,12 +20881,18 @@ async function abrirHistorialRendicionesValidar(){
     if(histSeparado&&histSeparado.rendicionHistorial)contData.rendicionHistorial=histSeparado.rendicionHistorial;
   }catch(e){console.warn('No se pudo refrescar el historial de rendiciones:',e);}
   const hist=(contData.rendicionHistorial||[]).slice().sort((a,b)=>b.numero-a.numero);
+  window._rdcSeleccionadas=window._rdcSeleccionadas||new Set();
   document.getElementById('mhrv-body').innerHTML=hist.length?`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;flex-wrap:wrap;gap:8px">
+    <p style="font-size:11px;color:var(--text3);margin:0"><i class="ti ti-info-circle"></i> Marcá el check de una o varias rendiciones para generar un reporte combinado (solo para imprimir, no cambia nada).</p>
+    <button class="btn btn-sm" onclick="imprimirRendicionesSeleccionadas()"><i class="ti ti-printer"></i> Imprimir seleccionadas (<span id="mhrv-contador-sel">${window._rdcSeleccionadas.size}</span>)</button>
+  </div>
   <table class="tbl" style="font-size:12px">
-    <thead><tr><th>Rendición</th><th>Fecha de cierre</th><th>Gastos totales</th><th>Sin validar</th><th></th></tr></thead>
+    <thead><tr><th></th><th>Rendición</th><th>Fecha de cierre</th><th>Gastos totales</th><th>Sin validar</th><th></th></tr></thead>
     <tbody>${hist.map(h=>{
       const sinValidar=(h.movs||[]).filter(m=>!m.registradoContable).length;
       return`<tr>
+        <td><input type="checkbox" ${window._rdcSeleccionadas.has(h.id)?'checked':''} onchange="toggleSeleccionRendicion('${h.id}',this.checked)"></td>
         <td style="font-weight:700">${fmtRDC(h.numero)}</td>
         <td>${h.fechaCierre||'—'}</td>
         <td style="text-align:center">${(h.movs||[]).length}</td>
@@ -20896,6 +20902,79 @@ async function abrirHistorialRendicionesValidar(){
     }).join('')}</tbody>
   </table>`:'<p style="text-align:center;color:var(--text3);padding:1.5rem">Todavía no hay ninguna rendición cerrada en el historial.</p>';
   openOv('ov-historial-rendiciones-validar');
+}
+function toggleSeleccionRendicion(id,marcado){
+  window._rdcSeleccionadas=window._rdcSeleccionadas||new Set();
+  if(marcado)window._rdcSeleccionadas.add(id);else window._rdcSeleccionadas.delete(id);
+  const contador=document.getElementById('mhrv-contador-sel');
+  if(contador)contador.textContent=window._rdcSeleccionadas.size;
+}
+// Reporte combinado SOLO PARA IMPRIMIR — no cambia nada en el sistema. Junta las rendiciones
+// marcadas y arma: un resumen de Inversión vs Gasto, el detalle de fondos recibidos, y el
+// detalle de gastos/inversión pagados, todo de la selección.
+function imprimirRendicionesSeleccionadas(){
+  const ids=[...(window._rdcSeleccionadas||[])];
+  if(!ids.length){alert('Marcá al menos una rendición para generar el reporte.');return;}
+  const seleccion=(contData.rendicionHistorial||[]).filter(h=>ids.includes(h.id)).sort((a,b)=>a.numero-b.numero);
+  const fondos=[];
+  const movs=[];
+  seleccion.forEach(h=>{
+    (h.fondosRecibidos||[]).forEach(f=>fondos.push({...f,rdc:fmtRDC(h.numero)}));
+    (h.movs||[]).forEach(m=>movs.push({...m,rdc:fmtRDC(h.numero)}));
+  });
+  const totalFondos=fondos.reduce((s,f)=>s+Number(f.monto||0),0);
+  const movsInversion=movs.filter(m=>m.clasif==='Inversión');
+  const movsGasto=movs.filter(m=>m.clasif!=='Inversión');
+  const totalInversion=movsInversion.reduce((s,m)=>s+Number(m.monto||0),0);
+  const totalGasto=movsGasto.reduce((s,m)=>s+Number(m.monto||0),0);
+  const filaFondo=f=>`<tr><td>${f.rdc}</td><td>${f.fecha||'—'}</td><td>${f.nota||'—'}</td><td style="text-align:right">C$ ${fmtNio(f.monto)}</td></tr>`;
+  const filaMov=m=>`<tr><td>${m.rdc}</td><td>${m.fecha||'—'}</td><td>${m.desc||'—'}</td><td>${m.clasif||'—'}</td><td>${m.pago||'—'}</td><td style="text-align:right">C$ ${fmtNio(m.monto)}</td></tr>`;
+  const html2=`<!DOCTYPE html><html><head><title>Reporte de Rendiciones</title>
+    <style>
+      body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#212529}
+      .titulo-print{background:#1971C2;color:#fff;text-align:center;font-weight:800;font-size:20px;letter-spacing:.03em;padding:14px;text-transform:uppercase;border-radius:8px;margin-bottom:1.25rem}
+      .resumen{display:flex;gap:16px;margin-bottom:1.5rem;flex-wrap:wrap}
+      .resumen div{flex:1;min-width:160px;background:#F1F3F5;border-radius:8px;padding:12px;text-align:center}
+      .resumen .label{font-size:11px;text-transform:uppercase;color:#868E96}
+      .resumen .valor{font-size:18px;font-weight:800;margin-top:4px}
+      h3{margin:1.25rem 0 .5rem;font-size:14px;text-transform:uppercase;color:#495057;border-bottom:2px solid #DEE2E6;padding-bottom:4px}
+      table{border-collapse:collapse;width:100%}
+      td,th{padding:5px 8px;font-size:12px;border-bottom:1px solid #DEE2E6}
+      th{text-align:left;background:#F1F3F5;font-size:11px;text-transform:uppercase}
+      tfoot td{font-weight:800;background:#F1F3F5}
+      .fecha-print{text-align:center;font-size:11px;color:#868E96;margin-top:1.5rem}
+      @media print{@page{margin:10mm}}
+    </style>
+  </head><body>
+    <div class="titulo-print">Reporte de Rendiciones — ${seleccion.map(h=>fmtRDC(h.numero)).join(', ')}</div>
+    <div class="resumen">
+      <div><div class="label">Fondos recibidos</div><div class="valor">C$ ${fmtNio(totalFondos)}</div></div>
+      <div><div class="label">Total Inversión</div><div class="valor">C$ ${fmtNio(totalInversion)}</div></div>
+      <div><div class="label">Total Gasto</div><div class="valor">C$ ${fmtNio(totalGasto)}</div></div>
+    </div>
+    <h3>Fondos recibidos</h3>
+    <table><thead><tr><th>Rendición</th><th>Fecha</th><th>Nota</th><th style="text-align:right">Monto</th></tr></thead>
+      <tbody>${fondos.length?fondos.map(filaFondo).join(''):'<tr><td colspan="4">Sin fondos registrados</td></tr>'}</tbody>
+      <tfoot><tr><td colspan="3" style="text-align:right">TOTAL:</td><td style="text-align:right">C$ ${fmtNio(totalFondos)}</td></tr></tfoot>
+    </table>
+    <h3>Inversión pagada</h3>
+    <table><thead><tr><th>Rendición</th><th>Fecha</th><th>Descripción</th><th>Clasificación</th><th>Forma de pago</th><th style="text-align:right">Monto</th></tr></thead>
+      <tbody>${movsInversion.length?movsInversion.map(filaMov).join(''):'<tr><td colspan="6">Sin inversión en esta selección</td></tr>'}</tbody>
+      <tfoot><tr><td colspan="5" style="text-align:right">TOTAL INVERSIÓN:</td><td style="text-align:right">C$ ${fmtNio(totalInversion)}</td></tr></tfoot>
+    </table>
+    <h3>Gastos pagados</h3>
+    <table><thead><tr><th>Rendición</th><th>Fecha</th><th>Descripción</th><th>Clasificación</th><th>Forma de pago</th><th style="text-align:right">Monto</th></tr></thead>
+      <tbody>${movsGasto.length?movsGasto.map(filaMov).join(''):'<tr><td colspan="6">Sin gastos en esta selección</td></tr>'}</tbody>
+      <tfoot><tr><td colspan="5" style="text-align:right">TOTAL GASTO:</td><td style="text-align:right">C$ ${fmtNio(totalGasto)}</td></tr></tfoot>
+    </table>
+    <div class="fecha-print">Generado desde NICAUTO el ${new Date().toLocaleDateString('es-NI')} — Solo para reporte, no modifica ninguna rendición.</div>
+  </body></html>`;
+  const win2=window.open('','_blank','width=900,height=1000');
+  if(!win2){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win2.document.open();
+  win2.document.write(html2);
+  win2.document.close();
+  win2.onload=()=>{win2.focus();win2.print();};
 }
 function abrirValidarRendicionCerrada(historialId){
   const hist=(contData.rendicionHistorial||[]).find(h=>h.id===historialId);
