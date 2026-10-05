@@ -4395,7 +4395,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1400';
+const APP_VERSION='2026-10-03-1500';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11575,7 +11575,7 @@ function imprimirEstadoResultado(desde,hasta){
       [id^="er-drop-"]{border:none !important}
       table{border-collapse:collapse;width:100%}
       td,th{padding:4px 8px;font-size:12px;border-bottom:1px solid #DEE2E6}
-      .card{display:none} /* el historial de cierres no hace falta en la hoja impresa */
+      #er-historial-cierres-card{display:none}
       .fecha-print{text-align:center;font-size:11px;color:#868E96;margin-top:1rem}
       @media print{@page{margin:10mm}}
     </style>
@@ -11887,7 +11887,7 @@ function renderEstado(){
       ${MODO==='admin'?`<button class="btn btn-success" onclick="cerrarEstadoResultado('${desde}','${hasta}')"><i class="ti ti-archive"></i>Cerrar y archivar este período</button>`:''}
     </div>
   </div>
-  ${(contData.estadosResultadoCerrados||[]).length?`<div class="card" style="margin-bottom:1rem">
+  ${(contData.estadosResultadoCerrados||[]).length?`<div class="card" id="er-historial-cierres-card" style="margin-bottom:1rem">
     <div class="card-head"><h3><i class="ti ti-history"></i> Historial de Estados de Resultado cerrados</h3></div>
     <table class="tbl" style="font-size:12px">
       <thead><tr><th>Período</th><th>Ingresos</th><th>Utilidad Neta</th><th>Cerrado el</th><th></th></tr></thead>
@@ -12675,7 +12675,8 @@ function ventasFiltradasActuales(){
     const txt=((c?c.nombre:'')+(vh?vh.marca+' '+vh.modelo:'')+(v.numeroControl||'')).toLowerCase();
     const pasaMes=!mesFiltro||(v.fecha||'').startsWith(mesFiltro);
     const pasaCerrado=mesFiltro?true:(incluirCerrados||!v.cerradoMes);
-    return(!q||txt.includes(q))&&(fest?v.estado===fest:v.estado==='Completada')&&(!fv||v.vendedorId===fv)&&pasaCerrado&&pasaMes;
+    const pasaCategoria=!window._vtaFiltroCategoria||(vh?.tipo||'Otro')===window._vtaFiltroCategoria;
+    return(!q||txt.includes(q))&&(fest?v.estado===fest:v.estado==='Completada')&&(!fv||v.vendedorId===fv)&&pasaCerrado&&pasaMes&&pasaCategoria;
   });
 }
 function exportExcelVentas(){
@@ -16267,6 +16268,17 @@ function renderTaller(){
     if(vistaCompleta)return true;
     return regs.some(r=>r.vehiculoId===idConsig&&r.paso==='Recepción');
   }).map(c=>({...c,id:'CONSIG_'+c.id})).sort((a,b)=>(a.marca+a.modelo).localeCompare(b.marca+b.modelo));
+  // Vehículos EXTERNOS (manuales) que ya se registraron antes — para poder elegirlos de nuevo y
+  // seguir avanzando sus pasos siguientes (si no aparecieran aquí, se quedarían pegados en el
+  // primer paso, porque no hay forma de volver a seleccionarlos).
+  const manualesIds=[...new Set(regs.filter(r=>r.vehiculoId.startsWith('MANUAL_')).map(r=>r.vehiculoId))];
+  const manualesDisponiblesTaller=manualesIds.map(id=>{
+    const primerReg=regs.find(r=>r.vehiculoId===id);
+    return{id,vehiculoInfo:primerReg?.vehiculoInfo||'Vehículo externo'};
+  }).filter(m=>{
+    if(vistaCompleta)return true;
+    return regs.some(r=>r.vehiculoId===m.id&&r.paso==='Recepción');
+  });
   // Matriz Trabajador × Paso: cuántos vehículos tiene cada trabajador en cada paso AHORA MISMO.
   // Se arma con los 5 trabajadores fijos MÁS cualquier otro nombre que aparezca de verdad en
   // los registros (por si hay una diferencia de nombre) — así ninguna asignación se pierde ni
@@ -16340,6 +16352,11 @@ function renderTaller(){
             const etiqueta=abiertos.length?` (en: ${abiertos.map(r=>r.paso).join(', ')})`:'';
             return`<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} — ${v.placa}${etiqueta}</option>`;
           }).join('')}</optgroup>
+          ${manualesDisponiblesTaller.length?`<optgroup label="Externos (manuales)">${manualesDisponiblesTaller.map(m=>{
+            const abiertos=abiertosPorVehiculo[m.id]||[];
+            const etiqueta=abiertos.length?` (en: ${abiertos.map(r=>r.paso).join(', ')})`:'';
+            return`<option value="${m.id}">${m.vehiculoInfo}${etiqueta}</option>`;
+          }).join('')}</optgroup>`:''}
         </select>
         <div id="tlr-manual-box" style="display:none;background:var(--amber-light);border-radius:var(--radius);padding:.75rem;margin-top:.5rem">
           <p style="font-size:11px;color:var(--text2);margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Para un vehículo que NO está cargado en Inventario ni Consignación (por ejemplo, un carro externo que solo se va a reparar).</p>
@@ -17385,9 +17402,17 @@ async function guardarTallerRegistro(){
   } else {
     vehiculoId=document.getElementById('tlr-vehiculo').value;
     if(!vehiculoId){alert('Elegí el vehículo.');return;}
-    const v=buscarVehiculoOConsig(vehiculoId)||vehiculos.find(x=>x.id===vehiculoId);
-    vehiculoInfo=v?`${v.marca} ${v.modelo} ${v.anio} — ${v.placa}${vehiculoId.startsWith('CONSIG_')?' (Consig.)':''}`:'Vehículo';
-    nombreCorto=v?v.marca+' '+v.modelo:'';
+    if(vehiculoId.startsWith('MANUAL_')){
+      // Vehículo externo ya existente: no está en ningún array de vehículos, se toma la
+      // descripción del registro anterior que ya se guardó para este mismo ID.
+      const regAnterior=getTallerRegistros().find(r=>r.vehiculoId===vehiculoId);
+      vehiculoInfo=regAnterior?.vehiculoInfo||'Vehículo externo';
+      nombreCorto=vehiculoInfo.split(' — ')[0]||vehiculoInfo;
+    } else {
+      const v=buscarVehiculoOConsig(vehiculoId)||vehiculos.find(x=>x.id===vehiculoId);
+      vehiculoInfo=v?`${v.marca} ${v.modelo} ${v.anio} — ${v.placa}${vehiculoId.startsWith('CONSIG_')?' (Consig.)':''}`:'Vehículo';
+      nombreCorto=v?v.marca+' '+v.modelo:'';
+    }
   }
   const paso=document.getElementById('tlr-paso').value;
   const fecha=document.getElementById('tlr-fecha').value;
@@ -17407,7 +17432,7 @@ async function guardarTallerRegistro(){
   // procesos abiertos a la vez, y cada uno se cierra por separado cuando corresponda.
   const fechaEstimada=TALLER_PASOS_EXTERNOS.includes(paso)?(document.getElementById('tlr-fecha-estimada').value||null):null;
   regs.push({
-    id:uid(),vehiculoId,vehiculoInfo,esExterno:esManual||undefined,
+    id:uid(),vehiculoId,vehiculoInfo,esExterno:vehiculoId.startsWith('MANUAL_')||undefined,
     trabajador,paso,fechaInicio:fecha,fechaFin:paso==='Finalizado'?fecha:null,bitacora,
     pasosAsignados,fechaEstimada,
     creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()
@@ -17416,7 +17441,7 @@ async function guardarTallerRegistro(){
   await saveOne('contable',{id:'main',...contData});
   // Un vehículo externo (manual) o de Consignación no tiene sentido activarlo en Marketing de
   // NICAUTO — eso es solo para carros propios que se van a vender aquí.
-  if(paso==='Finalizado'&&!esManual&&!vehiculoId.startsWith('CONSIG_'))await verificarYActivarMarketing(vehiculoId);
+  if(paso==='Finalizado'&&!vehiculoId.startsWith('MANUAL_')&&!vehiculoId.startsWith('CONSIG_'))await verificarYActivarMarketing(vehiculoId);
   document.getElementById('tlr-bitacora').value='';
   if(!esManual)document.getElementById('tlr-vehiculo').value='';
   else{document.getElementById('tlr-manual-marca').value='';document.getElementById('tlr-manual-modelo').value='';document.getElementById('tlr-manual-anio').value='';document.getElementById('tlr-manual-placa').value='';document.getElementById('tlr-manual-dueno').value='';}
