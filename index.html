@@ -4389,7 +4389,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1200';
+const APP_VERSION='2026-10-03-1300';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -16187,6 +16187,14 @@ function renderTaller(){
     if(vistaCompleta)return true;
     return regs.some(r=>r.vehiculoId===v.id&&r.paso==='Recepción');
   }).sort((a,b)=>(a.marca+a.modelo).localeCompare(b.marca+b.modelo));
+  // Igual que con propios, pero de Consignación — con el mismo prefijo CONSIG_ que ya se usa en
+  // todo el sistema para identificar estos vehículos.
+  const consigDisponiblesTaller=(contData.consignacion||[]).filter(c=>{
+    if(c.estado==='Vendido')return false;
+    const idConsig='CONSIG_'+c.id;
+    if(vistaCompleta)return true;
+    return regs.some(r=>r.vehiculoId===idConsig&&r.paso==='Recepción');
+  }).map(c=>({...c,id:'CONSIG_'+c.id})).sort((a,b)=>(a.marca+a.modelo).localeCompare(b.marca+b.modelo));
   // Matriz Trabajador × Paso: cuántos vehículos tiene cada trabajador en cada paso AHORA MISMO.
   // Se arma con los 5 trabajadores fijos MÁS cualquier otro nombre que aparezca de verdad en
   // los registros (por si hay una diferencia de nombre) — así ninguna asignación se pierde ni
@@ -16244,12 +16252,35 @@ function renderTaller(){
   <div class="card" style="margin-bottom:1.5rem">
     <div class="card-head"><h3><i class="ti ti-clipboard-plus"></i> Registrar avance de un vehículo</h3></div>
     <div style="padding:1rem">
-      <div class="form-group"><label>Vehículo</label>
-        <select id="tlr-vehiculo" onchange="actualizarPasoTaller()"><option value="">-- Elegir vehículo --</option>${vehiculosDisponibles.map(v=>{
-          const abiertos=abiertosPorVehiculo[v.id]||[];
-          const etiqueta=abiertos.length?` (en: ${abiertos.map(r=>r.paso).join(', ')})`:'';
-          return`<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} — ${v.placa}${etiqueta}</option>`;
-        }).join('')}</select>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;justify-content:space-between">
+          <span>Vehículo</span>
+          <span style="font-weight:400;font-size:12px;cursor:pointer;color:var(--blue)" onclick="toggleVehiculoManualTaller()"><input type="checkbox" id="tlr-manual-toggle" onchange="toggleVehiculoManualTaller()" style="vertical-align:middle;margin-right:4px">Vehículo externo (no está en Inventario)</span>
+        </label>
+        <select id="tlr-vehiculo" onchange="actualizarPasoTaller()"><option value="">-- Elegir vehículo --</option>
+          <optgroup label="Propios">${vehiculosDisponibles.map(v=>{
+            const abiertos=abiertosPorVehiculo[v.id]||[];
+            const etiqueta=abiertos.length?` (en: ${abiertos.map(r=>r.paso).join(', ')})`:'';
+            return`<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} — ${v.placa}${etiqueta}</option>`;
+          }).join('')}</optgroup>
+          <optgroup label="Consignación">${consigDisponiblesTaller.map(v=>{
+            const abiertos=abiertosPorVehiculo[v.id]||[];
+            const etiqueta=abiertos.length?` (en: ${abiertos.map(r=>r.paso).join(', ')})`:'';
+            return`<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} — ${v.placa}${etiqueta}</option>`;
+          }).join('')}</optgroup>
+        </select>
+        <div id="tlr-manual-box" style="display:none;background:var(--amber-light);border-radius:var(--radius);padding:.75rem;margin-top:.5rem">
+          <p style="font-size:11px;color:var(--text2);margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Para un vehículo que NO está cargado en Inventario ni Consignación (por ejemplo, un carro externo que solo se va a reparar).</p>
+          <div class="form-row">
+            <div class="form-group"><label>Marca</label><input id="tlr-manual-marca" placeholder="Toyota"></div>
+            <div class="form-group"><label>Modelo</label><input id="tlr-manual-modelo" placeholder="Corolla"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Año</label><input id="tlr-manual-anio" placeholder="2020"></div>
+            <div class="form-group"><label>Placa</label><input id="tlr-manual-placa" placeholder="M 123456"></div>
+          </div>
+          <div class="form-group"><label>Dueño / Cliente</label><input id="tlr-manual-dueno" placeholder="Nombre de quien trae el carro"></div>
+        </div>
       </div>
       <div id="tlr-sin-recepcion" style="display:none;background:var(--amber-light);border-radius:var(--radius);padding:.75rem;margin-bottom:.75rem;font-size:12px;color:var(--text2)">
         <i class="ti ti-info-circle"></i> Este vehículo todavía no tiene <b>Recepción</b> registrada — ese es siempre el primer paso, lo hace el <b>Jefe Operativo</b> (o Admin/Coordinador), y ahí mismo se elige qué otros pasos le van a aplicar a este carro en particular.
@@ -17259,15 +17290,39 @@ function toggleRecepcionTaller(){
   if(trabWrap)trabWrap.style.display=esRecepcion?'none':'block';
   if(estimadaWrap)estimadaWrap.style.display=TALLER_PASOS_EXTERNOS.includes(paso)?'block':'none';
 }
+// Muestra/oculta el selector normal de vehículo y la caja de datos manuales, según el check.
+function toggleVehiculoManualTaller(){
+  const manual=document.getElementById('tlr-manual-toggle').checked;
+  document.getElementById('tlr-vehiculo').style.display=manual?'none':'';
+  document.getElementById('tlr-manual-box').style.display=manual?'block':'none';
+  if(manual)document.getElementById('tlr-vehiculo').value='';
+}
 async function guardarTallerRegistro(){
-  const vehiculoId=document.getElementById('tlr-vehiculo').value;
+  const esManual=document.getElementById('tlr-manual-toggle')?.checked;
+  let vehiculoId,vehiculoInfo,nombreCorto;
+  if(esManual){
+    const marca=document.getElementById('tlr-manual-marca').value.trim();
+    const modelo=document.getElementById('tlr-manual-modelo').value.trim();
+    const anio=document.getElementById('tlr-manual-anio').value.trim();
+    const placa=document.getElementById('tlr-manual-placa').value.trim();
+    const dueno=document.getElementById('tlr-manual-dueno').value.trim();
+    if(!marca||!modelo){alert('Poné al menos Marca y Modelo del vehículo externo.');return;}
+    vehiculoId='MANUAL_'+uid();
+    vehiculoInfo=`${marca} ${modelo}${anio?' '+anio:''}${placa?' — '+placa:''}${dueno?' (de: '+dueno+')':''} 🔧Externo`;
+    nombreCorto=marca+' '+modelo;
+  } else {
+    vehiculoId=document.getElementById('tlr-vehiculo').value;
+    if(!vehiculoId){alert('Elegí el vehículo.');return;}
+    const v=buscarVehiculoOConsig(vehiculoId)||vehiculos.find(x=>x.id===vehiculoId);
+    vehiculoInfo=v?`${v.marca} ${v.modelo} ${v.anio} — ${v.placa}${vehiculoId.startsWith('CONSIG_')?' (Consig.)':''}`:'Vehículo';
+    nombreCorto=v?v.marca+' '+v.modelo:'';
+  }
   const paso=document.getElementById('tlr-paso').value;
   const fecha=document.getElementById('tlr-fecha').value;
   const bitacora=document.getElementById('tlr-bitacora').value;
   const esRecepcion=paso==='Recepción';
   const trabajador=esRecepcion?'Jefe Operativo':document.getElementById('tlr-trabajador').value;
   if(!esRecepcion&&!trabajador){alert('Elegí tu nombre (Trabajador).');return;}
-  if(!vehiculoId){alert('Elegí el vehículo.');return;}
   if(!paso){alert('Elegí el paso/proceso.');return;}
   if(!fecha){alert('Poné la fecha de inicio.');return;}
   let pasosAsignados=null;
@@ -17278,22 +17333,23 @@ async function guardarTallerRegistro(){
   const regs=getTallerRegistros();
   // Ya NO se cierra automáticamente ningún paso anterior — un vehículo puede tener varios
   // procesos abiertos a la vez, y cada uno se cierra por separado cuando corresponda.
-  const v=vehiculos.find(x=>x.id===vehiculoId);
   const fechaEstimada=TALLER_PASOS_EXTERNOS.includes(paso)?(document.getElementById('tlr-fecha-estimada').value||null):null;
   regs.push({
-    id:uid(),vehiculoId,
-    vehiculoInfo:v?`${v.marca} ${v.modelo} ${v.anio} — ${v.placa}`:'Vehículo',
+    id:uid(),vehiculoId,vehiculoInfo,esExterno:esManual||undefined,
     trabajador,paso,fechaInicio:fecha,fechaFin:paso==='Finalizado'?fecha:null,bitacora,
     pasosAsignados,fechaEstimada,
     creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()
   });
   contData.tallerRegistros=regs;
   await saveOne('contable',{id:'main',...contData});
-  if(paso==='Finalizado')await verificarYActivarMarketing(vehiculoId);
+  // Un vehículo externo (manual) o de Consignación no tiene sentido activarlo en Marketing de
+  // NICAUTO — eso es solo para carros propios que se van a vender aquí.
+  if(paso==='Finalizado'&&!esManual&&!vehiculoId.startsWith('CONSIG_'))await verificarYActivarMarketing(vehiculoId);
   document.getElementById('tlr-bitacora').value='';
-  document.getElementById('tlr-vehiculo').value='';
+  if(!esManual)document.getElementById('tlr-vehiculo').value='';
+  else{document.getElementById('tlr-manual-marca').value='';document.getElementById('tlr-manual-modelo').value='';document.getElementById('tlr-manual-anio').value='';document.getElementById('tlr-manual-placa').value='';document.getElementById('tlr-manual-dueno').value='';}
   renderTaller();
-  alert(`✅ Registrado: ${v?v.marca+' '+v.modelo:''} — ${paso}${esRecepcion?` (se clasificaron ${pasosAsignados.length} paso(s) para este carro)`:''}`);
+  alert(`✅ Registrado: ${nombreCorto} — ${paso}${esRecepcion?` (se clasificaron ${pasosAsignados.length} paso(s) para este carro)`:''}`);
 }
 function verHistorialTallerVehiculo(vehiculoId){
   const regs=getTallerRegistros().filter(r=>r.vehiculoId===vehiculoId).sort((a,b)=>(a.fechaInicio||'').localeCompare(b.fechaInicio||''));
