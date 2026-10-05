@@ -671,6 +671,12 @@ body.no-delete .confirmDelete{display:none!important}
         <input type="checkbox" id="vta-incluir-cerrados" onchange="renderVtas()" style="width:auto">
         <i class="ti ti-history"></i> Buscar también en meses cerrados
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);white-space:nowrap" title="Mostrar solo ese mes calendario, aunque ya esté cerrado — no hace falta marcar la casilla de arriba">
+        <i class="ti ti-calendar"></i> Mostrar mes:
+        <input type="month" id="vta-mes-filtro" onchange="renderVtas()" style="padding:4px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px">
+        <button class="btn btn-sm" onclick="document.getElementById('vta-mes-filtro').value='';renderVtas()" title="Quitar el filtro de mes">✕</button>
+      </label>
+      <button class="btn btn-sm" onclick="imprimirListaVentas()"><i class="ti ti-printer"></i>Imprimir</button>
     </div>
     <div id="vta-resumen-categorias"></div>
     <div id="vta-financiados"></div>
@@ -4389,7 +4395,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1300';
+const APP_VERSION='2026-10-03-1400';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -9184,6 +9190,7 @@ function renderVtas(){
   const fest=document.getElementById('vta-fest').value;
   const fv=document.getElementById('vta-fvend').value;
   const incluirCerrados=document.getElementById('vta-incluir-cerrados')?.checked;
+  const mesFiltro=document.getElementById('vta-mes-filtro')?.value;
   let data=ventas.filter(v=>{
     const c=clientes.find(x=>x.id===v.compradorId);
     const vh=buscarVehiculoOConsig(v.vehiculoId);
@@ -9197,7 +9204,12 @@ function renderVtas(){
     // "Vehículos Reservados" en Lista de Precios.
     // Las ventas de meses ya cerrados quedan afuera por defecto (para no mezclar el mes
     // actual con lo archivado) — a menos que se marque "Buscar también en meses cerrados".
-    return(!q||txt.includes(q))&&(fest?v.estado===fest:v.estado==='Completada')&&(!fv||v.vendedorId===fv)&&(incluirCerrados||!v.cerradoMes);
+    // Si se elige un mes específico en "Mostrar mes", ESE filtro manda por encima de la
+    // restricción de "mes cerrado" — no hace falta marcar la casilla aparte para ver un mes
+    // archivado, con solo elegirlo ya se muestra.
+    const pasaMes=!mesFiltro||(v.fecha||'').startsWith(mesFiltro);
+    const pasaCerrado=mesFiltro?true:(incluirCerrados||!v.cerradoMes);
+    return(!q||txt.includes(q))&&(fest?v.estado===fest:v.estado==='Completada')&&(!fv||v.vendedorId===fv)&&pasaCerrado&&pasaMes;
   });
   // Resumen por categoría (Sedán/Pickup/SUV/etc.) de lo que hay filtrado ahora mismo — clickeable
   // para quedarse viendo solo esa categoría. Se calcula ANTES de aplicar el filtro de categoría,
@@ -12648,9 +12660,27 @@ function exportExcelInventario(){
   });
   exportarExcelConFormato(rows,'inventario_nicauto','Inventario');
 }
+// Devuelve las ventas filtradas EXACTAMENTE igual que como se ven ahora mismo en la tabla de
+// Ventas (mismo texto buscado, estado, vendedor, mes elegido, meses cerrados) — para que Excel
+// e Imprimir siempre exporten lo mismo que está en pantalla, no todas las ventas sin filtrar.
+function ventasFiltradasActuales(){
+  const q=(document.getElementById('vta-q')?.value||'').toLowerCase();
+  const fest=document.getElementById('vta-fest')?.value;
+  const fv=document.getElementById('vta-fvend')?.value;
+  const incluirCerrados=document.getElementById('vta-incluir-cerrados')?.checked;
+  const mesFiltro=document.getElementById('vta-mes-filtro')?.value;
+  return ventas.filter(v=>{
+    const c=clientes.find(x=>x.id===v.compradorId);
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const txt=((c?c.nombre:'')+(vh?vh.marca+' '+vh.modelo:'')+(v.numeroControl||'')).toLowerCase();
+    const pasaMes=!mesFiltro||(v.fecha||'').startsWith(mesFiltro);
+    const pasaCerrado=mesFiltro?true:(incluirCerrados||!v.cerradoMes);
+    return(!q||txt.includes(q))&&(fest?v.estado===fest:v.estado==='Completada')&&(!fv||v.vendedorId===fv)&&pasaCerrado&&pasaMes;
+  });
+}
 function exportExcelVentas(){
   const rows=[['Fecha','Comprador','Vendedor','Vehículo','Precio Venta','Costo Compra','Reparaciones','Utilidad Bruta','Comisión','Utilidad Neta','Pago','Recibo','Estado']];
-  ventas.forEach(v=>{
+  ventasFiltradasActuales().forEach(v=>{
     const c=clientes.find(x=>x.id===v.compradorId);
     const vh=buscarVehiculoOConsig(v.vehiculoId);
     const vnd=clientes.find(x=>x.id===v.vendedorId);
@@ -12660,6 +12690,48 @@ function exportExcelVentas(){
     rows.push([v.fecha,c?c.nombre:'',vnd?vnd.nombre:'',vh?vh.marca+' '+vh.modelo+' '+vh.anio:'',precio,costo,reps,utilBruta,com,utilNeta,v.pago,v.recibo||'',v.estado]);
   });
   downloadCSV(toCSV(rows),'ventas_autolote');
+}
+// Imprime esta misma lista filtrada en una hoja aparte, en formato tabla simple.
+function imprimirListaVentas(){
+  const lista=ventasFiltradasActuales();
+  if(!lista.length){alert('No hay ventas para imprimir con este filtro.');return;}
+  const mesFiltro=document.getElementById('vta-mes-filtro')?.value;
+  const filas=lista.map(v=>{
+    const c=clientes.find(x=>x.id===v.compradorId);
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const vnd=clientes.find(x=>x.id===v.vendedorId);
+    const reps=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo),0):0;
+    const precio=Number(v.precio||0);const costo=Number(v.costo||0);const com=Number(v.comision||0);
+    const utilNeta=precio-costo-reps-com;
+    return`<tr><td>${v.fecha}</td><td>${c?c.nombre:'—'}</td><td>${vnd?vnd.nombre:'—'}</td><td>${vh?vh.marca+' '+vh.modelo+' '+vh.anio:'—'}</td><td>${fmtD(precio)}</td><td>${fmtD(utilNeta)}</td><td>${v.estado}</td></tr>`;
+  }).join('');
+  const totalVenta=lista.reduce((s,v)=>s+Number(v.precio||0),0);
+  const html2=`<!DOCTYPE html><html><head><title>Ventas${mesFiltro?' — '+mesFiltro:''}</title>
+    <style>
+      body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .titulo-print{background:#1971C2;color:#fff;text-align:center;font-weight:800;font-size:20px;letter-spacing:.03em;padding:14px;text-transform:uppercase;border-radius:8px;margin-bottom:1.25rem}
+      table{border-collapse:collapse;width:100%}
+      td,th{padding:6px 10px;border-bottom:1px solid #DEE2E6;font-size:12px}
+      th{text-align:left;background:#F1F3F5;font-size:11px;text-transform:uppercase}
+      tfoot td{font-weight:800;background:#F1F3F5}
+      .fecha-print{text-align:center;font-size:11px;color:#868E96;margin-top:1rem}
+      @media print{@page{margin:10mm}}
+    </style>
+  </head><body>
+    <div class="titulo-print">Ventas${mesFiltro?' — '+mesFiltro:''} (${lista.length})</div>
+    <table>
+      <thead><tr><th>Fecha</th><th>Comprador</th><th>Vendedor</th><th>Vehículo</th><th>P. Venta</th><th>Ganancia</th><th>Estado</th></tr></thead>
+      <tbody>${filas}</tbody>
+      <tfoot><tr><td colspan="4">TOTAL (${lista.length} ventas)</td><td>${fmtD(totalVenta)}</td><td colspan="2"></td></tr></tfoot>
+    </table>
+    <div class="fecha-print">Generado desde NICAUTO el ${new Date().toLocaleDateString('es-NI')}</div>
+  </body></html>`;
+  const win2=window.open('','_blank','width=900,height=1000');
+  if(!win2){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win2.document.open();
+  win2.document.write(html2);
+  win2.document.close();
+  win2.onload=()=>{win2.focus();win2.print();};
 }
 function exportExcelContable(){
   const rows=[['Fecha','Tipo','Medio','Categoría','Ref','Persona','Monto','Descripción']];
