@@ -4395,7 +4395,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-03-1700';
+const APP_VERSION='2026-10-05-1100';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11803,6 +11803,10 @@ function renderEstado(){
   const enRango=fecha=>!fecha||(fecha>=desde&&fecha<=hasta);
   const vtasC=ventas.filter(v=>v.estado==='Completada'&&enRango(v.fecha));
   const vistaComision=!!window._erVistaComision;
+  // Nivel de detalle: cuando está activo, cada cuenta muestra debajo cada transacción que la
+  // compone (fecha, descripción, proveedor, forma de pago, monto), en vez de solo el subtotal.
+  // El clic en la cuenta sigue abriendo el auxiliar completo igual que siempre.
+  const nivelDetalle=!!document.getElementById('estado-nivel-detalle')?.checked;
   const comisiones=vtasC.reduce((s,v)=>s+Number(v.comision||0),0);
   // Costo de reparaciones de cada vehículo vendido — antes el Estado de Resultado solo restaba
   // el costo de adquisición, sin contar lo invertido en reparaciones antes de venderlo.
@@ -11869,6 +11873,18 @@ function renderEstado(){
   const gastosAdminPorCuenta=agruparPorCuenta(gastosAdmin);
   const gastosFinancierosPorCuenta=agruparPorCuenta(gastosFinancieros);
   const gastosNoOpPorCuenta=agruparPorCuenta(gastosNoOp);
+  // Para el nivel de detalle: lista de transacciones de una cuenta específica, ordenadas por
+  // fecha, con fecha, descripción, proveedor y forma de pago.
+  const filasDetalleCuenta=(cat,listaCompleta)=>{
+    const items=listaCompleta.filter(g=>g.cat===cat).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+    if(!items.length)return'';
+    return`<div style="margin:2px 0 10px 22px;border-left:2px solid var(--border);padding-left:10px">
+      ${items.map(g=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--text2);padding:2px 0">
+        <span>${g.fecha||'—'} — ${g.desc||'(sin descripción)'}${g.beneficiario?' · '+g.beneficiario:''}${g.medio?' · '+g.medio:''}</span>
+        <span style="white-space:nowrap;color:var(--red)">(${fmtD(g.monto)})</span>
+      </div>`).join('')}
+    </div>`;
+  };
   document.getElementById('cont-estado').innerHTML=`
   ${pendientesValidarRendicion().cantidad?(()=>{const p=pendientesValidarRendicion();return`<div style="background:var(--amber-light);border:1px solid #FFDEAB;border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
     <span style="font-size:13px"><i class="ti ti-alert-triangle" style="color:var(--amber)"></i> Hay <b>${p.cantidad} gasto${p.cantidad===1?'':'s'}</b> de Rendición de Operaciones (≈ ${fmt(p.totalUSD)} USD) que todavía <b>no se han validado y registrado</b> en Contabilidad — no están incluidos en estos totales.</span>
@@ -11880,6 +11896,10 @@ function renderEstado(){
       <input type="date" id="estado-fecha-desde" value="${desde}" onchange="renderEstado()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px">
       <b>al:</b>
       <input type="date" id="estado-fecha-hasta" value="${hasta}" onchange="renderEstado()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap" title="Muestra cada transacción (fecha, descripción, proveedor, forma de pago) debajo de cada cuenta, en vez de solo el subtotal">
+        <input type="checkbox" id="estado-nivel-detalle" onchange="renderEstado()" style="width:auto">
+        <i class="ti ti-list-details"></i> Ver a nivel de detalle
+      </label>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${MODO==='admin'?`<button class="btn" onclick="corregirCategoriasRendicionAntiguas()" style="color:var(--purple);border-color:var(--purple)" title="Corrige gastos viejos de Rendición que quedaron mal clasificados"><i class="ti ti-tool"></i>Corregir cuentas de Rendición</button>`:''}
@@ -11922,13 +11942,13 @@ function renderEstado(){
       <div class="contable-row total"><span>Utilidad bruta <small style="font-weight:400">(margen ${mb}%)</small></span><span>${fmtD(vistaComision?utilBruta:utilBruta-comisiones)}</span></div>
       <h4 style="margin-top:1rem">Gastos operativos</h4>
       <div id="er-drop-operativo" ondragover="event.preventDefault();this.style.background='var(--blue-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaEnSeccion(event,'operativo')" style="border-radius:6px;transition:background .15s">
-      ${gastosAdminPorCuenta.length?gastosAdminPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos operativos</span><span>$0.00</span></div>`}
+      ${gastosAdminPorCuenta.length?gastosAdminPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosAdmin):''}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos operativos</span><span>$0.00</span></div>`}
       </div>
       <div class="contable-row subtotal"><span>Total gastos operativos</span><span>(${fmtD(totAdmin)})</span></div>
       <div class="contable-row total"><span>Utilidad operativa</span><span>${fmtD(utilOp)}</span></div>
       <h4 style="margin-top:1rem">Gastos Financieros</h4>
       <div id="er-drop-financiero" ondragover="event.preventDefault();this.style.background='var(--amber-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaEnSeccion(event,'financiero')" style="border-radius:6px;min-height:36px;transition:background .15s">
-      ${gastosFinancierosPorCuenta.length?gastosFinancierosPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos financieros (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`}
+      ${gastosFinancierosPorCuenta.length?gastosFinancierosPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosFinancieros):''}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos financieros (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`}
       </div>
       <div class="contable-row subtotal"><span>Total Gastos Financieros</span><span>(${fmtD(totFinanciero)})</span></div>
       <div class="contable-row total"><span>Utilidad Financiera</span><span>${fmtD(utilFinanciera)}</span></div>
@@ -11938,7 +11958,7 @@ function renderEstado(){
         <div style="font-size:10px;font-weight:700;color:var(--amber);padding:2px 8px;text-transform:uppercase">Reclamos post-venta</div>
         ${rClick('🔴 Reclamos de clientes','('+fmtD(totReclamo)+')',`abrirAuxiliarCuenta('Reclamo de cliente','${desde}','${hasta}')`)}
       </div>`:''}
-      ${gastosNoOpPorCuenta.length?gastosNoOpPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}</div>`).join(''):(gastosReclamo.length?'':`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos no operativos (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`)}
+      ${gastosNoOpPorCuenta.length?gastosNoOpPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosNoOp):''}</div>`).join(''):(gastosReclamo.length?'':`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos no operativos (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`)}
       </div>
       <div class="contable-row subtotal"><span>Total gastos no operativos</span><span>(${fmtD(totNoOp+totReclamo)})</span></div>
       <div class="contable-row total" style="background:${utilNeta>=0?'var(--green-light)':'var(--red-light)'};border-radius:6px;padding:10px 12px">
@@ -20886,6 +20906,7 @@ async function abrirHistorialRendicionesValidar(){
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;flex-wrap:wrap;gap:8px">
     <p style="font-size:11px;color:var(--text3);margin:0"><i class="ti ti-info-circle"></i> Marcá el check de una o varias rendiciones para generar un reporte combinado (solo para imprimir, no cambia nada).</p>
     <button class="btn btn-sm" onclick="imprimirRendicionesSeleccionadas()"><i class="ti ti-printer"></i> Imprimir seleccionadas (<span id="mhrv-contador-sel">${window._rdcSeleccionadas.size}</span>)</button>
+    <button class="btn btn-sm" onclick="exportExcelRendicionesSeleccionadas()"><i class="ti ti-download"></i> Excel seleccionadas</button>
   </div>
   <table class="tbl" style="font-size:12px">
     <thead><tr><th></th><th>Rendición</th><th>Fecha de cierre</th><th>Gastos totales</th><th>Sin validar</th><th></th></tr></thead>
@@ -20975,6 +20996,48 @@ function imprimirRendicionesSeleccionadas(){
   win2.document.write(html2);
   win2.document.close();
   win2.onload=()=>{win2.focus();win2.print();};
+}
+// Mismo reporte que "Imprimir seleccionadas", pero como Excel — mismas rendiciones marcadas,
+// mismo resumen (Fondos, Inversión, Gasto) y el mismo detalle, en un solo archivo.
+async function exportExcelRendicionesSeleccionadas(){
+  const ids=[...(window._rdcSeleccionadas||[])];
+  if(!ids.length){alert('Marcá al menos una rendición para generar el reporte.');return;}
+  const seleccion=(contData.rendicionHistorial||[]).filter(h=>ids.includes(h.id)).sort((a,b)=>a.numero-b.numero);
+  const fondos=[];
+  const movs=[];
+  seleccion.forEach(h=>{
+    (h.fondosRecibidos||[]).forEach(f=>fondos.push({...f,rdc:fmtRDC(h.numero)}));
+    (h.movs||[]).forEach(m=>movs.push({...m,rdc:fmtRDC(h.numero)}));
+  });
+  const totalFondos=fondos.reduce((s,f)=>s+Number(f.monto||0),0);
+  const movsInversion=movs.filter(m=>m.clasif==='Inversión');
+  const movsGasto=movs.filter(m=>m.clasif!=='Inversión');
+  const totalInversion=movsInversion.reduce((s,m)=>s+Number(m.monto||0),0);
+  const totalGasto=movsGasto.reduce((s,m)=>s+Number(m.monto||0),0);
+  const rows=[
+    ['Reporte de Rendiciones',seleccion.map(h=>fmtRDC(h.numero)).join(', ')],
+    [],
+    ['RESUMEN'],
+    ['Fondos recibidos',totalFondos],
+    ['Total Inversión',totalInversion],
+    ['Total Gasto',totalGasto],
+    [],
+    ['FONDOS RECIBIDOS'],
+    ['Rendición','Fecha','Nota','Monto'],
+    ...fondos.map(f=>[f.rdc,f.fecha||'',f.nota||'',Number(f.monto||0)]),
+    ['','','TOTAL',totalFondos],
+    [],
+    ['INVERSIÓN PAGADA'],
+    ['Rendición','Fecha','Descripción','Clasificación','Forma de pago','Monto'],
+    ...movsInversion.map(m=>[m.rdc,m.fecha||'',m.desc||'',m.clasif||'',m.pago||'',Number(m.monto||0)]),
+    ['','','','','TOTAL INVERSIÓN',totalInversion],
+    [],
+    ['GASTOS PAGADOS'],
+    ['Rendición','Fecha','Descripción','Clasificación','Forma de pago','Monto'],
+    ...movsGasto.map(m=>[m.rdc,m.fecha||'',m.desc||'',m.clasif||'',m.pago||'',Number(m.monto||0)]),
+    ['','','','','TOTAL GASTO',totalGasto]
+  ];
+  await exportarExcelConFormato(rows,'reporte_rendiciones_'+seleccion.map(h=>h.numero).join('-'),'Reporte');
 }
 function abrirValidarRendicionCerrada(historialId){
   const hist=(contData.rendicionHistorial||[]).find(h=>h.id===historialId);
