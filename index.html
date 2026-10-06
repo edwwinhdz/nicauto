@@ -4398,7 +4398,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-05-1400';
+const APP_VERSION='2026-10-05-1500';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -10816,7 +10816,10 @@ function aplicarLineaDiario(linea,fecha,numero,concepto){
   const esCodigoGastoFijo=/^[67]\d{3}$/.test(codigo);
   if(esCodigoGastoFijo||(cuentaPers&&cuentaPers.tipo==='gasto')){
     const gastoId=uid();
-    const monto=linea.debe>0?linea.debe:linea.haber;
+    // Un Gasto es de saldo normal Debe: el Debe lo sube, el Haber lo baja (sirve para reversar
+    // o reducir un gasto ya registrado, por ejemplo una devolución). Antes esto siempre sumaba,
+    // sin importar de qué lado se pusiera el monto.
+    const monto=linea.debe-linea.haber;
     contData.gastos=contData.gastos||[];
     contData.gastos.push({id:gastoId,fecha,cat:nombreCuenta,medio:'Diario',monto,beneficiario:'',ref:numero,desc:`[${numero}] ${concepto}`,comprobanteDiarioId:true});
     return{tipo:'gasto',id:gastoId};
@@ -10825,7 +10828,11 @@ function aplicarLineaDiario(linea,fecha,numero,concepto){
   if(MAPA_CXC_CXP[codigo]){
     const cuentaId=uid();
     const esActivo=codigo.startsWith('11');
-    const monto=esActivo?linea.debe:linea.haber;
+    // CxC (Activo) es de saldo normal Debe: sube con Debe, baja con Haber (para cobrar/reducir
+    // una cuenta por cobrar). CxP (Pasivo) es al revés: sube con Haber, baja con Debe. Antes
+    // tomaba un solo lado sin restar el otro, así que poner el monto en el lado "de bajar"
+    // creaba una cuenta nueva de $0 en vez de reducir el saldo.
+    const monto=esActivo?(linea.debe-linea.haber):(linea.haber-linea.debe);
     contData.cuentas=contData.cuentas||[];
     contData.cuentas.push({id:cuentaId,fecha,tipo:MAPA_CXC_CXP[codigo],estado:'Pendiente',monto,saldo:monto,persona:'Comprobante de Diario',desc:`[${numero}] ${concepto}`});
     return{tipo:'cuenta',id:cuentaId};
