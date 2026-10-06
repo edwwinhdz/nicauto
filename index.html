@@ -729,6 +729,7 @@ body.no-delete .confirmDelete{display:none!important}
   <div class="tab-bar">
     <button class="tab active" onclick="showContTab('caja')">Caja y Banco</button>
     <button class="tab" onclick="showContTab('cuentas')">Cuentas</button>
+    <button class="tab" onclick="showContTab('cd')">Comprobante de Diario</button>
     <button class="tab" onclick="showContTab('gastos')">Gastos</button>
     <button class="tab" onclick="showContTab('cajachica')"><i class="ti ti-wallet" style="font-size:13px"></i> Caja Chica Menor</button>
     <button class="tab" onclick="showContTab('planilla')">Planilla Personal</button>
@@ -750,6 +751,7 @@ body.no-delete .confirmDelete{display:none!important}
   <div id="cont-comisiones" class="cont-tab" style="display:none"></div>
   <div id="cont-caja" class="cont-tab"></div>
   <div id="cont-cuentas" class="cont-tab" style="display:none"></div>
+  <div id="cont-cd" class="cont-tab" style="display:none"></div>
   <div id="cont-gastos" class="cont-tab" style="display:none"></div>
   <div id="cont-cajachica" class="cont-tab" style="display:none"></div>
   <div id="cont-planilla" class="cont-tab" style="display:none"></div>
@@ -2182,6 +2184,7 @@ body.no-delete .confirmDelete{display:none!important}
       <div class="form-group"><label>Número</label><input id="mdia-numero" disabled style="color:var(--text2);font-weight:700"></div>
     </div>
     <div class="form-group"><label>Concepto / Descripción</label><input id="mdia-concepto" placeholder="Explicá para qué es este comprobante…"></div>
+    <div class="form-group"><label>Vehículo de referencia (opcional, solo informativo)</label><select id="mdia-vehiculo"><option value="">-- Ninguno --</option></select></div>
     <div style="background:var(--blue-light);border-radius:var(--radius);padding:.6rem .875rem;margin-bottom:.75rem;font-size:11px;color:var(--text2)">
       <i class="ti ti-info-circle"></i> Cada línea es una cuenta del catálogo con su monto en <b>Debe</b> o <b>Haber</b> (una sola de las dos, no las dos). El total Debe debe ser igual al total Haber para poder guardar. Caja/Bancos ajustan el saldo directo; cuentas de Gasto se suman a Gastos; cuentas personalizadas ajustan su saldo en Catálogo — todo con la fecha que pongas arriba.
     </div>
@@ -4395,7 +4398,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-05-1100';
+const APP_VERSION='2026-10-05-1400';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -10111,12 +10114,12 @@ function showContTab(t){
   contTab=t;
   document.querySelectorAll('.cont-tab').forEach(x=>x.style.display='none');
   document.getElementById('cont-'+t).style.display='block';
-  const tabs=['caja','cuentas','gastos','cajachica','planilla','catalogo','balance','estado','flujo','periodos','auxiliares','costosfijos','proyeccion','posicionfinanciera','notasef','fondosjm','fondosgo'];
+  const tabs=['caja','cuentas','cd','gastos','cajachica','planilla','catalogo','balance','estado','flujo','periodos','auxiliares','costosfijos','proyeccion','posicionfinanciera','notasef','fondosjm','fondosgo'];
   document.querySelectorAll('#page-contable .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',tabs[i]===t));
   const tabJM=document.getElementById('tab-fondosjm'),tabGO=document.getElementById('tab-fondosgo');
   if(tabJM)tabJM.style.display=(MODO==='admin'||MODO==='gerente1')?'inline-flex':'none';
   if(tabGO)tabGO.style.display=(MODO==='admin'||MODO==='gerente2')?'inline-flex':'none';
-  ({caja:renderCaja,cuentas:renderCuentas,gastos:renderGastos,cajachica:renderCajaChicaMenor,planilla:renderPlanillaContable,comisiones:renderComisionesContable,catalogo:renderCatalogo,balance:renderBalance,estado:renderEstado,flujo:renderFlujo,periodos:renderPeriodosCerrados,auxiliares:renderAuxiliares,costosfijos:renderCostosFijos,proyeccion:renderProyeccion,posicionfinanciera:renderPosicionFinanciera,notasef:renderNotasEF,fondosjm:renderFondosJM,fondosgo:renderFondosGO})[t]?.();
+  ({caja:renderCaja,cuentas:renderCuentas,cd:renderComprobanteDiario,gastos:renderGastos,cajachica:renderCajaChicaMenor,planilla:renderPlanillaContable,comisiones:renderComisionesContable,catalogo:renderCatalogo,balance:renderBalance,estado:renderEstado,flujo:renderFlujo,periodos:renderPeriodosCerrados,auxiliares:renderAuxiliares,costosfijos:renderCostosFijos,proyeccion:renderProyeccion,posicionfinanciera:renderPosicionFinanciera,notasef:renderNotasEF,fondosjm:renderFondosJM,fondosgo:renderFondosGO})[t]?.();
 }
 
 // ======================== POSICIÓN FINANCIERA (hoja nueva, aún NO conectada a datos automáticos) ========================
@@ -10735,11 +10738,23 @@ function delRecibo(id){if(MODO!=='admin'&&MODO!=='jefecomercial'){alert('⛔ Sol
 //  - Cuentas personalizadas (activo/pasivo/ingreso) → ajustan su saldo en Catálogo
 let _diarioLineaSeq=0;
 function getComprobantesDiario(){if(!contData.comprobantesDiario)contData.comprobantesDiario=[];return contData.comprobantesDiario;}
+// Vehículos para la referencia del comprobante: propios, Gerencia/Taller y Consignación, SIN
+// excluir los vendidos — a diferencia de otros selectores del sistema, acá sí hace falta poder
+// referenciar un carro ya vendido (por ejemplo, una devolución), porque es solo para anotar,
+// nunca mueve nada del vehículo en sí.
+function opcionesVehiculoReferenciaDiario(){
+  const propios=(vehiculos||[]).map(v=>({id:v.id,label:`${v.marca} ${v.modelo} ${v.anio} — ${v.placa} (${v.estado||'—'})`}));
+  const ger=(vehGerencia||[]).map(v=>({id:'VGER_'+v.id,label:`${v.marca} ${v.modelo} ${v.anio} — ${v.placa||'—'} (Gerencia/Taller)`}));
+  const consig=(contData.consignacion||[]).map(c=>({id:'CONSIG_'+c.id,label:`${c.marca} ${c.modelo} ${c.anio} — ${c.placa} (Consig. — ${c.estado||'—'})`}));
+  return[...propios,...ger,...consig].sort((a,b)=>a.label.localeCompare(b.label));
+}
 function abrirModalDiario(){
   if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ No tenés permisos para registrar comprobantes de diario.');return;}
   document.getElementById('mdia-fecha').value=hoyLocal();
   document.getElementById('mdia-numero').value='CD-'+String(getComprobantesDiario().length+1).padStart(3,'0');
   document.getElementById('mdia-concepto').value='';
+  const selVeh=document.getElementById('mdia-vehiculo');
+  selVeh.innerHTML='<option value="">-- Ninguno --</option>'+opcionesVehiculoReferenciaDiario().map(v=>`<option value="${v.id}">${v.label}</option>`).join('');
   document.getElementById('mdia-lineas').innerHTML='';
   _diarioLineaSeq=0;
   agregarLineaDiario();
@@ -10836,13 +10851,15 @@ async function guardarComprobanteDiario(){
   const totHaber=lineas.reduce((s,l)=>s+l.haber,0);
   if(Math.abs(totDebe-totHaber)>=0.01){alert(`⚠️ El comprobante no está balanceado.\n\nTotal Debe: ${fmtD(totDebe)}\nTotal Haber: ${fmtD(totHaber)}\n\nTienen que ser iguales para poder guardar.`);return;}
   const numero=document.getElementById('mdia-numero').value;
+  const vehiculoRefId=document.getElementById('mdia-vehiculo').value;
+  const vehiculoRefInfo=vehiculoRefId?document.querySelector(`#mdia-vehiculo option[value="${vehiculoRefId}"]`)?.textContent:'';
   const id=uid();
   const efectos=lineas.map(l=>aplicarLineaDiario(l,fecha,numero,concepto));
   const sinAplicar=efectos.filter(e=>e.tipo==='sinAplicar');
-  getComprobantesDiario().push({id,numero,fecha,concepto,lineas,efectos,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
+  getComprobantesDiario().push({id,numero,fecha,concepto,vehiculoRefId:vehiculoRefId||null,vehiculoRefInfo:vehiculoRefInfo||null,lineas,efectos,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
   await saveOne('contable',{id:'main',...contData});
   closeOv('ov-diario');
-  renderCaja();
+  renderComprobanteDiario();
   if(sinAplicar.length){
     alert(`✅ Comprobante ${numero} guardado.\n\n⚠️ Ojo: la(s) cuenta(s) "${sinAplicar.map(e=>e.nombreCuenta).join('", "')}" todavía no tienen un mecanismo automático de aplicación (por ejemplo, Ingresos o Capital) — quedaron registradas en el comprobante para el historial, pero no se sumaron a ningún reporte todavía. Avisale a Claude si necesitás que también se conecten.`);
   } else {
@@ -10855,7 +10872,7 @@ function verComprobanteDiario(id){
   const totDebe=(d.lineas||[]).reduce((s,l)=>s+Number(l.debe||0),0);
   document.getElementById('mdiav-title').innerHTML=`<i class="ti ti-book"></i> Comprobante ${d.numero} — ${d.fecha}`;
   document.getElementById('mdiav-body').innerHTML=`
-    <p style="font-size:13px;color:var(--text2);margin-bottom:.75rem"><b>Concepto:</b> ${d.concepto}</p>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:.75rem"><b>Concepto:</b> ${d.concepto}${d.vehiculoRefInfo?`<br><b>Vehículo de referencia:</b> ${d.vehiculoRefInfo}`:''}</p>
     <table class="tbl" style="font-size:12px">
       <thead><tr><th>Cuenta</th><th>Debe</th><th>Haber</th></tr></thead>
       <tbody>${(d.lineas||[]).map(l=>`<tr>
@@ -10884,7 +10901,7 @@ async function eliminarComprobanteDiario(id){
   });
   contData.comprobantesDiario=getComprobantesDiario().filter(x=>x.id!==id);
   await saveOne('contable',{id:'main',...contData});
-  renderCaja();
+  renderComprobanteDiario();
   alert('✅ Comprobante eliminado y sus movimientos revertidos.');
 }
 function renderCaja(){
@@ -10895,36 +10912,12 @@ function renderCaja(){
   const totalBancoEgr=rec.filter(r=>r.tipo==='Egreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0);
   const saldoCaja=totalCajaIng-totalCajaEgr;
   const saldoBanco=totalBancoIng-totalBancoEgr;
-  const diario=contData.comprobantesDiario||[];
   document.getElementById('cont-caja').innerHTML=`
   <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:1rem">
     <div class="stat-card"><div class="stat-label"><i class="ti ti-cash"></i>Saldo Caja</div><div class="stat-value ${saldoCaja>=0?'stat-green':'stat-red'}">${fmtD(saldoCaja)}</div></div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-building-bank"></i>Saldo Banco</div><div class="stat-value ${saldoBanco>=0?'stat-blue':'stat-red'}">${fmtD(saldoBanco)}</div></div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-arrow-up"></i>Total ingresos</div><div class="stat-value stat-green">${fmtD(totalCajaIng+totalBancoIng)}</div></div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-arrow-down"></i>Total egresos</div><div class="stat-value stat-red">${fmtD(totalCajaEgr+totalBancoEgr)}</div></div>
-  </div>
-  <div class="card" style="margin-bottom:1rem">
-    <div class="card-head"><h3><i class="ti ti-book"></i> Comprobantes de Diario</h3>
-      <button class="btn btn-primary btn-sm" onclick="abrirModalDiario()"><i class="ti ti-plus"></i>Nuevo comprobante</button>
-    </div>
-    <p style="font-size:11px;color:var(--text3);padding:0 1rem .5rem">Partida doble con el catálogo de cuentas completo (incluye tus cuentas personalizadas). Cada línea cae directo a la contabilidad según la cuenta que elijas y la fecha que indiques: Caja/Bancos ajustan el saldo, cuentas de Gasto se suman a Gastos, y cuentas personalizadas ajustan su saldo en Catálogo.</p>
-    <table class="tbl">
-      <thead><tr><th>No.</th><th>Fecha</th><th>Concepto</th><th>Total</th><th>Registrado por</th><th></th></tr></thead>
-      <tbody>${diario.length?[...diario].reverse().map(d=>{
-        const total=(d.lineas||[]).reduce((s,l)=>s+Number(l.debe||0),0);
-        return`<tr style="cursor:pointer" onclick="verComprobanteDiario('${d.id}')">
-          <td style="font-weight:700">${d.numero}</td>
-          <td>${d.fecha}</td>
-          <td style="font-size:12px">${d.concepto||'—'}</td>
-          <td style="font-weight:600">${fmtD(total)}</td>
-          <td style="font-size:12px;color:var(--text2)">${d.creadoPor||'—'}</td>
-          <td onclick="event.stopPropagation()"><div class="tbl-actions">
-            <button class="btn btn-sm" onclick="verComprobanteDiario('${d.id}')" title="Ver detalle"><i class="ti ti-eye"></i></button>
-            ${MODO==='admin'?`<button class="btn btn-sm btn-danger" onclick="eliminarComprobanteDiario('${d.id}')" title="Eliminar (revierte los movimientos generados)"><i class="ti ti-trash"></i></button>`:''}
-          </div></td>
-        </tr>`;
-      }).join(''):'<tr><td colspan="6"><div class="empty" style="padding:1rem"><p>Sin comprobantes de diario registrados</p></div></td></tr>'}</tbody>
-    </table>
   </div>
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-list"></i> Movimientos registrados</h3>
@@ -10948,6 +10941,37 @@ function renderCaja(){
         </div></td>
       </tr>`).join('')||'<tr><td colspan="9"><div class="empty"><i class="ti ti-cash"></i><p>Sin movimientos registrados</p></div></td></tr>'}
       </tbody>
+    </table>
+  </div>`;
+}
+// Misma tarjeta de Comprobantes de Diario que antes vivía dentro de Caja y Banco, ahora en su
+// propia página — la lógica de abajo (abrirModalDiario, guardarComprobanteDiario,
+// eliminarComprobanteDiario, aplicarLineaDiario) es exactamente la misma, no se tocó nada de eso.
+function renderComprobanteDiario(){
+  const diario=contData.comprobantesDiario||[];
+  document.getElementById('cont-cd').innerHTML=`
+  <div class="card">
+    <div class="card-head"><h3><i class="ti ti-book"></i> Comprobantes de Diario</h3>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalDiario()"><i class="ti ti-plus"></i>Nuevo comprobante</button>
+    </div>
+    <p style="font-size:11px;color:var(--text3);padding:0 1rem .5rem">Partida doble con el catálogo de cuentas completo (incluye tus cuentas personalizadas). Cada línea cae directo a la contabilidad según la cuenta que elijas y la fecha que indiques: Caja/Bancos ajustan el saldo, cuentas de Gasto se suman a Gastos, y cuentas personalizadas ajustan su saldo en Catálogo. Puede ligar un vehículo de Inventario o Consignación solo como referencia, sin mover nada de ese vehículo.</p>
+    <table class="tbl">
+      <thead><tr><th>No.</th><th>Fecha</th><th>Concepto</th><th>Vehículo ref.</th><th>Total</th><th>Registrado por</th><th></th></tr></thead>
+      <tbody>${diario.length?[...diario].reverse().map(d=>{
+        const total=(d.lineas||[]).reduce((s,l)=>s+Number(l.debe||0),0);
+        return`<tr style="cursor:pointer" onclick="verComprobanteDiario('${d.id}')">
+          <td style="font-weight:700">${d.numero}</td>
+          <td>${d.fecha}</td>
+          <td style="font-size:12px">${d.concepto||'—'}</td>
+          <td style="font-size:11px;color:var(--text2)">${d.vehiculoRefInfo||'—'}</td>
+          <td style="font-weight:600">${fmtD(total)}</td>
+          <td style="font-size:12px;color:var(--text2)">${d.creadoPor||'—'}</td>
+          <td onclick="event.stopPropagation()"><div class="tbl-actions">
+            <button class="btn btn-sm" onclick="verComprobanteDiario('${d.id}')" title="Ver detalle"><i class="ti ti-eye"></i></button>
+            ${MODO==='admin'?`<button class="btn btn-sm btn-danger" onclick="eliminarComprobanteDiario('${d.id}')" title="Eliminar (revierte los movimientos generados)"><i class="ti ti-trash"></i></button>`:''}
+          </div></td>
+        </tr>`;
+      }).join(''):'<tr><td colspan="7"><div class="empty" style="padding:1.5rem"><p>Todavía no hay ningún comprobante de diario registrado.</p></div></td></tr>'}</tbody>
     </table>
   </div>`;
 }
@@ -11897,7 +11921,7 @@ function renderEstado(){
       <b>al:</b>
       <input type="date" id="estado-fecha-hasta" value="${hasta}" onchange="renderEstado()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px">
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap" title="Muestra cada transacción (fecha, descripción, proveedor, forma de pago) debajo de cada cuenta, en vez de solo el subtotal">
-        <input type="checkbox" id="estado-nivel-detalle" onchange="renderEstado()" style="width:auto">
+        <input type="checkbox" id="estado-nivel-detalle" onchange="renderEstado()" style="width:auto" ${nivelDetalle?'checked':''}>
         <i class="ti ti-list-details"></i> Ver a nivel de detalle
       </label>
     </div>
