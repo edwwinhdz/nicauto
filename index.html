@@ -4399,7 +4399,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-05-1800';
+const APP_VERSION='2026-10-05-1830';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11793,8 +11793,8 @@ function cuadreRendicionData(desde,hasta,totalesER){
     else put(r.otros,v,item);
   });
   r.totER=totER;
-  r.tot=totalesER||{admin:0,reclamo:0,noop:0};
-  r.totERPantalla=(Number(r.tot.admin)||0)+(Number(r.tot.reclamo)||0)+(Number(r.tot.noop)||0);
+  r.tot=totalesER||{admin:0,reclamo:0,financiero:0,noop:0};
+  r.totERPantalla=(Number(r.tot.admin)||0)+(Number(r.tot.reclamo)||0)+(Number(r.tot.financiero)||0)+(Number(r.tot.noop)||0);
   r.difRend=r.enER.usd-r.reg.usd;
   r.faltante=r.gasto.usd-r.enER.usd;
   r.difPantalla=r.totER-r.totERPantalla;
@@ -11854,6 +11854,7 @@ function cuadreRendicionHTML(desde,hasta,totalesER){
       ${fila('Otros gastos (registro directo en Contable)',r.otros)}
       ${filaMonto('Suma por origen',r.totER,'',true)}
       ${filaMonto('Total gastos operativos (incl. reclamos) — como se ve en el ER',(Number(r.tot.admin)||0)+(Number(r.tot.reclamo)||0))}
+      ${filaMonto('Total Gastos Financieros — como se ve en el ER',Number(r.tot.financiero)||0)}
       ${filaMonto('Total gastos no operativos — como se ve en el ER',Number(r.tot.noop)||0)}
       <tr style="border-top:2px solid var(--border)"><td style="padding:6px 8px;font-weight:700">TOTAL GASTOS DEL ESTADO DE RESULTADO</td><td></td><td style="padding:6px 8px;text-align:right;font-weight:700">${fmtD(r.totERPantalla)}</td><td style="padding:6px 8px;font-size:11px">${chk}</td></tr>
       </tbody></table>
@@ -12088,7 +12089,7 @@ function renderEstado(){
       <p style="font-size:11px;color:var(--text3);margin-top:.25rem"><i class="ti ti-info-circle"></i> Se muestran las cuentas de Mayor. Clic en cualquier cuenta para ver su auxiliar (el detalle de cada movimiento que la compone) en el rango de fechas seleccionado arriba.</p>
     </div></div>
   </div>
-  ${window._erCuadre?cuadreRendicionHTML(desde,hasta,{admin:totAdmin,reclamo:totReclamo,noop:totNoOp}):''}`;
+  ${window._erCuadre?cuadreRendicionHTML(desde,hasta,{admin:totAdmin,reclamo:totReclamo,financiero:totFinanciero,noop:totNoOp}):''}`;
 }
 
 // ---- FLUJO DE CAJA ----
