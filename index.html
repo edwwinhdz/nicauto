@@ -2177,8 +2177,9 @@ body.no-delete .confirmDelete{display:none!important}
 <!-- Modal Comprobante de Diario (partida doble, catálogo de cuentas completo) -->
 <div class="overlay" id="ov-diario">
 <div class="modal" style="max-width:680px">
-  <div class="modal-head"><h3><i class="ti ti-book"></i> Nuevo Comprobante de Diario</h3><button class="btn-ghost btn" onclick="closeOv('ov-diario')"><i class="ti ti-x"></i></button></div>
+  <div class="modal-head"><h3 id="mdia-title"><i class="ti ti-book"></i> Nuevo Comprobante de Diario</h3><button class="btn-ghost btn" onclick="closeOv('ov-diario')"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
+    <input type="hidden" id="mdia-id">
     <div class="form-row">
       <div class="form-group"><label>Fecha</label><input id="mdia-fecha" type="date"></div>
       <div class="form-group"><label>Número</label><input id="mdia-numero" disabled style="color:var(--text2);font-weight:700"></div>
@@ -2215,7 +2216,7 @@ body.no-delete .confirmDelete{display:none!important}
 <div class="modal" style="max-width:600px">
   <div class="modal-head"><h3 id="mdiav-title"><i class="ti ti-book"></i> Comprobante de Diario</h3><button class="btn-ghost btn" onclick="closeOv('ov-diario-ver')"><i class="ti ti-x"></i></button></div>
   <div class="modal-body" id="mdiav-body"></div>
-  <div class="modal-foot">
+  <div class="modal-foot" id="mdiav-foot">
     <button class="btn" onclick="closeOv('ov-diario-ver')">Cerrar</button>
   </div>
 </div>
@@ -4398,7 +4399,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-05-1630';
+const APP_VERSION='2026-10-05-1800';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -10748,17 +10749,25 @@ function opcionesVehiculoReferenciaDiario(){
   const consig=(contData.consignacion||[]).map(c=>({id:'CONSIG_'+c.id,label:`${c.marca} ${c.modelo} ${c.anio} — ${c.placa} (Consig. — ${c.estado||'—'})`}));
   return[...propios,...ger,...consig].sort((a,b)=>a.label.localeCompare(b.label));
 }
-function abrirModalDiario(){
+function abrirModalDiario(id){
   if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ No tenés permisos para registrar comprobantes de diario.');return;}
-  document.getElementById('mdia-fecha').value=hoyLocal();
-  document.getElementById('mdia-numero').value='CD-'+String(getComprobantesDiario().length+1).padStart(3,'0');
-  document.getElementById('mdia-concepto').value='';
+  const d=id?getComprobantesDiario().find(x=>x.id===id):null;
+  document.getElementById('mdia-id').value=d?d.id:'';
+  document.getElementById('mdia-title').innerHTML=d?`<i class="ti ti-book"></i> Editar ${d.numero}`:`<i class="ti ti-book"></i> Nuevo Comprobante de Diario`;
+  document.getElementById('mdia-fecha').value=d?d.fecha:hoyLocal();
+  document.getElementById('mdia-numero').value=d?d.numero:('CD-'+String(getComprobantesDiario().length+1).padStart(3,'0'));
+  document.getElementById('mdia-concepto').value=d?d.concepto:'';
   const selVeh=document.getElementById('mdia-vehiculo');
   selVeh.innerHTML='<option value="">-- Ninguno --</option>'+opcionesVehiculoReferenciaDiario().map(v=>`<option value="${v.id}">${v.label}</option>`).join('');
+  if(d&&d.vehiculoRefId)selVeh.value=d.vehiculoRefId;
   document.getElementById('mdia-lineas').innerHTML='';
   _diarioLineaSeq=0;
-  agregarLineaDiario();
-  agregarLineaDiario();
+  if(d&&(d.lineas||[]).length){
+    d.lineas.forEach(l=>agregarLineaDiario(l.cuenta,l.debe||'',l.haber||''));
+  } else {
+    agregarLineaDiario();
+    agregarLineaDiario();
+  }
   recalcularTotalesDiario();
   openOv('ov-diario');
 }
@@ -10860,17 +10869,42 @@ async function guardarComprobanteDiario(){
   const numero=document.getElementById('mdia-numero').value;
   const vehiculoRefId=document.getElementById('mdia-vehiculo').value;
   const vehiculoRefInfo=vehiculoRefId?document.querySelector(`#mdia-vehiculo option[value="${vehiculoRefId}"]`)?.textContent:'';
-  const id=uid();
+  const idEditando=document.getElementById('mdia-id').value;
+  const esEdicion=!!idEditando;
+  if(esEdicion){
+    // Editar = revertir TODO lo que había aplicado el comprobante viejo (igual que al
+    // eliminarlo), y después aplicar las líneas nuevas desde cero — así nunca queda un efecto
+    // viejo mezclado con uno nuevo.
+    const viejo=getComprobantesDiario().find(x=>x.id===idEditando);
+    if(!viejo){alert('No se encontró el comprobante original.');return;}
+    if(!confirm(`¿Guardar los cambios de ${numero}?\n\nEsto revierte lo que este comprobante había aplicado antes, y lo vuelve a aplicar con los datos nuevos.`))return;
+    (viejo.efectos||[]).forEach(ef=>{
+      if(ef.tipo==='recibo')contData.recibos=(contData.recibos||[]).filter(r=>r.id!==ef.id);
+      else if(ef.tipo==='gasto')contData.gastos=(contData.gastos||[]).filter(g=>g.id!==ef.id);
+      else if(ef.tipo==='cuenta')contData.cuentas=(contData.cuentas||[]).filter(c=>c.id!==ef.id);
+      else if(ef.tipo==='saldoPersonalizado'){
+        const cp=(contData.cuentasPersonalizadas||[]).find(c=>c.codigo===ef.codigo);
+        if(cp)cp.saldo=Number(cp.saldo||0)-ef.delta;
+      }
+    });
+  }
+  const id=esEdicion?idEditando:uid();
   const efectos=lineas.map(l=>aplicarLineaDiario(l,fecha,numero,concepto,vehiculoRefInfo));
   const sinAplicar=efectos.filter(e=>e.tipo==='sinAplicar');
-  getComprobantesDiario().push({id,numero,fecha,concepto,vehiculoRefId:vehiculoRefId||null,vehiculoRefInfo:vehiculoRefInfo||null,lineas,efectos,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
+  const datosComprobante={id,numero,fecha,concepto,vehiculoRefId:vehiculoRefId||null,vehiculoRefInfo:vehiculoRefInfo||null,lineas,efectos,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()};
+  if(esEdicion){
+    const idx=getComprobantesDiario().findIndex(x=>x.id===idEditando);
+    if(idx>=0)contData.comprobantesDiario[idx]=datosComprobante;
+  } else {
+    getComprobantesDiario().push(datosComprobante);
+  }
   await saveOne('contable',{id:'main',...contData});
   closeOv('ov-diario');
   renderComprobanteDiario();
   if(sinAplicar.length){
     alert(`✅ Comprobante ${numero} guardado.\n\n⚠️ Ojo: la(s) cuenta(s) "${sinAplicar.map(e=>e.nombreCuenta).join('", "')}" todavía no tienen un mecanismo automático de aplicación (por ejemplo, Ingresos o Capital) — quedaron registradas en el comprobante para el historial, pero no se sumaron a ningún reporte todavía. Avisale a Claude si necesitás que también se conecten.`);
   } else {
-    alert(`✅ Comprobante ${numero} guardado y aplicado a la contabilidad correctamente.`);
+    alert(`✅ Comprobante ${numero} ${esEdicion?'actualizado':'guardado'} y aplicado a la contabilidad correctamente.`);
   }
 }
 function verComprobanteDiario(id){
@@ -10890,6 +10924,8 @@ function verComprobanteDiario(id){
       <tfoot><tr style="background:var(--surface2);font-weight:700"><td>TOTAL</td><td>${fmtD(totDebe)}</td><td>${fmtD(totDebe)}</td></tr></tfoot>
     </table>
     <p style="font-size:11px;color:var(--text3);margin-top:.75rem">Registrado por ${d.creadoPor||'—'} el ${d.fechaRegistro||'—'}.</p>`;
+  const foot=document.getElementById('mdiav-foot');
+  if(foot)foot.innerHTML=`<button class="btn" onclick="closeOv('ov-diario-ver')">Cerrar</button>${(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-primary" onclick="closeOv('ov-diario-ver');abrirModalDiario('${d.id}')"><i class="ti ti-edit"></i>Editar</button>`:''}`;
   openOv('ov-diario-ver');
 }
 async function eliminarComprobanteDiario(id){
@@ -10975,6 +11011,7 @@ function renderComprobanteDiario(){
           <td style="font-size:12px;color:var(--text2)">${d.creadoPor||'—'}</td>
           <td onclick="event.stopPropagation()"><div class="tbl-actions">
             <button class="btn btn-sm" onclick="verComprobanteDiario('${d.id}')" title="Ver detalle"><i class="ti ti-eye"></i></button>
+            ${(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm" style="color:var(--blue);border-color:var(--blue)" onclick="abrirModalDiario('${d.id}')" title="Editar (revierte lo viejo y aplica lo nuevo)"><i class="ti ti-edit"></i></button>`:''}
             ${MODO==='admin'?`<button class="btn btn-sm btn-danger" onclick="eliminarComprobanteDiario('${d.id}')" title="Eliminar (revierte los movimientos generados)"><i class="ti ti-trash"></i></button>`:''}
           </div></td>
         </tr>`;
@@ -11860,7 +11897,7 @@ function renderEstado(){
   vtasC.forEach(v=>{
     const vh=buscarVehiculoOConsig(v.vehiculoId);
     (vh?.reparaciones||[]).forEach(r=>{
-      const esComision=/comisi[oó]n/i.test(r.desc||'');
+      const esComision=/comisi/i.test(r.desc||'');
       const item={fecha:v.fecha,desc:r.desc||'(sin descripción)',monto:Number(r.costo||0),cat:esComision?'Comisión de compradores':'Reparaciones de vehículos vendidos',vehiculoRef:vh?`${vh.marca} ${vh.modelo} — ${vh.placa||'—'}`:''};
       (esComision?comisionCompradoresDetalle:reparacionesRealesDetalle).push(item);
     });
@@ -22538,12 +22575,12 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
     ${puedeReclasificar?`<p style="font-size:11px;color:var(--text3);margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Si algún gasto quedó en la cuenta equivocada, cambiala directo en el desplegable de esa fila.</p>`:''}
     <div style="max-height:420px;overflow-y:auto">
       <table class="tbl" style="font-size:12px">
-        <thead><tr><th>Fecha</th><th>Descripción</th>${puedeReclasificar?'<th style="width:180px">Cuenta contable</th>':'<th>Categoría</th>'}${esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th>':''}<th style="text-align:right">Monto</th>${cuenta.startsWith('Cx')?'<th>Estado</th>':''}${hayAcciones?'<th>Acciones</th>':''}</tr></thead>
+        <thead><tr><th>Fecha</th><th>Descripción</th>${puedeReclasificar?'<th style="width:180px">Cuenta contable</th>':'<th>Categoría</th>'}${esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th><th>Vehículo</th>':''}<th style="text-align:right">Monto</th>${cuenta.startsWith('Cx')?'<th>Estado</th>':''}${hayAcciones?'<th>Acciones</th>':''}</tr></thead>
         <tbody>${movimientos.length?movimientos.map((m,i)=>`<tr>
           <td>${m.fecha||'—'}</td>
           <td>${m.desc||m.persona||'—'}</td>
           ${puedeReclasificar?`<td><select style="width:100%;padding:4px;font-size:11px" onchange="reasignarCuentaGastoDesdeAuxiliar('${m.id}',this.value,'${desde}','${hasta}')">${opcionesCuentaGastoPlano(m.cat)}</select></td>`:`<td style="font-size:11px;color:var(--text2)">${m.cat||'—'}</td>`}
-          ${esAuxiliarDeGasto?`<td style="font-size:11px;color:var(--text2)">${m.beneficiario||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.medio||'—'}</td>`:''}
+          ${esAuxiliarDeGasto?`<td style="font-size:11px;color:var(--text2)">${m.beneficiario||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.medio||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.vehiculoRef?'🚗 '+m.vehiculoRef:'—'}</td>`:''}
           <td style="text-align:right;font-weight:700;color:${m.color};white-space:nowrap">${m.signo}${fmtD(m.monto)}</td>
           ${cuenta.startsWith('Cx')?`<td><span class="badge badge-${m.estado==='Pagada'?'green':'amber'}" style="font-size:10px">${m.estado||'—'}</span></td>`:''}
           ${(cuenta.startsWith('Cx')&&MODO==='admin')?`<td><button class="btn btn-sm" onclick="closeOv('ov-auxiliar');${m.esGastoCxC?'abrirModalGasto':'abrirModalCuenta'}('${m.id}')" title="Editar como contador"><i class="ti ti-edit"></i></button></td>`
@@ -22553,10 +22590,10 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
                 <button class="btn btn-sm" onclick="closeOv('ov-auxiliar');abrirModalGasto('${m.id}')" title="Editar este gasto"><i class="ti ti-edit"></i></button>
                 <button class="btn btn-sm btn-danger" onclick="eliminarGastoDesdeAuxiliar('${m.id}','${cuenta}','${desde}','${hasta}')" title="Eliminar este gasto"><i class="ti ti-trash"></i></button>
               </div></td>`:''}
-        </tr>`).join(''):`<tr><td colspan="${esAuxiliarDeGasto?7:5}"><div class="empty" style="padding:1.5rem"><p>Sin movimientos</p></div></td></tr>`}
+        </tr>`).join(''):`<tr><td colspan="${esAuxiliarDeGasto?8:5}"><div class="empty" style="padding:1.5rem"><p>Sin movimientos</p></div></td></tr>`}
         </tbody>
         <tfoot><tr style="background:var(--surface2);font-weight:700">
-          <td colspan="${esAuxiliarDeGasto?5:3}" style="text-align:right;padding:8px">SALDO:</td>
+          <td colspan="${esAuxiliarDeGasto?6:3}" style="text-align:right;padding:8px">SALDO:</td>
           <td style="padding:8px;text-align:right;font-weight:800;color:${total>=0?'var(--green)':'var(--red)'}">${fmtD(Math.abs(total))}</td>
           ${cuenta.startsWith('Cx')?'<td></td>':''}
           ${hayAcciones?'<td></td>':''}
@@ -22581,7 +22618,7 @@ function eliminarGastoDesdeAuxiliar(id,cuenta,desde,hasta){
 function imprimirAuxiliarCuenta(){
   const a=window._auxiliarActual;if(!a)return;
   const total=a.movimientos.reduce((s,m)=>s+(m.signo==='+'?m.monto:-m.monto),0);
-  const filas=a.movimientos.map(m=>`<tr><td>${m.fecha||'—'}</td><td>${m.desc||m.persona||'—'}</td><td>${m.cat||'—'}</td>${a.esAuxiliarDeGasto?`<td>${m.beneficiario||'—'}</td><td>${m.medio||'—'}</td>`:''}<td style="text-align:right">${m.signo}${fmtD(m.monto)}</td></tr>`).join('');
+  const filas=a.movimientos.map(m=>`<tr><td>${m.fecha||'—'}</td><td>${m.desc||m.persona||'—'}</td><td>${m.cat||'—'}</td>${a.esAuxiliarDeGasto?`<td>${m.beneficiario||'—'}</td><td>${m.medio||'—'}</td><td>${m.vehiculoRef||'—'}</td>`:''}<td style="text-align:right">${m.signo}${fmtD(m.monto)}</td></tr>`).join('');
   const html=`<!DOCTYPE html><html><head><title>${a.titulo}</title><style>
     body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;color:#212529}
     h2{margin:0 0 4px}
@@ -22593,9 +22630,9 @@ function imprimirAuxiliarCuenta(){
   </style></head><body>
     <h2>${a.titulo}</h2>
     <p style="color:#666;font-size:12px">${a.desde||a.hasta?`Período: ${a.desde||'inicio'} a ${a.hasta||'hoy'}`:'Acumulado global'} — Impreso el ${new Date().toLocaleDateString('es-NI')}</p>
-    <table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th>${a.esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th>':''}<th style="text-align:right">Monto</th></tr></thead>
+    <table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th>${a.esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th><th>Vehículo</th>':''}<th style="text-align:right">Monto</th></tr></thead>
     <tbody>${filas}</tbody>
-    <tfoot><tr><td colspan="${a.esAuxiliarDeGasto?5:3}" style="text-align:right">SALDO:</td><td style="text-align:right">${fmtD(Math.abs(total))}</td></tr></tfoot>
+    <tfoot><tr><td colspan="${a.esAuxiliarDeGasto?6:3}" style="text-align:right">SALDO:</td><td style="text-align:right">${fmtD(Math.abs(total))}</td></tr></tfoot>
     </table>
   </body></html>`;
   const win=window.open('','_blank');
@@ -22606,10 +22643,10 @@ function imprimirAuxiliarCuenta(){
 // Exporta a Excel la lista de movimientos que se está viendo ahora mismo en el Auxiliar de Cuenta.
 async function exportExcelAuxiliarCuenta(){
   const a=window._auxiliarActual;if(!a)return;
-  const rows=a.esAuxiliarDeGasto?[['Fecha','Descripción','Categoría','Proveedor','Forma de pago','Monto']]:[['Fecha','Descripción','Categoría','Monto']];
+  const rows=a.esAuxiliarDeGasto?[['Fecha','Descripción','Categoría','Proveedor','Forma de pago','Vehículo','Monto']]:[['Fecha','Descripción','Categoría','Monto']];
   a.movimientos.forEach(m=>{
     const fila=[m.fecha||'',m.desc||m.persona||'',m.cat||''];
-    if(a.esAuxiliarDeGasto)fila.push(m.beneficiario||'',m.medio||'');
+    if(a.esAuxiliarDeGasto)fila.push(m.beneficiario||'',m.medio||'',m.vehiculoRef||'');
     fila.push((m.signo==='-'?-1:1)*Number(m.monto||0));
     rows.push(fila);
   });
