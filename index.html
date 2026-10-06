@@ -4398,7 +4398,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-05-1500';
+const APP_VERSION='2026-10-05-1630';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -10799,7 +10799,7 @@ function recalcularTotalesDiario(){
 // Aplica el efecto real de una línea a la contabilidad, según a qué cuenta corresponda.
 // Devuelve un "efecto" que queda guardado en el comprobante, para poder revertirlo exacto si
 // se elimina el comprobante más adelante.
-function aplicarLineaDiario(linea,fecha,numero,concepto){
+function aplicarLineaDiario(linea,fecha,numero,concepto,vehiculoRefInfo){
   const partes=linea.cuenta.split(' - ');
   const codigo=partes[0].trim();
   const nombreCuenta=partes.slice(1).join(' - ').trim();
@@ -10821,7 +10821,7 @@ function aplicarLineaDiario(linea,fecha,numero,concepto){
     // sin importar de qué lado se pusiera el monto.
     const monto=linea.debe-linea.haber;
     contData.gastos=contData.gastos||[];
-    contData.gastos.push({id:gastoId,fecha,cat:nombreCuenta,medio:'Diario',monto,beneficiario:'',ref:numero,desc:`[${numero}] ${concepto}`,comprobanteDiarioId:true});
+    contData.gastos.push({id:gastoId,fecha,cat:nombreCuenta,medio:'Diario',monto,beneficiario:'',ref:numero,desc:`[${numero}] ${concepto}`,comprobanteDiarioId:true,vehiculoRef:vehiculoRefInfo||''});
     return{tipo:'gasto',id:gastoId};
   }
   const MAPA_CXC_CXP={'1103':'CxC-Cliente','1104':'CxC-Banco','1105':'CxC-Tercero','1106':'CxC-Inversor','2101':'CxP-Reserva','2102':'CxP-Inversor','2103':'CxP-Otra','2104':'CxP-Prestamo','2105':'CxP-Tarjeta','2106':'CxP-TCCorporativo1','2107':'CxP-TCCorporativo2'};
@@ -10861,7 +10861,7 @@ async function guardarComprobanteDiario(){
   const vehiculoRefId=document.getElementById('mdia-vehiculo').value;
   const vehiculoRefInfo=vehiculoRefId?document.querySelector(`#mdia-vehiculo option[value="${vehiculoRefId}"]`)?.textContent:'';
   const id=uid();
-  const efectos=lineas.map(l=>aplicarLineaDiario(l,fecha,numero,concepto));
+  const efectos=lineas.map(l=>aplicarLineaDiario(l,fecha,numero,concepto,vehiculoRefInfo));
   const sinAplicar=efectos.filter(e=>e.tipo==='sinAplicar');
   getComprobantesDiario().push({id,numero,fecha,concepto,vehiculoRefId:vehiculoRefId||null,vehiculoRefInfo:vehiculoRefInfo||null,lineas,efectos,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
   await saveOne('contable',{id:'main',...contData});
@@ -11838,6 +11838,11 @@ function renderEstado(){
   // compone (fecha, descripción, proveedor, forma de pago, monto), en vez de solo el subtotal.
   // El clic en la cuenta sigue abriendo el auxiliar completo igual que siempre.
   const nivelDetalle=!!document.getElementById('estado-nivel-detalle')?.checked;
+  // Cada cuenta, cuando el nivel de detalle está activo, se puede ocultar individual con la
+  // flechita — sin afectar el clic normal de la fila, que sigue abriendo el auxiliar completo.
+  window._erColapsados=window._erColapsados||new Set();
+  const estaColapsado=key=>window._erColapsados.has(key);
+  const flechaToggle=key=>`<i class="ti ${estaColapsado(key)?'ti-chevron-down':'ti-chevron-up'}" style="font-size:12px;cursor:pointer;margin-left:6px;opacity:.6" title="${estaColapsado(key)?'Mostrar':'Ocultar'} el detalle de esta cuenta" onclick="event.stopPropagation();toggleDetalleCuentaER('${key.replace(/'/g,"\\'")}')"></i>`;
   const comisiones=vtasC.reduce((s,v)=>s+Number(v.comision||0),0);
   // Costo de reparaciones de cada vehículo vendido — antes el Estado de Resultado solo restaba
   // el costo de adquisición, sin contar lo invertido en reparaciones antes de venderlo.
@@ -11845,6 +11850,39 @@ function renderEstado(){
     const vh=buscarVehiculoOConsig(v.vehiculoId);
     return s+(vh?(vh.reparaciones||[]).reduce((s2,r)=>s2+Number(r.costo||0),0):0);
   },0);
+  // Dentro de "Reparaciones" a veces queda mezclada una comisión pagada a un agente de compra
+  // (ej. "comisión Norvin"), no un gasto real de taller. Esto SOLO separa la vista en el Estado
+  // de Resultado — no toca ni mueve nada en los datos reales de Reparaciones del vehículo. El
+  // total de "Reparaciones de vehículos vendidos" sigue siendo el mismo para el cálculo de la
+  // Utilidad Bruta; solo cambia cómo se muestran las dos partes.
+  const comisionCompradoresDetalle=[];
+  const reparacionesRealesDetalle=[];
+  vtasC.forEach(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    (vh?.reparaciones||[]).forEach(r=>{
+      const esComision=/comisi[oó]n/i.test(r.desc||'');
+      const item={fecha:v.fecha,desc:r.desc||'(sin descripción)',monto:Number(r.costo||0),cat:esComision?'Comisión de compradores':'Reparaciones de vehículos vendidos',vehiculoRef:vh?`${vh.marca} ${vh.modelo} — ${vh.placa||'—'}`:''};
+      (esComision?comisionCompradoresDetalle:reparacionesRealesDetalle).push(item);
+    });
+  });
+  const totComisionCompradores=comisionCompradoresDetalle.reduce((s,i)=>s+i.monto,0);
+  const totReparacionesReales=totReparacionesVentas-totComisionCompradores;
+  // Detalle transacción por transacción de Ventas, Costos y Comisiones de vendedores, para el
+  // nivel de detalle del Estado de Resultado.
+  const ventasDetalle=vtasC.map(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    const c=clientes.find(x=>x.id===v.compradorId);
+    return{fecha:v.fecha,desc:(vh?vh.marca+' '+vh.modelo+' — '+(vh.placa||'—'):'Vehículo'),monto:Number(v.precio||0),cat:'__ventas__',beneficiario:c?c.nombre:''};
+  });
+  const costosDetalle=vtasC.map(v=>{
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    return{fecha:v.fecha,desc:(vh?vh.marca+' '+vh.modelo+' — '+(vh.placa||'—'):'Vehículo'),monto:Number(v.costo||0),cat:'__costos__'};
+  });
+  const comisionesVendDetalle=vtasC.filter(v=>Number(v.comision||0)>0).map(v=>{
+    const vnd=clientes.find(x=>x.id===v.vendedorId);
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    return{fecha:v.fecha,desc:(vh?vh.marca+' '+vh.modelo:'Venta'),monto:Number(v.comision),cat:'__comisionesvendedores__',beneficiario:vnd?vnd.nombre:''};
+  });
   // Ganancia real de cada venta (precio - costo - reparaciones - comisión) — esto es lo que se
   // usa como "ingreso" en la Vista por Comisión, en vez de la comisión sola.
   const gananciaVentas=vtasC.reduce((s,v)=>{
@@ -11906,12 +11944,17 @@ function renderEstado(){
   const gastosNoOpPorCuenta=agruparPorCuenta(gastosNoOp);
   // Para el nivel de detalle: lista de transacciones de una cuenta específica, ordenadas por
   // fecha, con fecha, descripción, proveedor y forma de pago.
+  window.toggleDetalleCuentaER=key=>{
+    if(window._erColapsados.has(key))window._erColapsados.delete(key);else window._erColapsados.add(key);
+    renderEstado();
+  };
   const filasDetalleCuenta=(cat,listaCompleta)=>{
+    if(estaColapsado(cat))return'';
     const items=listaCompleta.filter(g=>g.cat===cat).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
     if(!items.length)return'';
     return`<div style="margin:2px 0 10px 22px;border-left:2px solid var(--border);padding-left:10px">
       ${items.map(g=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--text2);padding:2px 0">
-        <span>${g.fecha||'—'} — ${g.desc||'(sin descripción)'}${g.beneficiario?' · '+g.beneficiario:''}${g.medio?' · '+g.medio:''}</span>
+        <span>${g.fecha||'—'} — ${g.desc||'(sin descripción)'}${g.beneficiario?' · '+g.beneficiario:''}${g.medio?' · '+g.medio:''}${g.vehiculoRef?' · 🚗 '+g.vehiculoRef:''}</span>
         <span style="white-space:nowrap;color:var(--red)">(${fmtD(g.monto)})</span>
       </div>`).join('')}
     </div>`;
@@ -11962,24 +12005,30 @@ function renderEstado(){
     </div>
     <div class="contable-section">
       <h4>Ingresos operativos</h4>
-      ${vistaComision?rClick('Ganancia en ventas',fmtD(gananciaVentas),`abrirAuxiliarCuenta('ventas','${desde}','${hasta}')`):rClick('Ingresos por ventas de vehículos',fmtD(ingresosVentas),`abrirAuxiliarCuenta('ventas','${desde}','${hasta}')`)}
+      ${vistaComision?rClick('Ganancia en ventas',fmtD(gananciaVentas),`abrirAuxiliarCuenta('ventas','${desde}','${hasta}')`):rClick('Ingresos por ventas de vehículos'+(nivelDetalle?flechaToggle('__ventas__'):''),fmtD(ingresosVentas),`abrirAuxiliarCuenta('ventas','${desde}','${hasta}')`)}
+      ${(nivelDetalle&&!vistaComision)?filasDetalleCuenta('__ventas__',ventasDetalle):''}
       ${totReembolsoAlistamiento>0?r(`Reembolso de alistamiento <small style="font-weight:400;color:var(--text3)">($218 x ${ventasPropiasRango.length} carro${ventasPropiasRango.length===1?'':'s'})</small>`,fmtD(totReembolsoAlistamiento)):''}
       <div class="contable-row subtotal"><span>Total ingresos${vistaComision?' (por comisión)':' por ventas'}</span><span>${fmtD(ingresos)}</span></div>
       ${vistaComision?'':`<h4 style="margin-top:1rem">Costo de ventas</h4>
-      ${rClick('Costo de venta de vehículos',(costos-totReparacionesVentas)?'('+fmtD(costos-totReparacionesVentas)+')':fmtD(0),`abrirAuxiliarCuenta('costoventas','${desde}','${hasta}')`)}
-      ${totReparacionesVentas>0?r('Reparaciones de vehículos vendidos','('+fmtD(totReparacionesVentas)+')'):''}
-      ${rClick('Comisiones de vendedores','('+fmtD(comisiones)+')',`abrirAuxiliarCuenta('comisiones','${desde}','${hasta}')`)}
+      ${rClick('Costo de venta de vehículos'+(nivelDetalle?flechaToggle('__costos__'):''),(costos-totReparacionesVentas)?'('+fmtD(costos-totReparacionesVentas)+')':fmtD(0),`abrirAuxiliarCuenta('costoventas','${desde}','${hasta}')`)}
+      ${nivelDetalle?filasDetalleCuenta('__costos__',costosDetalle):''}
+      ${totReparacionesReales>0?r('Reparaciones de vehículos vendidos'+(nivelDetalle?flechaToggle('Reparaciones de vehículos vendidos'):''),'('+fmtD(totReparacionesReales)+')'):''}
+      ${nivelDetalle?filasDetalleCuenta('Reparaciones de vehículos vendidos',reparacionesRealesDetalle):''}
+      ${totComisionCompradores>0?r('Comisión de compradores'+(nivelDetalle?flechaToggle('Comisión de compradores'):''),'('+fmtD(totComisionCompradores)+')'):''}
+      ${nivelDetalle?filasDetalleCuenta('Comisión de compradores',comisionCompradoresDetalle):''}
+      ${rClick('Comisiones de vendedores'+(nivelDetalle?flechaToggle('__comisionesvendedores__'):''),'('+fmtD(comisiones)+')',`abrirAuxiliarCuenta('comisiones','${desde}','${hasta}')`)}
+      ${nivelDetalle?filasDetalleCuenta('__comisionesvendedores__',comisionesVendDetalle):''}
       <div class="contable-row subtotal"><span>Total costo de ventas</span><span>(${fmtD(costos+comisiones)})</span></div>`}
       <div class="contable-row total"><span>Utilidad bruta <small style="font-weight:400">(margen ${mb}%)</small></span><span>${fmtD(vistaComision?utilBruta:utilBruta-comisiones)}</span></div>
       <h4 style="margin-top:1rem">Gastos operativos</h4>
       <div id="er-drop-operativo" ondragover="event.preventDefault();this.style.background='var(--blue-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaEnSeccion(event,'operativo')" style="border-radius:6px;transition:background .15s">
-      ${gastosAdminPorCuenta.length?gastosAdminPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosAdmin):''}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos operativos</span><span>$0.00</span></div>`}
+      ${gastosAdminPorCuenta.length?gastosAdminPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat+(nivelDetalle?flechaToggle(cat):''),'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosAdmin):''}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos operativos</span><span>$0.00</span></div>`}
       </div>
       <div class="contable-row subtotal"><span>Total gastos operativos</span><span>(${fmtD(totAdmin)})</span></div>
       <div class="contable-row total"><span>Utilidad operativa</span><span>${fmtD(utilOp)}</span></div>
       <h4 style="margin-top:1rem">Gastos Financieros</h4>
       <div id="er-drop-financiero" ondragover="event.preventDefault();this.style.background='var(--amber-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaEnSeccion(event,'financiero')" style="border-radius:6px;min-height:36px;transition:background .15s">
-      ${gastosFinancierosPorCuenta.length?gastosFinancierosPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosFinancieros):''}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos financieros (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`}
+      ${gastosFinancierosPorCuenta.length?gastosFinancierosPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat+(nivelDetalle?flechaToggle(cat):''),'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosFinancieros):''}</div>`).join(''):`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos financieros (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`}
       </div>
       <div class="contable-row subtotal"><span>Total Gastos Financieros</span><span>(${fmtD(totFinanciero)})</span></div>
       <div class="contable-row total"><span>Utilidad Financiera</span><span>${fmtD(utilFinanciera)}</span></div>
@@ -11987,9 +12036,10 @@ function renderEstado(){
       <div id="er-drop-nooperativo" ondragover="event.preventDefault();this.style.background='var(--red-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaEnSeccion(event,'no-operativo')" style="border-radius:6px;min-height:36px;transition:background .15s">
       ${gastosReclamo.length?`<div style="margin-bottom:6px;background:var(--amber-light);border-radius:4px;padding:4px">
         <div style="font-size:10px;font-weight:700;color:var(--amber);padding:2px 8px;text-transform:uppercase">Reclamos post-venta</div>
-        ${rClick('🔴 Reclamos de clientes','('+fmtD(totReclamo)+')',`abrirAuxiliarCuenta('Reclamo de cliente','${desde}','${hasta}')`)}
+        ${rClick('🔴 Reclamos de clientes'+(nivelDetalle?flechaToggle('__reclamos__'):''),'('+fmtD(totReclamo)+')',`abrirAuxiliarCuenta('Reclamo de cliente','${desde}','${hasta}')`)}
+        ${nivelDetalle?filasDetalleCuenta('__reclamos__',gastosReclamo.map(g=>({fecha:g.fecha,desc:g.desc||'(sin descripción)',monto:Number(g.monto||0),cat:'__reclamos__',beneficiario:g.beneficiario||'',medio:g.medio||''}))):''}
       </div>`:''}
-      ${gastosNoOpPorCuenta.length?gastosNoOpPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat,'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosNoOp):''}</div>`).join(''):(gastosReclamo.length?'':`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos no operativos (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`)}
+      ${gastosNoOpPorCuenta.length?gastosNoOpPorCuenta.map(([cat,monto])=>`<div draggable="true" ondragstart="dragCuentaStart(event,'${cat.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá esta cuenta para moverla a otra sección">${rClick('↕️ '+cat+(nivelDetalle?flechaToggle(cat):''),'('+fmtD(monto)+')',`abrirAuxiliarCuenta('${cat.replace(/'/g,"\\'")}','${desde}','${hasta}')`)}${nivelDetalle?filasDetalleCuenta(cat,gastosNoOp):''}</div>`).join(''):(gastosReclamo.length?'':`<div class="contable-row" style="color:var(--text3)"><span>Sin gastos no operativos (soltá acá una cuenta para moverla)</span><span>$0.00</span></div>`)}
       </div>
       <div class="contable-row subtotal"><span>Total gastos no operativos</span><span>(${fmtD(totNoOp+totReclamo)})</span></div>
       <div class="contable-row total" style="background:${utilNeta>=0?'var(--green-light)':'var(--red-light)'};border-radius:6px;padding:10px 12px">
