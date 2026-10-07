@@ -867,6 +867,10 @@ body.no-delete .confirmDelete{display:none!important}
       <button class="btn" onclick="renderChequeoFisico()"><i class="ti ti-refresh"></i>Actualizar</button>
     </div>
   </div>
+  <div class="nicauto-encabezado" style="text-align:center;margin-bottom:1rem;padding:.5rem 1rem .75rem;border-bottom:3px solid var(--blue)">
+    <div style="font-size:26px;font-weight:800;letter-spacing:.08em;color:var(--blue);line-height:1.2">NICAUTO</div>
+    <div style="font-size:15px;font-weight:700;margin-top:2px">Chequeo Físico de Inventario</div>
+  </div>
   <p style="font-size:12px;color:var(--text2);margin-bottom:1rem"><i class="ti ti-info-circle"></i> Marcá cada casilla mientras revisás el carro en físico. Cada check queda guardado con quién lo hizo y cuándo.</p>
 
   <div id="cf-resumen-propios" style="margin-bottom:1rem"></div>
@@ -5327,6 +5331,7 @@ function updateChatBadge(){
 // Avisa en el ícono de RRHH (y en la pestaña Permisos) si hay solicitudes pendientes de
 // autorizar — solo relevante para quienes pueden autorizar (Edwin, Julio Mendoza, Gisselle).
 function updatePermisosBadge(){
+  try{updateTallerColaBadge();}catch(e){}
   const puedeAutorizar=MODO==='admin'||MODO==='gerente1'||MODO==='gerente2';
   const pendientes=puedeAutorizar?(contData.permisos||[]).filter(p=>p.estado==='Pendiente').length:0;
   const btn=document.getElementById('nb-rrhh');
@@ -6584,6 +6589,63 @@ function renderCalendarioLP(){
 }
 // Cuadro de Vehículos Reservados junto al calendario: marca/modelo, estado, monto de
 // cierre de venta y vendedor — solo lectura, clic abre el desglose completo de anticipos.
+// Datos del cuadro de Reservados, en un solo lugar para pantalla, impresión y Excel.
+function datosReservadosLP(){
+  const propios=vehiculos.filter(v=>v.estado==='Reservado').map(v=>({...v,_origen:'propio'}));
+  const consig=(contData.consignacion||[]).filter(v=>v.estado==='Reservado').map(v=>({...v,_origen:'consig'}));
+  return [...propios,...consig].map(v=>{
+    const reservas=v.reservas||[];
+    const principal=reservas[0];
+    const vendedorTxt=principal?principal.vendedor+(reservas.length>1?` (+${reservas.length-1} más)`:''):(v.vendedorreserva||'—');
+    const montoReservado=reservas.reduce((s,r)=>{
+      const adelantos=(r.adelantos&&r.adelantos.length)?r.adelantos:(r.monto?[{monto:r.monto}]:[]);
+      return s+adelantos.reduce((s2,a)=>s2+Number(a.monto||0),0);
+    },0);
+    const cliente=principal?.cliente||principal?.nombreCliente||v.clientereserva||'';
+    return{v,vendedorTxt,montoReservado,montoCierre:Number(v.precio||v.precioA||0),cliente};
+  });
+}
+function imprimirReservadosLP(){
+  const filas=datosReservadosLP();
+  if(!filas.length){alert('No hay vehículos reservados para imprimir.');return;}
+  const total=filas.reduce((s,f)=>s+f.montoReservado,0);
+  const ahora=new Date();
+  const fechaStr=ahora.toLocaleDateString('es-NI');
+  const horaStr=ahora.toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
+  const html=`<!DOCTYPE html><html><head><title>Vehículos Reservados — NICAUTO</title>
+    <style>body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;color:#212529;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    table{border-collapse:collapse;width:100%}
+    td,th{padding:6px 8px;border-bottom:1px solid #DEE2E6;font-size:12px;text-align:left}
+    th{background:#F1F3F5}
+    td.num,th.num{text-align:right}
+    tfoot td{font-weight:800;background:#F1F3F5}
+    .pie{margin-top:1rem;text-align:right;font-size:11px;color:#868E96}
+    @media print{@page{margin:10mm}}
+    </style></head><body>
+    ${encabezadoNicautoHTML('Vehículos Reservados','Al '+fechaStr)}
+    <table><thead><tr><th>#</th><th>Vehículo</th><th>Placa</th><th>Origen</th><th>Cliente</th><th>Vendedor</th><th class="num">Monto cierre</th><th class="num">Monto reservado</th></tr></thead>
+    <tbody>${filas.map((f,i)=>`<tr>
+      <td>${i+1}</td><td><b>${f.v.marca||''} ${f.v.modelo||''}</b> ${f.v.anio||''}</td><td>${f.v.placa||'—'}</td>
+      <td>${f.v._origen==='consig'?'Consignación':'Propio'}</td><td>${f.cliente||'—'}</td><td>${f.vendedorTxt}</td>
+      <td class="num">${f.montoCierre?fmtD(f.montoCierre):'—'}</td><td class="num">${f.montoReservado?fmtD(f.montoReservado):'—'}</td>
+    </tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="7" style="text-align:right">TOTAL RESERVADO:</td><td class="num">${fmtD(total)}</td></tr></tfoot></table>
+    <div class="pie">Impreso el ${fechaStr} a las ${horaStr} por ${getNombreUsuario()}</div>
+  </body></html>`;
+  const win=window.open('','_blank');
+  if(!win){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win.document.open();win.document.write(html);win.document.close();
+  win.onload=()=>{win.focus();win.print();};
+}
+async function exportExcelReservadosLP(){
+  const filas=datosReservadosLP();
+  if(!filas.length){alert('No hay vehículos reservados para exportar.');return;}
+  const rows=[['#','Vehículo','Placa','Origen','Cliente','Vendedor','Monto cierre (USD)','Monto reservado (USD)']];
+  filas.forEach((f,i)=>rows.push([i+1,`${f.v.marca||''} ${f.v.modelo||''} ${f.v.anio||''}`.trim(),f.v.placa||'',
+    f.v._origen==='consig'?'Consignación':'Propio',f.cliente||'',f.vendedorTxt,f.montoCierre||'',f.montoReservado||'']));
+  rows.push(['','','','','','TOTAL RESERVADO','',filas.reduce((s,f)=>s+f.montoReservado,0)]);
+  await exportarExcelConFormato(rows,'reservados_nicauto','Reservados','Vehículos Reservados');
+}
 function renderReservadosBoxLP(){
   const el=document.getElementById('lp-reservados-box');
   if(!el)return;
@@ -6592,7 +6654,12 @@ function renderReservadosBoxLP(){
   const reservados=[...reservadosPropios,...reservadosConsig];
   let totalReservado=0;
   el.innerHTML=`<div class="card">
-    <div class="card-head"><h3><i class="ti ti-bookmark"></i> Vehículos Reservados (${reservados.length})</h3></div>
+    <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h3><i class="ti ti-bookmark"></i> Vehículos Reservados (${reservados.length})</h3>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="imprimirReservadosLP()" title="Imprimir la lista de reservados"><i class="ti ti-printer"></i>Imprimir</button>
+        <button class="btn btn-sm" onclick="exportExcelReservadosLP()" title="Exportar la lista de reservados a Excel"><i class="ti ti-download"></i>Excel</button>
+      </div>
+    </div>
     <div style="max-height:280px;overflow-y:auto">
       ${reservados.length?`<table class="tbl" style="font-size:12px">
         <thead><tr><th>Vehículo</th><th>Estado</th><th>Monto cierre</th><th>Monto reservado</th><th>Vendedor</th></tr></thead>
@@ -8367,6 +8434,12 @@ function guardarVehiculo(){
   // Numeración automática de recibo de compra (req #9): si es nuevo y no se digitó
   // un recibo manual (solo el Admin puede sobreescribir), se consume el siguiente C####.
   if(esNuevo&&!vals.recibo){vals.recibo=consumirNumeroRecibo('compra');saveOne('contable',{id:'main',...contData});}
+  // Cada carro nuevo entra solo a la lista de espera de Recepción en Taller (Jordan).
+  if(esNuevo&&vals.estado!=='Vendido'){
+    contData.tallerColaRecepcion=contData.tallerColaRecepcion||[];
+    if(!contData.tallerColaRecepcion.some(x=>x.vehiculoId===id))
+      contData.tallerColaRecepcion.push({id:'COLA_'+id,vehiculoId:id,fechaIngreso:hoyLocal(),ingresadoPor:getNombreUsuario()});
+  }
   const i=vehiculos.findIndex(v=>v.id===id);
   const obj={id,...vals};
   obj.numeroControl=esNuevo?siguienteNumeroControl():(vehiculos[i]?.numeroControl||siguienteNumeroControl());
@@ -8392,6 +8465,7 @@ function guardarVehiculo(){
   }
   fotoSlots=[null,null,null];
   closeOv('ov-vehiculo');renderInv();
+  try{updateTallerColaBadge();}catch(e){}
 }
 async function revertirVendido(id){
   if(!confirm('¿Revertir este vehículo de Vendido a Disponible?\n\nEsto NO eliminará la venta registrada — solo cambia el estado del inventario.'))return;
@@ -11458,6 +11532,16 @@ function desgloseRendicionesPendientes(){
   lista.sort((a,b)=>(b.activa-a.activa)||(b.numero-a.numero));
   return lista;
 }
+// ======================== ENCABEZADO NICAUTO (reportes) ========================
+// Título de empresa que va arriba del Balance General, Estado de Resultados y Chequeo Físico
+// (en pantalla y al imprimir). Usa colores con respaldo para que se vea igual en la hoja impresa.
+function encabezadoNicautoHTML(titulo,detalle){
+  return`<div class="nicauto-encabezado" style="text-align:center;margin-bottom:1rem;padding:.5rem 1rem .75rem;border-bottom:3px solid var(--blue,#1971C2)">
+    <div style="font-size:26px;font-weight:800;letter-spacing:.08em;color:var(--blue,#1971C2);line-height:1.2">NICAUTO</div>
+    <div style="font-size:15px;font-weight:700;margin-top:2px;color:var(--text,#212529)">${titulo}</div>
+    ${detalle?`<div style="font-size:12px;color:var(--text2,#495057);margin-top:2px">${detalle}</div>`:''}
+  </div>`;
+}
 function renderBalance(){
   const gastosAdmin=getGastosAdminCatsCompleto();
   const fechaCorte=document.getElementById('balance-fecha-corte')?.value||''; // vacío = acumulado global (sin filtrar)
@@ -11515,6 +11599,7 @@ function renderBalance(){
   const rc=(l,v,cuenta)=>`<div class="contable-row" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirAuxiliarCuenta('${cuenta}','','${fechaCorte}')" title="Ver auxiliar de ${l}"><span>${l} <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i></span><span>${v}</span></div>`;
   const pendRend=pendientesValidarRendicion();
   document.getElementById('cont-balance').innerHTML=`
+  ${encabezadoNicautoHTML('Balance General',fechaCorte?'Al '+fechaCorte:'Acumulado global (sin fecha de corte)')}
   ${pendRend.cantidad?`<div style="background:var(--amber-light);border:1px solid #FFDEAB;border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
     <span style="font-size:13px"><i class="ti ti-alert-triangle" style="color:var(--amber)"></i> Hay <b>${pendRend.cantidad} gasto${pendRend.cantidad===1?'':'s'}</b> de Rendición de Operaciones (≈ ${fmt(pendRend.totalUSD)} USD) que todavía <b>no se han validado y registrado</b> en Contabilidad — no están incluidos en estos totales.</span>
     <button class="btn btn-sm" onclick="showPage('operaciones');showOpsTab('rendicion')" style="color:var(--amber);border-color:var(--amber)">Ir a Rendición de Cuentas</button>
@@ -11648,7 +11733,6 @@ function imprimirEstadoResultado(desde,hasta){
       @media print{@page{margin:10mm}}
     </style>
   </head><body>
-    <div class="titulo-print">Estado de Resultado — Del ${desde} al ${hasta}</div>
     ${cont.innerHTML}
     <div class="fecha-print">Generado desde NICAUTO el ${new Date().toLocaleDateString('es-NI')}</div>
   </body></html>`;
@@ -11998,6 +12082,7 @@ function renderEstado(){
     </div>`;
   };
   document.getElementById('cont-estado').innerHTML=`
+  ${encabezadoNicautoHTML('Estado de Resultados','Del '+desde+' al '+hasta)}
   ${pendientesValidarRendicion().cantidad?(()=>{const p=pendientesValidarRendicion();return`<div style="background:var(--amber-light);border:1px solid #FFDEAB;border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
     <span style="font-size:13px"><i class="ti ti-alert-triangle" style="color:var(--amber)"></i> Hay <b>${p.cantidad} gasto${p.cantidad===1?'':'s'}</b> de Rendición de Operaciones (≈ ${fmt(p.totalUSD)} USD) que todavía <b>no se han validado y registrado</b> en Contabilidad — no están incluidos en estos totales.</span>
     <button class="btn btn-sm" onclick="showPage('operaciones');showOpsTab('rendicion')" style="color:var(--amber);border-color:var(--amber)">Ir a Rendición de Cuentas</button>
@@ -12402,7 +12487,7 @@ function cargarExcelJS(){
 }
 // Genera y descarga un .xlsx con el estilo visual del sistema (encabezado azul NICAUTO,
 // texto blanco en negrita, columnas ajustadas). rows[0] son los encabezados.
-async function exportarExcelConFormato(rows,nombreArchivo,tituloHoja){
+async function exportarExcelConFormato(rows,nombreArchivo,tituloHoja,tituloReporte){
   const ok=await cargarExcelJS();
   if(!ok||!window.ExcelJS){
     // Respaldo: exporta como CSV si no se pudo cargar la librería de Excel con estilos
@@ -12439,7 +12524,22 @@ async function exportarExcelConFormato(rows,nombreArchivo,tituloHoja){
     });
     col.width=Math.min(max+3,40);
   });
-  ws.views=[{state:'frozen',ySplit:1}]; // encabezado fijo al desplazar
+  // Título opcional arriba de la tabla: "NICAUTO" + nombre del reporte + fecha.
+  let filasTitulo=0;
+  if(tituloReporte){
+    const nCols=Math.max(1,(rows[0]||[]).length);
+    ws.spliceRows(1,0,['NICAUTO'],[tituloReporte],['Generado el '+new Date().toLocaleDateString('es-NI')],[]);
+    filasTitulo=4;
+    [1,2,3].forEach(r=>{if(nCols>1)ws.mergeCells(r,1,r,nCols);});
+    const t1=ws.getRow(1).getCell(1);
+    t1.font={bold:true,size:18,color:{argb:'FF1971C2'}};t1.alignment={horizontal:'center',vertical:'middle'};
+    ws.getRow(1).height=28;
+    const t2=ws.getRow(2).getCell(1);
+    t2.font={bold:true,size:13};t2.alignment={horizontal:'center'};
+    const t3=ws.getRow(3).getCell(1);
+    t3.font={size:10,color:{argb:'FF868E96'}};t3.alignment={horizontal:'center'};
+  }
+  ws.views=[{state:'frozen',ySplit:1+filasTitulo}]; // encabezado fijo al desplazar
   const buffer=await wb.xlsx.writeBuffer();
   const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const url=URL.createObjectURL(blob);
@@ -12534,7 +12634,7 @@ async function exportExcelChequeoFisico(){
         (!cfCasillaOk(cf,'verificado')&&cf.noEncontradoJustificacion)?`${cf.noEncontradoJustificacion} (${cf.noEncontradoPor||''}, ${cf.noEncontradoFecha||''})`:'']);
     });
   }
-  await exportarExcelConFormato(rows,'chequeo_fisico_nicauto','Chequeo Físico');
+  await exportarExcelConFormato(rows,'chequeo_fisico_nicauto','Chequeo Físico','Chequeo Físico de Inventario');
 }
 function imprimirChequeoFisico(){
   const q=(document.getElementById('cf-q')?.value||'').toLowerCase();
@@ -12571,7 +12671,7 @@ function imprimirChequeoFisico(){
     .linea-firma{border-top:1.5px solid #212529;width:280px;padding-top:6px;text-align:center;font-size:12px}
     h3{margin:1.5rem 0 .5rem}
     </style></head><body>
-    <div class="titulo">CHEQUEO FÍSICO DE INVENTARIO — NICAUTO</div>
+    ${encabezadoNicautoHTML('Chequeo Físico de Inventario','Fecha: '+fechaStr)}
     <div class="resumen">
       <div><div>🔑 Llaves no encontradas</div><div class="num" style="color:${sinLlave?'#C92A2A':'#2F9E44'}">${sinLlave}</div></div>
       <div><div>🚗 Carros no encontrados</div><div class="num" style="color:${noVerificados?'#C92A2A':'#2F9E44'}">${noVerificados}</div></div>
@@ -16378,6 +16478,85 @@ async function marcarLavadoHecho(origen,id){
   else await saveOne('vehiculos',v);
   renderTaller();
 }
+// ======================== COLA DE RECEPCIÓN DE TALLER ========================
+// Los carros nuevos de Inventario llegan aquí solos y esperan a que Jordan les haga la
+// Recepción. Se ordenan por fecha de compra (el primero que se compró, primero en la lista).
+// Un carro sale de la lista apenas tiene Recepción registrada, si se vende, o si se quita a mano.
+function tallerColaPendientes(){
+  const regs=getTallerRegistros();
+  const conRecepcion=new Set(regs.filter(r=>r.paso==='Recepción').map(r=>r.vehiculoId));
+  return(contData.tallerColaRecepcion||[])
+    .filter(x=>!x.descartado&&!conRecepcion.has(x.vehiculoId))
+    .map(x=>({...x,v:vehiculos.find(v=>v.id===x.vehiculoId)}))
+    .filter(x=>x.v&&x.v.estado!=='Vendido')
+    .sort((a,b)=>((a.v.fechacompra||a.fechaIngreso||'')+a.fechaIngreso).localeCompare((b.v.fechacompra||b.fechaIngreso||'')+b.fechaIngreso));
+}
+function puedeVerColaTaller(){
+  return MODO==='admin'||MODO==='operaciones2'||(safeStorage.getItem('taller_quien_soy')||'')==='Jefe Operativo';
+}
+function renderColaRecepcionTaller(){
+  if(!puedeVerColaTaller())return'';
+  const pend=tallerColaPendientes();
+  if(!pend.length)return'';
+  return`<div class="card" style="margin-bottom:1.5rem;border:2px solid #FAB005">
+    <div class="card-head" style="background:#FFF3BF"><h3 style="color:#8a6100"><i class="ti ti-alert-triangle-filled" style="color:#FAB005"></i> Pendientes de recepcionar (${pend.length})</h3></div>
+    <p style="font-size:12px;color:var(--text2);padding:.5rem 1rem 0;margin:0"><i class="ti ti-info-circle"></i> Carros nuevos de Inventario, en el orden en que se compraron. Revisalos de arriba hacia abajo.</p>
+    <table class="tbl" style="font-size:12px">
+      <thead><tr><th>#</th><th></th><th>Vehículo</th><th>Placa</th><th>Fecha de compra</th><th>Días esperando</th><th></th></tr></thead>
+      <tbody>${pend.map((x,i)=>{
+        const dias=diasDesde(x.v.fechacompra||x.fechaIngreso);
+        return`<tr>
+          <td style="font-weight:700;color:var(--text2);text-align:center">${i+1}</td>
+          <td style="text-align:center"><i class="ti ti-alert-circle-filled" style="color:#FAB005;font-size:18px" title="Pendiente de recepción"></i></td>
+          <td style="font-weight:700">${x.v.marca||''} ${x.v.modelo||''} <span style="color:var(--text3);font-weight:400">${x.v.anio||''}</span></td>
+          <td style="font-family:monospace">${x.v.placa||'—'}</td>
+          <td>${x.v.fechacompra||x.fechaIngreso||'—'}</td>
+          <td>${dias===null?'—':dias+' día'+(dias===1?'':'s')}</td>
+          <td><div class="tbl-actions">
+            <button class="btn btn-sm btn-primary" onclick="recepcionarDesdeCola('${x.vehiculoId}')"><i class="ti ti-clipboard-check"></i> Recepcionar</button>
+            <button class="btn btn-sm" onclick="quitarDeColaTaller('${x.vehiculoId}')" title="Quitar de la lista sin hacer recepción (por ejemplo, si no va a pasar por Taller)"><i class="ti ti-x"></i></button>
+          </div></td>
+        </tr>`;}).join('')}</tbody>
+    </table>
+  </div>`;
+}
+// Llena el formulario de "Registrar avance" con el carro elegido y el paso Recepción.
+function recepcionarDesdeCola(vehiculoId){
+  const manual=document.getElementById('tlr-manual-toggle');
+  if(manual&&manual.checked){manual.checked=false;toggleVehiculoManualTaller();}
+  const sel=document.getElementById('tlr-vehiculo');
+  if(!sel)return;
+  sel.value=vehiculoId;
+  if(sel.value!==vehiculoId){alert('No se encontró este vehículo en la lista de Taller. Tocá Actualizar e intentá de nuevo.');return;}
+  actualizarPasoTaller();
+  const paso=document.getElementById('tlr-paso');
+  if(paso){paso.value='Recepción';toggleRecepcionTaller();}
+  const fecha=document.getElementById('tlr-fecha');
+  if(fecha&&!fecha.value)fecha.value=hoyLocal();
+  sel.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function quitarDeColaTaller(vehiculoId){
+  if(!confirm('¿Quitar este carro de la lista de pendientes de recepción?\n\nNo se borra nada del Inventario, solo deja de aparecer aquí.'))return;
+  const x=(contData.tallerColaRecepcion||[]).find(e=>e.vehiculoId===vehiculoId);
+  if(!x)return;
+  x.descartado=true;x.descartadoPor=getNombreUsuario();x.descartadoFecha=hoyLocal();
+  await saveOne('contable',{id:'main',...contData});
+  renderTaller();
+  updateTallerColaBadge();
+}
+// Ícono amarillo en el botón Taller del menú con la cantidad de carros por recepcionar.
+function updateTallerColaBadge(){
+  const btn=document.getElementById('nb-taller');
+  if(!btn)return;
+  const cant=puedeVerColaTaller()?tallerColaPendientes().length:0;
+  let b=btn.querySelector('.nav-badge-taller');
+  if(cant>0){
+    if(!b){b=document.createElement('span');b.className='nav-badge nav-badge-taller';btn.style.position='relative';btn.appendChild(b);}
+    b.style.background='#FAB005';b.style.color='#212529';
+    b.textContent=cant>9?'9+':cant;
+    b.title=`${cant} carro(s) pendientes de recepción en Taller`;
+  } else if(b)b.remove();
+}
 function renderTaller(){
   const cont=document.getElementById('taller-content');
   if(!cont)return;
@@ -16464,6 +16643,7 @@ function renderTaller(){
       </table>
     </div>`;
   })()}
+  ${renderColaRecepcionTaller()}
   ${renderMiTrabajoTaller(porVehiculoTodo,activosPorVehiculo)}
   <div class="card" style="margin-bottom:1.5rem">
     <div class="card-head"><h3><i class="ti ti-users"></i> Equipo del Taller</h3></div>
@@ -17585,6 +17765,7 @@ async function guardarTallerRegistro(){
   if(!esManual)document.getElementById('tlr-vehiculo').value='';
   else{document.getElementById('tlr-manual-marca').value='';document.getElementById('tlr-manual-modelo').value='';document.getElementById('tlr-manual-anio').value='';document.getElementById('tlr-manual-placa').value='';document.getElementById('tlr-manual-dueno').value='';}
   renderTaller();
+  try{updateTallerColaBadge();}catch(e){}
   alert(`✅ Registrado: ${nombreCorto} — ${paso}${esRecepcion?` (se clasificaron ${pasosAsignados.length} paso(s) para este carro)`:''}`);
 }
 function verHistorialTallerVehiculo(vehiculoId){
