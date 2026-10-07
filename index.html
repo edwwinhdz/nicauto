@@ -1028,6 +1028,7 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab" onclick="showRepTab('marca')">Por marca</button>
     <button class="tab" onclick="showRepTab('gastos')">Gastos</button>
     <button class="tab" onclick="showRepTab('costos')">Costos vehículos</button>
+    <button class="tab" onclick="showRepTab('reparaciones')"><i class="ti ti-tool" style="font-size:13px"></i> Reparaciones</button>
     <button class="tab" onclick="showRepTab('especifico')">Vehículo específico</button>
     <button class="tab" onclick="showRepTab('ia')">Análisis IA</button>
   </div>
@@ -1035,6 +1036,7 @@ body.no-delete .confirmDelete{display:none!important}
   <div id="rep-marca" class="rep-tab-panel" style="display:none"></div>
   <div id="rep-gastos" class="rep-tab-panel" style="display:none"></div>
   <div id="rep-costos" class="rep-tab-panel" style="display:none"></div>
+  <div id="rep-reparaciones" class="rep-tab-panel" style="display:none"></div>
   <div id="rep-especifico" class="rep-tab-panel" style="display:none">
     <div style="margin-bottom:1rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:8px;flex:1">
@@ -14221,7 +14223,7 @@ function showRepTab(t){
   repTabActivo=t;
   document.querySelectorAll('.rep-tab-panel').forEach(x=>x.style.display='none');
   document.getElementById('rep-'+t).style.display='block';
-  document.querySelectorAll('#page-reportes .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['vendidos','marca','gastos','costos','especifico','ia'][i]===t));
+  document.querySelectorAll('#page-reportes .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['vendidos','marca','gastos','costos','reparaciones','especifico','ia'][i]===t));
   if(t==='especifico'){
     const sel=document.getElementById('rep-veh-sel');
     sel.innerHTML='<option value="">-- Seleccionar vehículo --</option>'+vehiculos.map(v=>`<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} (${v.placa})</option>`).join('');
@@ -14246,6 +14248,108 @@ function generarReporte(){
   else if(t==='marca')repMarca();
   else if(t==='gastos')repGastos();
   else if(t==='costos')repCostos();
+  else if(t==='reparaciones')repReparaciones();
+}
+// ======================== REPORTE DE REPARACIONES ========================
+// Lo invertido en reparaciones de los carros, SOLO las reparaciones cuya fecha cae dentro del
+// rango Desde/Hasta de arriba. Agrupado por vehículo, con el comprador, el rango de fechas de
+// sus reparaciones y un subtotal por carro; al final el total general.
+function datosReparacionesRango(){
+  const{d,h}=getRepFechas();
+  const origen=document.getElementById('reprep-origen')?.value||'todos';
+  const comprador=document.getElementById('reprep-comprador')?.value||'';
+  const enRango=f=>f&&(!d||f>=d)&&(!h||f<=h);
+  const lista=[];
+  if(origen!=='consig')vehiculos.forEach(v=>lista.push({v,origen:'Propio',comprador:v.agentecompra||'—'}));
+  if(origen!=='propios')(contData.consignacion||[]).forEach(c=>lista.push({v:c,origen:'Consignación',comprador:c.duenio||c.dueno||c.propietario||'—'}));
+  const grupos=lista.map(x=>{
+    const reps=(x.v.reparaciones||[]).filter(r=>enRango(r.fecha)).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+    const subtotal=reps.reduce((s,r)=>s+Number(r.costo||0),0);
+    return{...x,reps,subtotal,primera:reps[0]?.fecha||'',ultima:reps[reps.length-1]?.fecha||''};
+  }).filter(g=>g.reps.length&&(!comprador||g.comprador===comprador))
+    .sort((a,b)=>(a.primera||'').localeCompare(b.primera||''));
+  const compradores=[...new Set(lista.filter(x=>(x.v.reparaciones||[]).some(r=>enRango(r.fecha))).map(x=>x.comprador))].sort();
+  return{d,h,grupos,total:grupos.reduce((s,g)=>s+g.subtotal,0),compradores,origen,comprador};
+}
+function repReparaciones(){
+  const el=document.getElementById('rep-reparaciones');
+  if(!el)return;
+  const{d,h,grupos,total,compradores,origen,comprador}=datosReparacionesRango();
+  const nRep=grupos.reduce((s,g)=>s+g.reps.length,0);
+  el.innerHTML=`
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+    <label style="font-size:12px">Origen:</label>
+    <select id="reprep-origen" onchange="repReparaciones()" style="width:auto">
+      <option value="todos" ${origen==='todos'?'selected':''}>Todos</option>
+      <option value="propios" ${origen==='propios'?'selected':''}>Solo propios</option>
+      <option value="consig" ${origen==='consig'?'selected':''}>Solo consignación</option>
+    </select>
+    <label style="font-size:12px">Comprador:</label>
+    <select id="reprep-comprador" onchange="repReparaciones()" style="width:auto">
+      <option value="">Todos</option>
+      ${compradores.map(c=>`<option value="${c}" ${comprador===c?'selected':''}>${c}</option>`).join('')}
+    </select>
+    <button class="btn" onclick="imprimirReparacionesRango()"><i class="ti ti-printer"></i>Imprimir</button>
+    <button class="btn" onclick="exportExcelReparacionesRango()"><i class="ti ti-download"></i>Excel</button>
+  </div>
+  <div class="stats-grid" style="margin-bottom:1rem">
+    <div class="stat-card"><div class="stat-label">Total invertido en reparaciones</div><div class="stat-value" style="color:var(--amber)">${fmtD(total)}</div></div>
+    <div class="stat-card"><div class="stat-label">Vehículos reparados</div><div class="stat-value">${grupos.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Reparaciones registradas</div><div class="stat-value">${nRep}</div></div>
+  </div>
+  ${grupos.length?`<div class="card" style="overflow-x:auto">${tablaReparacionesRangoHTML(grupos,total)}</div>`
+    :`<div class="empty" style="padding:2rem"><i class="ti ti-tool"></i><p>No hay reparaciones entre ${d||'el inicio'} y ${h||'hoy'}.</p></div>`}`;
+}
+function tablaReparacionesRangoHTML(grupos,total){
+  return`<table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse">
+    <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Taller</th><th>Pago</th><th>Factura</th><th style="text-align:right">Costo</th></tr></thead>
+    <tbody>${grupos.map(g=>`
+      <tr style="background:#E7F5FF"><td colspan="7" style="padding:8px 10px">
+        <b>${g.v.marca||''} ${g.v.modelo||''} ${g.v.anio||''}</b> — ${g.v.placa||'sin placa'}
+        ${g.origen==='Consignación'?' <span class="badge badge-purple" style="font-size:9px">Consig.</span>':''}
+        <span style="margin-left:12px">${g.origen==='Consignación'?'Dueño':'Comprador'}: <b>${g.comprador}</b></span>
+        <span style="margin-left:12px;color:#495057">Del ${g.primera} al ${g.ultima}</span>
+      </td></tr>
+      ${g.reps.map(r=>`<tr>
+        <td style="white-space:nowrap">${r.fecha||'—'}</td><td>${r.tipo||'—'}</td><td>${r.desc||'—'}</td>
+        <td>${r.taller||'—'}</td><td>${r.pago||'—'}</td><td>${r.factura||'—'}</td>
+        <td style="text-align:right;white-space:nowrap">${fmtD(r.costo)}</td></tr>`).join('')}
+      <tr style="font-weight:700"><td colspan="6" style="text-align:right">Subtotal ${g.v.marca||''} ${g.v.modelo||''}:</td><td style="text-align:right;color:#E67700;white-space:nowrap">${fmtD(g.subtotal)}</td></tr>`).join('')}
+    </tbody>
+    <tfoot><tr style="background:#FFF3BF;font-weight:800"><td colspan="6" style="text-align:right;padding:8px 10px">TOTAL INVERTIDO EN REPARACIONES:</td><td style="text-align:right;white-space:nowrap">${fmtD(total)}</td></tr></tfoot>
+  </table>`;
+}
+function imprimirReparacionesRango(){
+  const{d,h,grupos,total}=datosReparacionesRango();
+  if(!grupos.length){alert('No hay reparaciones en ese rango de fechas.');return;}
+  const ahora=new Date();
+  const html=`<!DOCTYPE html><html><head><title>Reparaciones — NICAUTO</title>
+    <style>body{font-family:Arial,sans-serif;margin:0;padding:1.5rem;color:#212529;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    td,th{padding:5px 8px;border-bottom:1px solid #DEE2E6;font-size:11px;text-align:left}
+    th{background:#F1F3F5}.badge{font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px}
+    .pie{margin-top:1rem;text-align:right;font-size:11px;color:#868E96}
+    @media print{@page{size:landscape;margin:10mm}}</style></head><body>
+    ${encabezadoNicautoHTML('Inversión en Reparaciones','Del '+(d||'inicio')+' al '+(h||'hoy'))}
+    ${tablaReparacionesRangoHTML(grupos,total)}
+    <div class="pie">Impreso el ${ahora.toLocaleDateString('es-NI')} a las ${ahora.toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'})} por ${getNombreUsuario()}</div>
+  </body></html>`;
+  const win=window.open('','_blank');
+  if(!win){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win.document.open();win.document.write(html);win.document.close();
+  win.onload=()=>{win.focus();win.print();};
+}
+async function exportExcelReparacionesRango(){
+  const{d,h,grupos,total}=datosReparacionesRango();
+  if(!grupos.length){alert('No hay reparaciones en ese rango de fechas.');return;}
+  const rows=[['Vehículo','Placa','Origen','Comprador / Dueño','Rango de fechas','Fecha','Tipo','Descripción','Taller','Pago','Factura','Costo (USD)']];
+  grupos.forEach(g=>{
+    const veh=`${g.v.marca||''} ${g.v.modelo||''} ${g.v.anio||''}`.trim();
+    const rango=`${g.primera} al ${g.ultima}`;
+    g.reps.forEach(r=>rows.push([veh,g.v.placa||'',g.origen,g.comprador,rango,r.fecha||'',r.tipo||'',r.desc||'',r.taller||'',r.pago||'',r.factura||'',Number(r.costo||0)]));
+    rows.push(['','','','','','','','','','','Subtotal '+veh,g.subtotal]);
+  });
+  rows.push(['','','','','','','','','','','TOTAL GENERAL',total]);
+  await exportarExcelConFormato(rows,'reparaciones_nicauto','Reparaciones','Inversión en Reparaciones — Del '+(d||'inicio')+' al '+(h||'hoy'));
 }
 function repTable(headers,rows,emptyMsg){
   if(!rows.length)return`<div class="empty" style="padding:2rem"><i class="ti ti-search"></i><p>${emptyMsg}</p></div>`;
@@ -14325,6 +14429,7 @@ function reporteVehEspecifico(){
   </div>`;
 }
 function exportarReporte(){
+  if(repTabActivo==='reparaciones'){exportExcelReparacionesRango();return;}
   const t=repTabActivo;const{d,h,filtrar}=getRepFechas();let rows=[];
   if(t==='vendidos'){
     rows=[['Fecha','Vehículo','Comprador','Vendedor','Precio','Inversión','Comisión','Utilidad','Pago']];
