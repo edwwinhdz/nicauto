@@ -4242,6 +4242,13 @@ async function obtenerFilaRemotaPorId(table,id,intentos=3){
 // (ej. dos vendedores reservando el mismo carro) — se protegen con la misma fusión.
 const TABLAS_CON_FUSION_POR_REGISTRO=['vehiculos','ventas','clientes','vehgerencia','ctrlclientes'];
 async function saveOne(table,obj){
+  // Una pestaña con una versión vieja del sistema NO puede guardar: su código desactualizado
+  // podía pisar y borrar registros que otros acababan de guardar. Primero hay que actualizar.
+  if(window._versionVieja){
+    mostrarAvisoActualizacion();
+    alert('⚠️ Hay una versión nueva del sistema y esta pantalla está desactualizada.\n\nPara proteger los datos, este cambio NO se guardó. Tocá "Actualizar" (o recargá la página) y volvé a hacerlo.');
+    return false;
+  }
   showSaving();
   try{
     setTimeout(respaldarContableSiHaceFalta,4000); // respaldo diario de TODO el sistema — con
@@ -4450,7 +4457,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-05-1900';
+const APP_VERSION='2026-10-08-1530';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -4685,7 +4692,7 @@ async function chequearActualizacionDisponible(){
     if(!resp.ok)return;
     const texto=await resp.text();
     const match=texto.match(/const APP_VERSION='([^']+)'/);
-    if(match&&match[1]&&match[1]!==APP_VERSION)mostrarAvisoActualizacion();
+    if(match&&match[1]&&match[1]!==APP_VERSION){window._versionVieja=true;mostrarAvisoActualizacion();}
   }catch(e){/* si falla (sin internet, etc.) no molesta a nadie, simplemente no avisa esta vez */}
 }
 function mostrarAvisoActualizacion(){
