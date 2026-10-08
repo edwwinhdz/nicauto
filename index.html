@@ -3662,6 +3662,13 @@ let vehiculos=[], clientes=[], ventas=[], bitacora=[], contData={cuentas:[],gast
 let cliTabActivo='todos';
 let saving=false;
 
+// ── Fusión segura de listas grandes (Gastos, Recibos, Compras, Cuentas, Taller) ──────────────
+// Antes, al guardar, la lista de esta sesión REEMPLAZABA completa la del servidor: si la sesión
+// estaba abierta desde antes, borraba sin querer lo que otros habían agregado (así se perdieron
+// los gastos de Registro Directo). Ahora se recuerda qué ids venían del servidor ("base"); al
+// guardar, se respetan los borrados hechos en esta sesión y se conserva todo lo nuevo de otros.
+window._baseListas=window._baseListas||{};
+function setBaseLista(campo,lista){window._baseListas[campo]=new Set((lista||[]).filter(x=>x&&x.id!=null).map(x=>x.id));}
 // Indicador de guardado
 function showSaving(){
   let el=document.getElementById('save-indicator');
@@ -3766,7 +3773,7 @@ async function load(){
     try{
       const gastosSeparado=await obtenerFilaRemotaPorId('contable','gastos_data');
       if(gastosSeparado&&gastosSeparado.gastos){
-        contData.gastos=gastosSeparado.gastos;
+        contData.gastos=gastosSeparado.gastos;setBaseLista('gastos',contData.gastos);
       } else if(contData.gastos&&contData.gastos.length){
         await saveOne('contable',{id:'main',...contData}); // esto ya los separa solos
       } else if(!gastosSeparado){
@@ -3776,25 +3783,25 @@ async function load(){
     // Recibos, Compras y Cuentas: mismo patrón que Gastos.
     try{
       const recibosSeparado=await obtenerFilaRemotaPorId('contable','recibos_data');
-      if(recibosSeparado&&recibosSeparado.recibos){contData.recibos=recibosSeparado.recibos;}
+      if(recibosSeparado&&recibosSeparado.recibos){contData.recibos=recibosSeparado.recibos;setBaseLista('recibos',contData.recibos);}
       else if(contData.recibos&&contData.recibos.length){await saveOne('contable',{id:'main',...contData});}
       else if(!recibosSeparado){fallosCarga.push('Recibos');}
     }catch(e){console.warn('No se pudo cargar los recibos separados:',e);fallosCarga.push('Recibos');}
     try{
       const comprasSeparado=await obtenerFilaRemotaPorId('contable','compras_data');
-      if(comprasSeparado&&comprasSeparado.compras){contData.compras=comprasSeparado.compras;}
+      if(comprasSeparado&&comprasSeparado.compras){contData.compras=comprasSeparado.compras;setBaseLista('compras',contData.compras);}
       else if(contData.compras&&contData.compras.length){await saveOne('contable',{id:'main',...contData});}
       else if(!comprasSeparado){fallosCarga.push('Compras');}
     }catch(e){console.warn('No se pudo cargar las compras separadas:',e);fallosCarga.push('Compras');}
     try{
       const cuentasSeparado=await obtenerFilaRemotaPorId('contable','cuentas_data');
-      if(cuentasSeparado&&cuentasSeparado.cuentas){contData.cuentas=cuentasSeparado.cuentas;}
+      if(cuentasSeparado&&cuentasSeparado.cuentas){contData.cuentas=cuentasSeparado.cuentas;setBaseLista('cuentas',contData.cuentas);}
       else if(contData.cuentas&&contData.cuentas.length){await saveOne('contable',{id:'main',...contData});}
       else if(!cuentasSeparado){fallosCarga.push('Cuentas');}
     }catch(e){console.warn('No se pudo cargar las cuentas separadas:',e);fallosCarga.push('Cuentas');}
     try{
       const tallerSeparado=await obtenerFilaRemotaPorId('contable','taller_data');
-      if(tallerSeparado&&tallerSeparado.tallerRegistros){contData.tallerRegistros=tallerSeparado.tallerRegistros;}
+      if(tallerSeparado&&tallerSeparado.tallerRegistros){contData.tallerRegistros=tallerSeparado.tallerRegistros;setBaseLista('tallerRegistros',contData.tallerRegistros);}
       else if(contData.tallerRegistros&&contData.tallerRegistros.length){await saveOne('contable',{id:'main',...contData});}
       else if(!tallerSeparado){fallosCarga.push('Taller');}
     }catch(e){console.warn('No se pudo cargar Taller separado:',e);fallosCarga.push('Taller');}
@@ -4198,6 +4205,7 @@ async function restaurarRespaldoContable(idRespaldo){
       if(idSep==='chequeo_historial')contData.historialChequeoFisico=filaBackup.historialChequeoFisico;
       if(idSep==='rendicion_historial')contData.rendicionHistorial=filaBackup.rendicionHistorial;
       if(idSep==='taller_data')contData.tallerRegistros=filaBackup.tallerRegistros;
+      if(campo&&contData[campo])setBaseLista(campo,contData[campo]);
       restaurados+=backupLen-actualLen;
     }
   }
@@ -4288,7 +4296,23 @@ async function saveOne(table,obj){
             return;
           }
         }
-        await guardarFilaSeparada(idFila,{[campo]:listaLocal});
+        // Fusión de 3 vías: se conservan los registros que OTRA sesión agregó al servidor y
+        // esta sesión no conoce; solo se quitan los que esta sesión sí conocía y borró.
+        let listaFinal=listaLocal;
+        if(['gastos','recibos','compras','cuentas','tallerRegistros'].includes(campo)){
+          const base=window._baseListas[campo];
+          const remotoActual=await obtenerFilaRemotaPorId('contable',idFila);
+          const listaRemota=(remotoActual&&remotoActual[campo])||[];
+          const idsLocales=new Set(listaLocal.filter(x=>x&&x.id!=null).map(x=>x.id));
+          const extras=listaRemota.filter(x=>x&&x.id!=null&&!idsLocales.has(x.id)&&!(base&&base.has(x.id)));
+          if(extras.length){
+            console.warn(`🛟 Se conservaron ${extras.length} registro(s) de '${campo}' que otra sesión había agregado.`);
+            listaFinal=[...listaLocal,...extras];
+            contData[campo]=listaFinal;
+          }
+        }
+        const ok=await guardarFilaSeparada(idFila,{[campo]:listaFinal});
+        if(ok)setBaseLista(campo,listaFinal);
       };
       // Papelera de Borrados: mismo caso — un registro por cada vehículo/venta/consignación
       // borrado, que se consulta casi nunca pero se guarda seguido. A diferencia de los otros
@@ -5292,7 +5316,7 @@ async function realtimeSync(){
       const gastosRow=await obtenerFilaRemotaPorId('contable','gastos_data');
       const newGastosHash=gastosRow?.gastos?gastosRow.gastos.length+'_'+JSON.stringify(gastosRow.gastos).length:'0';
       if(newGastosHash!==lastGastosHash&&lastGastosHash!==''){
-        contData.gastos=gastosRow?.gastos||contData.gastos;
+        contData.gastos=gastosRow?.gastos||contData.gastos;setBaseLista('gastos',contData.gastos);
         lastGastosHash=newGastosHash;
         const pg=document.querySelector('.page.active')?.id;
         if(pg==='page-contable')showContTab(contTab);
