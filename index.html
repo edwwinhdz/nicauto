@@ -3838,7 +3838,23 @@ function mergeContableArrays(remoto,local){
     // respeta siempre la versión local completa — así, eliminar un elemento individual
     // (una reparación, una reserva) funciona de verdad y no "revive" al combinarse con el
     // servidor, en vez de solo funcionar cuando se vacía la lista entera.
-    const LISTAS_SIEMPRE_LOCAL=['rendicionMovs','reparaciones','reservas','fotos','cuentasPersonalizadas','consignacion','ordenesServicio','baseDatosComprasReferencia','tallerRegistros','proveedoresTaller','registroDirectoGastos','fondosJM','fondosGO','auxiliares'];
+    // Consignación: antes la sesión que guardaba pisaba la lista completa del servidor, y si
+    // esa sesión estaba abierta desde antes, borraba sin querer los carros que otro acababa de
+    // ingresar (así se perdió el Elantra 2017 de Carlos Reyes). Ahora se combinan por id y solo
+    // se quitan los que alguien borró de verdad (lista consignacionBorrados).
+    if(clave==='consignacion'&&Array.isArray(valLocal)){
+      // Si el mismo id aparece en ambos lados, manda el local (puede venir marcado como restaurado).
+      const mapaB=new Map();
+      [...(remoto.consignacionBorrados||[]),...(local.consignacionBorrados||[])].forEach(b=>{if(b&&b.id!=null)mapaB.set(b.id,b);});
+      const borrados=new Set([...mapaB.values()].filter(b=>!b.restaurado).map(b=>b.id));
+      const restaurados=new Set();
+      const mapa=new Map();
+      (Array.isArray(valRemoto)?valRemoto:[]).forEach(it=>{if(it&&it.id!=null)mapa.set(it.id,it);});
+      valLocal.forEach(it=>{if(it&&it.id!=null)mapa.set(it.id,it);});
+      resultado[clave]=[...mapa.values()].filter(it=>!borrados.has(it.id)||restaurados.has(it.id));
+      return;
+    }
+    const LISTAS_SIEMPRE_LOCAL=['rendicionMovs','reparaciones','reservas','fotos','cuentasPersonalizadas','ordenesServicio','baseDatosComprasReferencia','tallerRegistros','proveedoresTaller','registroDirectoGastos','fondosJM','fondosGO','auxiliares'];
     if(LISTAS_SIEMPRE_LOCAL.includes(clave)&&Array.isArray(valLocal)){
       // PROTECCIÓN CONTRA SOBRESCRITURA VACÍA: si el servidor ya tiene datos reales acá y la
       // sesión local está vacía (típicamente porque esa carga falló), NUNCA se sobrescribe con
@@ -8537,6 +8553,9 @@ async function restaurarDesdePapelera(i){
     if(!contData.consignacion.find(c=>c.id===p.datos.id)){
       contData.consignacion.push(p.datos);
     }
+    contData.consignacionBorrados=contData.consignacionBorrados||[];
+    const tb=contData.consignacionBorrados.find(b=>b.id===p.datos.id);
+    if(tb)tb.restaurado=true;
   }
   contData.papeleraBorrados=(contData.papeleraBorrados||[]).filter((x,idx)=>idx!==i);
   await saveOne('contable',{id:'main',...contData});
@@ -19858,6 +19877,9 @@ async function delConsig(id){
   const c=(contData.consignacion||[]).find(x=>x.id===id);
   if(c)registrarBorrado('consignacion',c,`${c.marca||''} ${c.modelo||''} ${c.anio||''} — ${c.placa||'sin placa'} (Consignación de ${c.dueno||c.propietario||'—'})`);
   contData.consignacion=(contData.consignacion||[]).filter(x=>x.id!==id);
+  contData.consignacionBorrados=contData.consignacionBorrados||[];
+  contData.consignacionBorrados=contData.consignacionBorrados.filter(b=>b.id!==id);
+  contData.consignacionBorrados.push({id,fecha:hoyLocal(),por:getNombreUsuario()});
   await saveOne('contable',{id:'main',...contData});renderConsig();
 }
 function exportExcelConsig(){
