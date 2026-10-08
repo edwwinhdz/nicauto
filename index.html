@@ -3691,6 +3691,7 @@ async function cargarPoliticasDocs(){
     if(!r.ok){console.error('cargarPoliticasDocs: respuesta no-OK',r.status);return false;}
     const rows=await r.json();
     politicasDocsData=rows[0]?.data?.documentos||[];
+    if(politicasDocsData.length&&contData.politicasManuales)delete contData.politicasManuales;
     // Migración: si hay documentos guardados en la ubicación VIEJA (adentro del bloque
     // principal, de antes de este cambio) y todavía no se movieron, se pasan acá una sola vez.
     if(!politicasDocsData.length&&contData.politicasManuales&&contData.politicasManuales.length){
@@ -4316,6 +4317,9 @@ async function saveOne(table,obj){
       delete objSinHistorial.compras;
       delete objSinHistorial.cuentas;
       delete objSinHistorial.tallerRegistros;
+      // Copia vieja de los documentos de Políticas (ya viven en su propia fila 'politicas_docs').
+      // Pesaba 2.5 MB y viajaba en CADA guardado, volviendo todo lento hasta dar error.
+      delete objSinHistorial.politicasManuales;
       obj=objSinHistorial;
     }
     if(table==='contable'){
@@ -4331,7 +4335,7 @@ async function saveOne(table,obj){
         intentos++;
       }
       if(remoto){
-        ['rendicionHistorial','historialChequeoFisico','papeleraBorrados','gastos','recibos','compras','cuentas','tallerRegistros'].forEach(k=>{if(remoto[k])delete remoto[k];}); // ya viven aparte
+        ['rendicionHistorial','historialChequeoFisico','papeleraBorrados','gastos','recibos','compras','cuentas','tallerRegistros','politicasManuales'].forEach(k=>{if(remoto[k])delete remoto[k];}); // ya viven aparte
         window._bloqueoVacioDetectado=null;
         const fusionado=mergeContableArrays(remoto,obj);
         if(window._bloqueoVacioDetectado){
