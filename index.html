@@ -15561,7 +15561,8 @@ async function reiniciarCashInHand(personaKey){
   await saveOne('contable',{id:'main',...contData});
   renderAuxiliares();
 }
-function renderAuxiliares(){
+// Versión anterior de Cash in Hand (por persona). Ya no se muestra; se reemplazó por la Caja Diaria.
+function renderAuxiliaresAnterior(){
   const el=document.getElementById('cont-auxiliares');
   if(!el)return;
   const personas=[
@@ -15731,6 +15732,326 @@ function imprimirMovAux(personaKey,nombre){
   win.document.open();
   win.document.write('<!DOCTYPE html><html><head><title>Cash in Hand</title><style>body{margin:0;padding:1rem;}@media print{body{margin:0;}}</style></head><body>'+html+'</body></html>');
   win.document.close();win.onload=()=>{win.focus();win.print();};
+}
+
+// ======================== CAJA DIARIA (reemplaza Cash in Hand) ========================
+// Hoja de caja del día con el formato de Edwin: Saldo anterior, Ingresos (cada venta y reserva
+// entra SOLA con recibo, cliente y forma de pago), Egresos / Salidas, Saldo final, y un CIERRE
+// por día que queda guardado en un historial para volver a imprimirlo.
+// Se llevan dos saldos de efectivo: "Caja fuerte" y "Cash Julio M" (en caja de Don Julio).
+// Todo se guarda en listas con id (se fusionan entre usuarios sin pisarse); lo borrado se
+// marca con anulado:true en vez de quitarse, para que no "reviva" al fusionar.
+const CD_COLS=[
+  {k:'cajafuerte',t:'CASH Caja fuerte',g:'cash'},
+  {k:'ckgerencia',t:'Ck Gerencia Julio M',g:'cash'},
+  {k:'cashjulio',t:'Cash Julio M',g:'cash'},
+  {k:'bacgisselle',t:'BAC Gisselle',g:'cash'},
+  {k:'canje',t:'Canje-Carro',g:'cash'},
+  {k:'lafise',t:'La Fise',g:'banco',sub:'D.Julio'},
+  {k:'bac',t:'BAC',g:'banco',sub:'D.Julio'},
+  {k:'ficohsa',t:'Ficohsa',g:'banco',sub:'D.Julio'},
+  {k:'banpro',t:'Banpro-Norvin',g:'banco',sub:''},
+  {k:'credex',t:'Credex',g:'banco',sub:'',opcional:true},
+  {k:'sinbanco',t:'Banco s/asignar',g:'banco',sub:'',opcional:true},
+  // Ventas financiadas: el banco todavía no ha depositado, queda como Cuenta por cobrar a ese banco.
+  {k:'cxc',t:'Cuenta por cobrar',g:'cxc'}
+];
+const CD_BANCOS=['BAC','Credex','Ficohsa','La Fise','Banpro'];
+const CD_BANCO_COL={'BAC':'bac','La Fise':'lafise','Ficohsa':'ficohsa','Banpro':'banpro','Credex':'credex'};
+let cdFecha=null;
+
+function cdNombrePersona(id){const c=clientes.find(x=>x.id===id);return c?c.nombre:'';}
+function cdVehiculoTxt(vid){
+  if(!vid)return'';
+  let v=null;
+  try{v=buscarVehiculoOConsig(vid);}catch(e){}
+  if(!v){try{v=buscarVehiculoPropioOGer(vid);}catch(e){}}
+  if(!v&&String(vid).startsWith('CONSIG_'))v=(contData.consignacion||[]).find(x=>x.id===vid.replace('CONSIG_',''));
+  return v?`${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.placa?' — '+v.placa:''}`.trim():'';
+}
+function cdAjuste(key){return(contData.cajaDiariaAjustes||[]).find(a=>a.id===key);}
+
+// Líneas automáticas del día, sacadas de Ventas (completadas) y Reservas (anticipos).
+function cdLineasAuto(fecha){
+  const lineas=[];
+  (ventas||[]).filter(v=>v.fecha===fecha).forEach(v=>{
+    const base={fecha,vendedor:cdNombrePersona(v.vendedorId),cliente:v.nombreFactura||cdNombrePersona(v.compradorId)||'',
+      vehiculo:cdVehiculoTxt(v.vehiculoId),recibo:v.recibo||'',auto:true,ventaId:v.id};
+    if(v.estado==='Completada'){
+      const cash=Number(v.cash||0),banc=Number(v.bancario||0),canje=Number(v.canjeValor||0);
+      if(cash>0)lineas.push({...base,key:'V_'+v.id+'_cash',forma:'Efectivo',col:'cajafuerte',monto:cash,tipoLinea:'Venta'});
+      if(banc>0){
+        const financiado=v.bancarioTipo!=='transferencia';
+        lineas.push({...base,key:'V_'+v.id+'_banco',recibo:v.reciboBanco||v.recibo||'',
+          forma:financiado?'Financiamiento':'Transferencia'+(v.banco?' '+v.banco:''),
+          col:financiado?'cxc':(CD_BANCO_COL[v.banco]||'sinbanco'),banco:v.banco||'',monto:banc,tipoLinea:'Venta'});
+      }
+      if(canje>0)lineas.push({...base,key:'V_'+v.id+'_canje',forma:'Canje'+(v.canjeDesc?': '+v.canjeDesc:''),col:'canje',monto:canje,tipoLinea:'Venta'});
+    } else if(v.estado==='Pendiente'&&Number(v.anticipo||0)>0){
+      const pago=v.pago||'Efectivo';
+      lineas.push({...base,key:'R_'+v.id,forma:'Reserva — '+pago,tipoLinea:'Reserva',
+        col:pago==='Efectivo'?'cajafuerte':(CD_BANCO_COL[v.banco]||'sinbanco'),monto:Number(v.anticipo)});
+    }
+  });
+  // Ajustes hechos a mano (columna donde cayó el dinero, quién lo recibió, o línea quitada)
+  return lineas.map(l=>{const a=cdAjuste(l.key);return a?{...l,col:a.col||l.col,recibe:a.recibe||'',banco:a.banco!==undefined?a.banco:l.banco,oculta:!!a.oculta}:l;});
+}
+function cdMovsManual(fecha,tipo){
+  return(contData.cajaDiariaMovs||[]).filter(m=>m.fecha===fecha&&m.tipo===tipo&&!m.anulado);
+}
+function cdCierres(){return(contData.cajaDiariaCierres||[]).filter(c=>!c.anulado).sort((a,b)=>a.fecha.localeCompare(b.fecha));}
+function cdCierreDe(fecha){return cdCierres().find(c=>c.fecha===fecha);}
+function cdSaldoAnterior(fecha){
+  const prev=cdCierres().filter(c=>c.fecha<fecha).pop();
+  if(prev)return{cajafuerte:prev.saldoFinal.cajafuerte,cashjulio:prev.saldoFinal.cashjulio,desde:'Cierre del '+prev.fecha};
+  const ini=(contData.cajaDiariaSaldoInicial||[]).find(x=>x.id==='inicial')||{};
+  return{cajafuerte:Number(ini.cajafuerte||0),cashjulio:Number(ini.cashjulio||0),desde:'Saldo inicial',editable:true};
+}
+// Arma la hoja completa de un día (en vivo, o la foto guardada si ya está cerrado)
+function cdCalcular(fecha){
+  const cierre=cdCierreDe(fecha);
+  if(cierre)return{...cierre,cerrado:true};
+  const saldoAnt=cdSaldoAnterior(fecha);
+  const ingresos=[...cdLineasAuto(fecha).filter(l=>!l.oculta),...cdMovsManual(fecha,'ingreso').map(m=>({...m,key:m.id,manual:true}))];
+  const egresos=cdMovsManual(fecha,'egreso').map(m=>({...m,key:m.id,manual:true}));
+  const tot={};CD_COLS.forEach(c=>tot[c.k]=ingresos.filter(l=>l.col===c.k).reduce((s,l)=>s+Number(l.monto||0),0));
+  const totalIngresos=Object.values(tot).reduce((s,n)=>s+n,0);
+  const salidas={cajafuerte:egresos.filter(e=>(e.col||'cajafuerte')==='cajafuerte').reduce((s,e)=>s+Number(e.monto||0),0),
+                 cashjulio:egresos.filter(e=>e.col==='cashjulio').reduce((s,e)=>s+Number(e.monto||0),0)};
+  const disponible={cajafuerte:saldoAnt.cajafuerte+tot.cajafuerte,cashjulio:saldoAnt.cashjulio+tot.cashjulio};
+  const saldoFinal={cajafuerte:disponible.cajafuerte-salidas.cajafuerte,cashjulio:disponible.cashjulio-salidas.cashjulio};
+  return{fecha,saldoAnterior:saldoAnt,ingresos,egresos,tot,totalIngresos,salidas,disponible,saldoFinal,cerrado:false};
+}
+function cdColsVisibles(h){return CD_COLS.filter(c=>!c.opcional||(h.tot&&h.tot[c.k]));}
+
+// Tabla de la hoja (se usa en pantalla y al imprimir)
+function cdHojaHTML(h,enPantalla){
+  const cols=cdColsVisibles(h);
+  const nCash=cols.filter(c=>c.g==='cash').length,nBanco=cols.filter(c=>c.g==='banco').length,nCxc=cols.filter(c=>c.g==='cxc').length;
+  const f=n=>n?fmtD(n):'—';
+  const amarillo='background:#FFF3BF;font-weight:700';
+  const acciones=l=>enPantalla&&!h.cerrado?`<td style="white-space:nowrap">
+      <button class="btn btn-sm" onclick="cdEditarLinea('${l.key}',${l.manual?'true':'false'})" title="Editar"><i class="ti ti-edit"></i></button>
+      <button class="btn btn-sm btn-danger" onclick="cdQuitarLinea('${l.key}',${l.manual?'true':'false'})" title="Quitar de esta hoja"><i class="ti ti-x"></i></button></td>`:(enPantalla?'<td></td>':'');
+  return`
+  <table class="cd-tbl" style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead>
+      <tr><th colspan="7" style="border:none"></th>
+        <th colspan="${nCash}" style="background:#D0EBFF;text-align:center">PARTE CASH</th>
+        <th colspan="${nBanco}" style="background:#91A7FF;color:#fff;text-align:center">PARTE BANCARIA</th>
+        ${nCxc?`<th colspan="${nCxc}" style="background:#FFD8A8;text-align:center">FINANCIADO</th>`:''}<th></th>${enPantalla?'<th></th>':''}</tr>
+      <tr style="background:#E9ECEF">
+        <th>Fecha</th><th>Vendedor</th><th>Nombre Cliente</th><th>Vehículo</th><th>Recibe</th><th>No. Recibo</th><th style="text-align:right">Monto recibo</th>
+        ${cols.map(c=>`<th style="text-align:right">${c.sub?`<span style="font-weight:400;font-size:9px">${c.sub}</span><br>`:''}${c.t}</th>`).join('')}
+        <th style="text-align:right">TOTAL</th>${enPantalla?'<th></th>':''}
+      </tr>
+    </thead>
+    <tbody>
+      ${h.ingresos.length?h.ingresos.map(l=>`<tr>
+        <td>${l.fecha}</td><td>${l.vendedor||''}</td><td>${l.cliente||''}</td>
+        <td>${l.vehiculo||l.desc||''}${l.forma?`<br><span style="font-size:9px;color:#868E96">${l.forma}</span>`:''}${l.col==='cxc'?`<br><span style="font-size:9px;font-weight:700;color:${l.banco?'#E67700':'#C92A2A'}">Banco: ${l.banco||'sin asignar'}</span>`:''}</td>
+        <td>${l.recibe||''}</td><td>${l.recibo||''}</td><td style="text-align:right">${f(Number(l.monto))}</td>
+        ${cols.map(c=>`<td style="text-align:right">${l.col===c.k?f(Number(l.monto))+(c.k==='cxc'&&l.banco?`<br><span style="font-size:9px">${l.banco}</span>`:''):''}</td>`).join('')}
+        <td style="text-align:right;font-weight:700">${f(Number(l.monto))}</td>${acciones(l)}
+      </tr>`).join(''):`<tr><td colspan="${8+cols.length}" style="text-align:center;color:#868E96;padding:12px">Sin ingresos este día</td>${enPantalla?'<td></td>':''}</tr>`}
+      <tr style="${amarillo}"><td colspan="6">TOTAL</td><td style="text-align:right">${f(h.totalIngresos)}</td>
+        ${cols.map(c=>`<td style="text-align:right">${f(h.tot[c.k])}</td>`).join('')}
+        <td style="text-align:right">${f(h.totalIngresos)}</td>${enPantalla?'<td></td>':''}</tr>
+    </tbody>
+  </table>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:14px">
+    <tr><td style="width:60%;font-weight:700">TOTAL INGRESOS DE HOY + SALDO ANTERIOR</td>
+      <td style="${amarillo};text-align:right;padding:4px 8px">Caja fuerte: ${fmtD(h.disponible.cajafuerte)}</td>
+      <td style="${amarillo};text-align:right;padding:4px 8px">Cash Julio M: ${fmtD(h.disponible.cashjulio)}</td></tr>
+  </table>
+  <div style="margin-top:16px;font-weight:800;background:#E9ECEF;display:inline-block;padding:4px 12px">EGRESOS / SALIDAS</div>
+  <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
+    <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
+    <tbody>${h.egresos.length?h.egresos.map(e=>`<tr>
+      <td>${e.fecha}</td><td>${e.desc||''}</td><td>${e.recibo||''}</td><td>${e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte'}</td>
+      <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
+      :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
+  </table>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px">
+    <tr><td style="width:60%;font-weight:700">TOTAL SALIDAS</td>
+      <td style="${amarillo};text-align:right;padding:4px 8px">Caja fuerte: ${fmtD(h.salidas.cajafuerte)}</td>
+      <td style="${amarillo};text-align:right;padding:4px 8px">Salida de Gerencia: ${fmtD(h.salidas.cashjulio)}</td></tr>
+    <tr><td style="font-weight:800;font-size:14px;padding-top:8px">SALDO FINAL CAJA</td>
+      <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cajafuerte)}</td>
+      <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cashjulio)} <span style="font-weight:400;font-size:10px">en caja Don Julio</span></td></tr>
+  </table>`;
+}
+
+function renderAuxiliares(){
+  const el=document.getElementById('cont-auxiliares');
+  if(!el)return;
+  cdFecha=cdFecha||hoyLocal();
+  const h=cdCalcular(cdFecha);
+  const sa=h.saldoAnterior;
+  const historial=cdCierres().slice().reverse();
+  el.innerHTML=`
+  <style>.cd-tbl th,.cd-tbl td{border:1px solid var(--border);padding:4px 6px;vertical-align:top}</style>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+    <label style="font-size:12px">Día:</label>
+    <input type="date" value="${cdFecha}" onchange="cdFecha=this.value;renderAuxiliares()" style="width:auto">
+    <button class="btn btn-sm" onclick="cdFecha=hoyLocal();renderAuxiliares()">Hoy</button>
+    ${h.cerrado?`<span class="badge badge-green"><i class="ti ti-lock"></i> Día cerrado por ${h.cerradoPor||'—'}</span>`
+      :`<span class="badge badge-amber"><i class="ti ti-lock-open"></i> Día abierto</span>`}
+    <div style="flex:1"></div>
+    ${!h.cerrado?`<button class="btn btn-sm btn-primary" onclick="cdAbrirMov('ingreso')"><i class="ti ti-plus"></i>Ingreso manual</button>
+      <button class="btn btn-sm btn-danger" onclick="cdAbrirMov('egreso')"><i class="ti ti-minus"></i>Salida</button>`:''}
+    <button class="btn btn-sm" onclick="cdImprimir('${cdFecha}')"><i class="ti ti-printer"></i>Imprimir</button>
+    ${!h.cerrado?`<button class="btn btn-sm" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="cdCerrarDia()"><i class="ti ti-lock"></i>Cerrar día</button>`
+      :(MODO==='admin'?`<button class="btn btn-sm" onclick="cdReabrirDia()"><i class="ti ti-lock-open"></i>Reabrir</button>`:'')}
+  </div>
+  <div class="card" style="padding:1rem;overflow-x:auto">
+    ${encabezadoNicautoHTML('CAJA','Día '+cdFecha)}
+    <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;font-size:13px">
+      <b>Saldo anterior</b>
+      <span style="background:#FFF3BF;padding:4px 10px;font-weight:700">Caja fuerte: ${fmtD(sa.cajafuerte)}</span>
+      <span style="background:#FFF3BF;padding:4px 10px;font-weight:700">Cash Julio M: ${fmtD(sa.cashjulio)}</span>
+      <span style="font-size:11px;color:var(--text2)">(${sa.desde||''})</span>
+      ${sa.editable&&!h.cerrado&&MODO==='admin'?`<button class="btn btn-sm" onclick="cdEditarSaldoInicial()"><i class="ti ti-edit"></i>Saldo inicial</button>`:''}
+    </div>
+    ${cdHojaHTML(h,true)}
+    <p style="font-size:11px;color:var(--text2);margin-top:1rem"><i class="ti ti-info-circle"></i> Las ventas y reservas del día entran solas. Con <i class="ti ti-edit"></i> podés cambiar en qué columna cayó el dinero o quién lo recibió. Al cerrar el día, el saldo final pasa a ser el saldo anterior del día siguiente.</p>
+  </div>
+  <div class="card" style="margin-top:1.5rem">
+    <div class="card-head"><h3><i class="ti ti-history"></i> Historial de cierres (${historial.length})</h3></div>
+    ${historial.length?`<table class="tbl" style="font-size:12px"><thead><tr><th>Día</th><th>Ingresos</th><th>Salidas caja fuerte</th><th>Saldo final caja fuerte</th><th>Saldo final Cash Julio M</th><th>Cerrado por</th><th></th></tr></thead>
+      <tbody>${historial.map(c=>`<tr>
+        <td style="font-weight:700">${c.fecha}</td><td>${fmtD(c.totalIngresos)}</td><td>${fmtD(c.salidas.cajafuerte)}</td>
+        <td style="font-weight:700">${fmtD(c.saldoFinal.cajafuerte)}</td><td>${fmtD(c.saldoFinal.cashjulio)}</td>
+        <td>${c.cerradoPor||''}<br><span style="font-size:10px;color:var(--text3)">${c.cerradoHora||''}</span></td>
+        <td><div class="tbl-actions"><button class="btn btn-sm" onclick="cdFecha='${c.fecha}';renderAuxiliares();window.scrollTo(0,0)" title="Ver"><i class="ti ti-eye"></i></button>
+          <button class="btn btn-sm" onclick="cdImprimir('${c.fecha}')" title="Imprimir"><i class="ti ti-printer"></i></button></div></td>
+      </tr>`).join('')}</tbody></table>`
+      :`<div class="empty" style="padding:1.5rem"><i class="ti ti-history"></i><p>Todavía no hay días cerrados</p></div>`}
+  </div>`;
+}
+
+// ---- Modal genérico de Caja Diaria ----
+function cdModal(titulo,cuerpo,onGuardar){
+  let ov=document.getElementById('ov-cajadiaria');
+  if(!ov){ov=document.createElement('div');ov.className='overlay';ov.id='ov-cajadiaria';document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="modal" style="max-width:520px">
+    <div class="modal-head"><h3>${titulo}</h3><button class="btn-ghost btn" onclick="closeOv('ov-cajadiaria')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">${cuerpo}</div>
+    <div class="modal-foot"><button class="btn" onclick="closeOv('ov-cajadiaria')">Cancelar</button><button class="btn btn-primary" id="cd-guardar"><i class="ti ti-check"></i>Guardar</button></div>
+  </div>`;
+  document.getElementById('cd-guardar').onclick=onGuardar;
+  openOv('ov-cajadiaria');
+}
+const cdOpcionesCol=(sel,soloEfectivo)=>(soloEfectivo?CD_COLS.filter(c=>c.k==='cajafuerte'||c.k==='cashjulio'):CD_COLS)
+  .map(c=>`<option value="${c.k}" ${c.k===sel?'selected':''}>${c.t}${c.sub?' ('+c.sub+')':''}</option>`).join('');
+const cdVal=id=>(document.getElementById(id)?.value||'').trim();
+async function cdGuardarTodo(){await saveOne('contable',{id:'main',...contData});closeOv('ov-cajadiaria');renderAuxiliares();}
+
+function cdAbrirMov(tipo,editId){
+  const m=editId?(contData.cajaDiariaMovs||[]).find(x=>x.id===editId):null;
+  const esIng=tipo==='ingreso';
+  cdModal(esIng?(m?'Editar ingreso':'Ingreso manual'):(m?'Editar salida':'Salida / Egreso'),`
+    <div class="form-group"><label>Descripción</label><input id="cd-desc" value="${m?.desc||''}" placeholder="${esIng?'Ej. Traslado de fondo Gerencia':'Ej. Compra de Ford Figo 2017 gris'}"></div>
+    ${esIng?`<div class="form-row"><div class="form-group"><label>Vendedor</label><input id="cd-vendedor" value="${m?.vendedor||''}"></div>
+      <div class="form-group"><label>Nombre cliente</label><input id="cd-cliente" value="${m?.cliente||''}"></div></div>
+      <div class="form-group"><label>Recibe</label><input id="cd-recibe" value="${m?.recibe||''}"></div>`:''}
+    <div class="form-row"><div class="form-group"><label>No. Recibo / ROC</label><input id="cd-recibo" value="${m?.recibo||''}"></div>
+      <div class="form-group"><label>Monto (USD $)</label><input id="cd-monto" type="number" step="0.01" value="${m?.monto||''}"></div></div>
+    <div class="form-group"><label>${esIng?'Columna donde entra':'Sale de'}</label><select id="cd-col">${cdOpcionesCol(m?.col||'cajafuerte',!esIng)}</select></div>`,
+  async()=>{
+    const monto=parseFloat(cdVal('cd-monto'));
+    if(!monto||monto<=0){alert('El monto es obligatorio.');return;}
+    if(!cdVal('cd-desc')){alert('La descripción es obligatoria.');return;}
+    contData.cajaDiariaMovs=contData.cajaDiariaMovs||[];
+    const obj={...(m||{}),id:m?.id||('CDM_'+uid()),fecha:m?.fecha||cdFecha,tipo,desc:cdVal('cd-desc'),
+      vendedor:cdVal('cd-vendedor'),cliente:cdVal('cd-cliente'),recibe:cdVal('cd-recibe'),recibo:cdVal('cd-recibo'),
+      monto,col:cdVal('cd-col'),registradoPor:m?.registradoPor||getNombreUsuario()};
+    const i=contData.cajaDiariaMovs.findIndex(x=>x.id===obj.id);
+    if(i>=0)contData.cajaDiariaMovs[i]=obj;else contData.cajaDiariaMovs.push(obj);
+    await cdGuardarTodo();
+  });
+}
+function cdEditarLinea(key,manual){
+  if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m)cdAbrirMov(m.tipo,key);return;}
+  const l=cdLineasAuto(cdFecha).find(x=>x.key===key);if(!l)return;
+  cdModal('Ajustar línea de venta',`
+    <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">${l.cliente||''} — ${l.vehiculo||''}<br>${l.forma||''} · ${fmtD(l.monto)}</p>
+    <div class="form-group"><label>Columna donde cayó el dinero</label><select id="cd-col" onchange="document.getElementById('cd-banco-wrap').style.display=this.value==='cxc'?'block':'none'">${cdOpcionesCol(l.col)}</select></div>
+    <div class="form-group" id="cd-banco-wrap" style="display:${l.col==='cxc'?'block':'none'}"><label>Banco que financia (Cuenta por cobrar)</label>
+      <select id="cd-banco"><option value="">-- Seleccionar --</option>${CD_BANCOS.map(b=>`<option ${b===l.banco?'selected':''}>${b}</option>`).join('')}</select></div>
+    <div class="form-group"><label>Recibe</label><input id="cd-recibe" value="${l.recibe||''}"></div>`,
+  async()=>{
+    contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
+    const a=cdAjuste(key);
+    const nuevo={...(a||{}),id:key,col:cdVal('cd-col'),recibe:cdVal('cd-recibe'),banco:cdVal('cd-banco'),oculta:false};
+    if(a)Object.assign(a,nuevo);else contData.cajaDiariaAjustes.push(nuevo);
+    await cdGuardarTodo();
+  });
+}
+async function cdQuitarLinea(key,manual){
+  if(!confirm(manual?'¿Eliminar este movimiento de la caja?':'¿Quitar esta línea de la hoja de caja?\n\nLa venta NO se borra, solo deja de aparecer aquí.'))return;
+  if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m){m.anulado=true;m.anuladoPor=getNombreUsuario();}}
+  else{
+    contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
+    const a=cdAjuste(key);if(a)a.oculta=true;else contData.cajaDiariaAjustes.push({id:key,oculta:true});
+  }
+  await saveOne('contable',{id:'main',...contData});renderAuxiliares();
+}
+function cdEditarSaldoInicial(){
+  const ini=(contData.cajaDiariaSaldoInicial||[]).find(x=>x.id==='inicial')||{};
+  cdModal('Saldo inicial de caja',`
+    <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">Solo se usa para el primer día. Después, cada día arranca con el saldo final del cierre anterior.</p>
+    <div class="form-row"><div class="form-group"><label>Caja fuerte (USD $)</label><input id="cd-ini-cf" type="number" step="0.01" value="${ini.cajafuerte||''}"></div>
+    <div class="form-group"><label>Cash Julio M (USD $)</label><input id="cd-ini-cj" type="number" step="0.01" value="${ini.cashjulio||''}"></div></div>`,
+  async()=>{
+    contData.cajaDiariaSaldoInicial=[{id:'inicial',cajafuerte:parseFloat(cdVal('cd-ini-cf'))||0,cashjulio:parseFloat(cdVal('cd-ini-cj'))||0,por:getNombreUsuario()}];
+    await cdGuardarTodo();
+  });
+}
+async function cdCerrarDia(){
+  const h=cdCalcular(cdFecha);
+  if(!confirm(`¿Cerrar la caja del ${cdFecha}?\n\nSaldo final Caja fuerte: ${fmtD(h.saldoFinal.cajafuerte)}\nSaldo final Cash Julio M: ${fmtD(h.saldoFinal.cashjulio)}\n\nQueda guardado en el historial y ya no se puede modificar (solo el Administrador puede reabrirlo).`))return;
+  const ahora=new Date();
+  const cierre={id:'CIERRE_'+cdFecha,fecha:cdFecha,saldoAnterior:h.saldoAnterior,ingresos:h.ingresos,egresos:h.egresos,tot:h.tot,
+    totalIngresos:h.totalIngresos,salidas:h.salidas,disponible:h.disponible,saldoFinal:h.saldoFinal,
+    cerradoPor:getNombreUsuario(),cerradoHora:ahora.toLocaleString('es-NI'),anulado:false};
+  contData.cajaDiariaCierres=(contData.cajaDiariaCierres||[]).filter(c=>c.id!==cierre.id);
+  contData.cajaDiariaCierres.push(cierre);
+  await saveOne('contable',{id:'main',...contData});
+  renderAuxiliares();
+  if(confirm('✅ Día cerrado. ¿Querés imprimirlo ahora?'))cdImprimir(cdFecha);
+}
+async function cdReabrirDia(){
+  if(MODO!=='admin'){alert('⛔ Solo el Administrador puede reabrir un día cerrado.');return;}
+  const c=(contData.cajaDiariaCierres||[]).find(x=>x.id==='CIERRE_'+cdFecha);
+  if(!c)return;
+  const posteriores=cdCierres().filter(x=>x.fecha>cdFecha);
+  if(!confirm(`¿Reabrir la caja del ${cdFecha}?`+(posteriores.length?`\n\n⚠️ Hay ${posteriores.length} día(s) cerrado(s) después de este. Sus saldos anteriores NO se recalculan solos: si cambiás algo, reabrí y volvé a cerrar esos días también.`:'')))return;
+  c.anulado=true;c.reabiertoPor=getNombreUsuario();c.reabiertoHora=new Date().toLocaleString('es-NI');
+  await saveOne('contable',{id:'main',...contData});renderAuxiliares();
+}
+function cdImprimir(fecha){
+  const h=cdCalcular(fecha);
+  const sa=h.saldoAnterior;
+  const ahora=new Date();
+  const html=`<!DOCTYPE html><html><head><title>Caja ${fecha} — NICAUTO</title>
+    <style>body{font-family:Arial,sans-serif;margin:0;padding:1rem;color:#212529;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .cd-tbl th,.cd-tbl td{border:1px solid #CED4DA;padding:3px 5px;vertical-align:top}
+    th{font-size:10px}@media print{@page{size:landscape;margin:8mm}}</style></head><body>
+    ${encabezadoNicautoHTML('CAJA','Día '+fecha+(h.cerrado?' — CERRADO por '+(h.cerradoPor||''):' — (día abierto, sin cierre)'))}
+    <div style="font-size:12px;margin-bottom:10px"><b>Saldo anterior:</b>
+      <span style="background:#FFF3BF;padding:3px 8px;font-weight:700;margin-left:8px">Caja fuerte: ${fmtD(sa.cajafuerte)}</span>
+      <span style="background:#FFF3BF;padding:3px 8px;font-weight:700;margin-left:8px">Cash Julio M: ${fmtD(sa.cashjulio)}</span></div>
+    ${cdHojaHTML(h,false)}
+    <div style="display:flex;justify-content:space-around;margin-top:50px;font-size:11px">
+      <div style="text-align:center;border-top:1px solid #000;width:200px;padding-top:4px">Elaborado por</div>
+      <div style="text-align:center;border-top:1px solid #000;width:200px;padding-top:4px">Revisado por</div></div>
+    <div style="margin-top:1rem;text-align:right;font-size:10px;color:#868E96">Impreso el ${ahora.toLocaleDateString('es-NI')} ${ahora.toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'})} por ${getNombreUsuario()}</div>
+  </body></html>`;
+  const win=window.open('','_blank');
+  if(!win){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win.document.open();win.document.write(html);win.document.close();
+  win.onload=()=>{win.focus();win.print();};
 }
 
 // Auto-register aux movement from recibos
