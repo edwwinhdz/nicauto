@@ -1329,7 +1329,8 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-group" id="mcp-mayor-wrap">
       <label>Cuenta Mayor a la que pertenece</label>
-      <select id="mcp-mayor"></select>
+      <select id="mcp-mayor" onchange="alCambiarCuentaPadre()"></select>
+      <p style="font-size:11px;color:var(--text3);margin-top:4px">Podés elegir un grupo (1100, 6000…) o una cuenta específica del catálogo, por ejemplo 1101 — Caja.</p>
     </div>
     <div class="form-group"><label>Saldo (USD $)</label><input id="mcp-saldo" type="number" step="0.01" placeholder="0.00"></div>
     <p style="font-size:11px;color:var(--text3)">Esta cuenta se va a sumar directo a los totales del Balance General o Estado de Resultado según el tipo que elijas. Podés volver a editar el saldo cuando quieras haciendo clic sobre la cuenta.</p>
@@ -5009,7 +5010,7 @@ async function intentarLogin(){
     load().then(()=>{
       try{aplicarCorreccionPizarraInicial();}catch(e){console.error('aplicarCorreccionPizarraInicial error:',e);}
       try{aplicarCorreccionPizarraAgosto2026();}catch(e){console.error('aplicarCorreccionPizarraAgosto2026 error:',e);}
-      if(['admin','coordinador','gerente1','gerente2'].includes(MODO)){showPage('dashboard');renderDash();} else if(['gerencia'].includes(MODO)){showPage('inventario');}
+      if(puedeVerDashboard()){showPage('dashboard');renderDash();} else if(['coordinador'].includes(MODO)){showPage('dashboard');} else if(['gerencia'].includes(MODO)){showPage('inventario');}
       else if(MODO==='vendedor')showPage('listaprecios');
       else if(MODO==='legal')showPage('legal');
       else if(MODO==='compras')showPage('compras');
@@ -5125,6 +5126,9 @@ function aplicarModoAcceso(){
   if(nbRrhh)nbRrhh.style.display='flex';
   const nbPoliticas=document.getElementById('nb-politicas');
   if(nbPoliticas)nbPoliticas.style.display='flex';
+  // Dashboard: solo Edwin (admin), Don Julio (gerente1) y Gisselle (gerente2).
+  const nbDash=document.getElementById('nb-dashboard');
+  if(nbDash&&!puedeVerDashboard())nbDash.style.display='none';
   if(MODO!=='admin'&&MODO!=='coordinador'&&MODO!=='jefecomercial'){
     document.body.classList.add('no-delete');
     window._canDelete=false;
@@ -5469,7 +5473,13 @@ function mostrarNotificacionAprobado(n){
 }
 
 // ======================== PAGES ========================
+function puedeVerDashboard(){return['admin','gerente1','gerente2'].includes(MODO);}
 function showPage(p){
+  if(p==='dashboard'&&!puedeVerDashboard()){
+    // Quien no tiene acceso al Dashboard entra a la primera pantalla que sí tiene visible.
+    const prim=[...document.querySelectorAll('.nav-btn')].find(b=>b.id!=='nb-dashboard'&&b.id&&b.id.startsWith('nb-')&&b.style.display!=='none');
+    p=prim?prim.id.replace('nb-',''):'listaprecios';
+  }
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
   document.getElementById('page-'+p).classList.add('active');
@@ -13826,7 +13836,51 @@ function listaMayoresDisponibles(){
     {codigo:'7000',nombre:'7000 — Gastos No Operativos'}
   ];
   const personalizados=(contData.cuentasPersonalizadas||[]).filter(c=>c.esMayor).map(c=>({codigo:c.codigo,nombre:`${c.codigo} — ${c.nombre}`}));
-  return[...fijos,...personalizados];
+  // Además de los grupos, se puede colgar una subcuenta de CUALQUIER cuenta del catálogo
+  // (ej. 1101 Caja) o de otra cuenta personalizada.
+  const nombresPers=contData.nombresCuentasCatalogo||{};
+  const usados=new Set([...fijos,...personalizados].map(x=>x.codigo));
+  const cuentasCat=(typeof CATALOGO_CUENTAS_LISTA!=='undefined'?CATALOGO_CUENTAS_LISTA:[])
+    .filter(c=>!usados.has(c.code)&&!/^[35]/.test(c.code))
+    .map(c=>({codigo:c.code,nombre:`${c.code} — ${nombresPers[c.code]||c.nombre}`}));
+  const subsPers=(contData.cuentasPersonalizadas||[]).filter(c=>!c.esMayor).map(c=>({codigo:c.codigo,nombre:`${c.codigo} — ${c.nombre}`}));
+  return[...fijos,...personalizados,...cuentasCat,...subsPers].sort((a,b)=>String(a.codigo).localeCompare(String(b.codigo)));
+}
+// Grupo contable (1100, 1200, 2100, 4000, 6000, 7000 o un Mayor personalizado) al que pertenece
+// una cuenta — es lo que usan los cálculos del Balance y del ER, así que una subcuenta de 1101
+// cuenta igual que cualquier otra cuenta de Activos Corrientes.
+function grupoDeCuenta(codigo){
+  const grupos=['1100','1200','2100','4000','6000','7000'];
+  if(grupos.includes(codigo))return codigo;
+  const cp=(contData.cuentasPersonalizadas||[]).find(c=>c.codigo===codigo);
+  if(cp)return cp.esMayor?cp.codigo:(cp.mayor||grupoDeCuenta(cp.cuentaPadre||''));
+  const c=String(codigo||'');
+  if(c.startsWith('11'))return'1100';
+  if(c.startsWith('12'))return'1200';
+  if(c.startsWith('2'))return'2100';
+  if(c.startsWith('4'))return'4000';
+  if(c.startsWith('7'))return'7000';
+  return'6000';
+}
+function tipoSugeridoDeCuenta(codigo){
+  const cp=(contData.cuentasPersonalizadas||[]).find(c=>c.codigo===codigo);
+  if(cp)return cp.tipo;
+  const d=String(codigo||'')[0];
+  return d==='1'?'activo':d==='2'?'pasivo':d==='4'?'ingreso':'gasto';
+}
+// Al elegir la cuenta padre: ajusta el tipo y propone el siguiente código (ej. 1101.01, 1101.02)
+function alCambiarCuentaPadre(){
+  const padre=document.getElementById('mcp-mayor').value;
+  if(!padre)return;
+  document.getElementById('mcp-tipo').value=tipoSugeridoDeCuenta(padre);
+  const codEl=document.getElementById('mcp-codigo');
+  if(codEl.disabled)return;
+  if(!codEl.value||codEl.dataset.auto==='1'){
+    const usados=new Set((contData.cuentasPersonalizadas||[]).map(c=>c.codigo));
+    let n=1,cod;
+    do{cod=padre+'.'+String(n).padStart(2,'0');n++;}while(usados.has(cod));
+    codEl.value=cod;codEl.dataset.auto='1';
+  }
 }
 function toggleMcpMayorPadre(){
   const esSub=document.getElementById('mcp-esmayor').value==='sub';
@@ -13834,7 +13888,7 @@ function toggleMcpMayorPadre(){
   if(esSub){
     const sel=document.getElementById('mcp-mayor');
     const valorActual=sel.value;
-    sel.innerHTML=listaMayoresDisponibles().map(m=>`<option value="${m.codigo}">${m.nombre}</option>`).join('');
+    sel.innerHTML='<option value="">-- Elegir cuenta --</option>'+listaMayoresDisponibles().map(m=>`<option value="${m.codigo}">${m.nombre}</option>`).join('');
     if(valorActual)sel.value=valorActual;
   }
 }
@@ -13849,7 +13903,9 @@ function abrirModalCuentaPersonalizada(codigoExistente){
   document.getElementById('mcp-tipo').value=existente?.tipo||'activo';
   document.getElementById('mcp-esmayor').value=existente?(existente.esMayor?'mayor':'sub'):'sub';
   toggleMcpMayorPadre();
-  document.getElementById('mcp-mayor').value=existente?.mayor||'';
+  document.getElementById('mcp-mayor').value=existente?(existente.cuentaPadre||existente.mayor||''):'';
+  document.getElementById('mcp-codigo').dataset.auto='';
+  if(!existente&&document.getElementById('mcp-esmayor').value==='sub')document.getElementById('mcp-mayor').value='';
   document.getElementById('mcp-saldo').value=existente?.saldo||0;
   document.getElementById('mcp-btn-eliminar').style.display=existente?'inline-flex':'none';
   openOv('ov-cuenta-personalizada');
@@ -13862,18 +13918,22 @@ async function guardarCuentaPersonalizada(){
   const nombre=document.getElementById('mcp-nombre').value.trim();
   const tipo=document.getElementById('mcp-tipo').value;
   const esMayor=document.getElementById('mcp-esmayor').value==='mayor';
-  const mayor=esMayor?'':document.getElementById('mcp-mayor').value;
+  const padreSel=esMayor?'':document.getElementById('mcp-mayor').value;
+  if(!esMayor&&!padreSel){alert('Elegí la cuenta a la que pertenece esta subcuenta.');return;}
+  if(!esMayor&&padreSel===codigo){alert('Una cuenta no puede ser subcuenta de sí misma.');return;}
+  const mayor=esMayor?'':grupoDeCuenta(padreSel);
+  const cuentaPadre=(!esMayor&&padreSel!==mayor)?padreSel:'';
   const saldo=parseFloat(document.getElementById('mcp-saldo').value)||0;
   if(!codigo||!nombre){alert('El código y el nombre son obligatorios.');return;}
   contData.cuentasPersonalizadas=contData.cuentasPersonalizadas||[];
   if(!codigoOriginal&&contData.cuentasPersonalizadas.find(c=>c.codigo===codigo)){alert('Ya existe una cuenta con ese código.');return;}
-  const obj={codigo,nombre,tipo,esMayor,mayor,saldo,creadoPor:getNombreUsuario(),fecha:hoyLocal()};
+  const obj={codigo,nombre,tipo,esMayor,mayor,cuentaPadre,saldo,creadoPor:getNombreUsuario(),fecha:hoyLocal()};
   const idx=contData.cuentasPersonalizadas.findIndex(c=>c.codigo===(codigoOriginal||codigo));
   if(idx>=0)contData.cuentasPersonalizadas[idx]=obj;else contData.cuentasPersonalizadas.push(obj);
   await saveOne('contable',{id:'main',...contData});
   closeOv('ov-cuenta-personalizada');
   renderCatalogo();
-  alert(`✅ ${esMayor?'Cuenta de Mayor':'Subcuenta'} "${nombre}" guardada y ya conectada al ${tipo==='activo'||tipo==='pasivo'?'Balance General':'Estado de Resultado'}.`);
+  alert(`✅ ${esMayor?'Cuenta de Mayor':'Subcuenta'} "${nombre}"${cuentaPadre?' (de la cuenta '+cuentaPadre+')':''} guardada y ya conectada al ${tipo==='activo'||tipo==='pasivo'?'Balance General':'Estado de Resultado'}.`);
 }
 async function eliminarCuentaPersonalizada(){
   if(MODO!=='admin'){alert('⛔ Solo el Administrador puede eliminar cuentas contables.');return;}
@@ -13965,8 +14025,19 @@ function saldoRealCuentaPersonalizada(c){
 }
 // Muestra una cuenta personalizada distinguiendo visualmente si es de Mayor (negrita, sin
 // sangría) o Subcuenta (con sangría y flecha, indicando que pertenece a otra cuenta).
-function filaCuentaPersonalizada(c,color){
-  const sangria=c.esMayor?'':'padding-left:20px;';
+// Subcuentas que cuelgan de una cuenta específica (del catálogo o personalizada).
+function hijasDeCuenta(codigo){return(contData.cuentasPersonalizadas||[]).filter(c=>!c.esMayor&&c.cuentaPadre===codigo);}
+function tienePadreVisible(c){
+  if(!c.cuentaPadre)return false;
+  return(typeof CATALOGO_CUENTAS_LISTA!=='undefined'&&CATALOGO_CUENTAS_LISTA.some(x=>x.code===c.cuentaPadre))
+    ||(contData.cuentasPersonalizadas||[]).some(x=>x.codigo===c.cuentaPadre&&x!==c);
+}
+function filasHijas(codigo,color,nivel){
+  return hijasDeCuenta(codigo).map(h=>filaCuentaPersonalizada(h,color,nivel)).join('');
+}
+function filaCuentaPersonalizada(c,color,nivel){
+  nivel=nivel||1;
+  const sangria=c.esMayor?'':`padding-left:${20*nivel}px;`;
   const prefijo=c.esMayor?'':'↳ ';
   const peso=c.esMayor?'font-weight:700':'';
   // El botón de mover solo aplica a subcuentas de gasto o activo (una cuenta de Mayor no
@@ -13979,7 +14050,7 @@ function filaCuentaPersonalizada(c,color){
     const esCorriente=c.mayor==='1100';
     botonMover=`<i class="ti ti-arrow-${esCorriente?'down':'up'}" style="font-size:11px;color:var(--blue);cursor:pointer;margin-left:6px" title="${esCorriente?'Mover a Activos No Corrientes (1200)':'Mover a Activos Corrientes (1100)'}" onclick="event.stopPropagation();moverCuentaPersonalizadaSeccion('${c.codigo}')"></i>`;
   }
-  return`<div class="cat-item" style="cursor:pointer;${sangria}${peso}" onclick="editarCuentaPersonalizada('${c.codigo}')"><div><span class="cat-code">${c.codigo}</span>${prefijo}${c.nombre} <i class="ti ti-pencil" style="font-size:10px;color:var(--text3)"></i>${botonMover}</div><span class="cat-saldo" style="color:${color}">${fmtD(saldoRealCuentaPersonalizada(c))}</span></div>`;
+  return`<div class="cat-item" style="cursor:pointer;${sangria}${peso}" onclick="editarCuentaPersonalizada('${c.codigo}')"><div><span class="cat-code">${c.codigo}</span>${prefijo}${c.nombre} <i class="ti ti-pencil" style="font-size:10px;color:var(--text3)"></i>${botonMover}</div><span class="cat-saldo" style="color:${color}">${fmtD(saldoRealCuentaPersonalizada(c))}</span></div>`+filasHijas(c.codigo,color,nivel+1);
 }
 // Cambia el Mayor padre de una subcuenta entre las dos secciones posibles de su tipo: gasto
 // (6000 Operativos ⇄ 7000 No Operativos) o activo (1100 Corrientes ⇄ 1200 No Corrientes) — este
@@ -14058,6 +14129,7 @@ function renderCatalogo(){
   // personalizadas sin Mayor 6000/7000 ya se cuentan dentro de totAdmin (más abajo), así que acá
   // solo hace falta sumar aparte las que sí tienen mayor==='6000' — esas antes no se restaban en
   // NINGÚN lado de la Utilidad Operativa (un hueco real, no solo de visualización).
+  const sueltas=c=>!tienePadreVisible(c); // las que tienen cuenta padre se muestran debajo de ella
   const gastosPersOperativos=cuentasPers.filter(c=>c.tipo==='gasto'&&c.mayor!=='7000');
   const gastosPersNoOperativos=cuentasPers.filter(c=>c.tipo==='gasto'&&c.mayor==='7000');
   const totalGastosPersOperativos=cuentasPers.filter(c=>c.tipo==='gasto'&&c.mayor==='6000').reduce((s,c)=>s+saldoRealCuentaPersonalizada(c),0);
@@ -14067,7 +14139,7 @@ function renderCatalogo(){
   const nombresPers=contData.nombresCuentasCatalogo||{};
   const cat=(code,name,val,tipo='activo')=>{
     const nombreFinal=nombresPers[code]||name;
-    return`<div class="cat-item"><div><span class="cat-code">${code}</span>${nombreFinal}${MODO==='admin'?` <i class="ti ti-pencil" style="font-size:10px;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();renombrarCuentaCatalogo('${code}','${nombreFinal.replace(/'/g,"\\'")}')" title="Renombrar esta cuenta"></i>`:''}</div><span class="cat-saldo" style="color:${tipo==='activo'?'var(--green)':tipo==='pasivo'?'var(--red)':tipo==='ingreso'?'var(--blue)':'var(--amber)'}">${fmtD(val)}</span></div>`;
+    return`<div class="cat-item"><div><span class="cat-code">${code}</span>${nombreFinal}${MODO==='admin'?` <i class="ti ti-pencil" style="font-size:10px;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();renombrarCuentaCatalogo('${code}','${nombreFinal.replace(/'/g,"\\'")}')" title="Renombrar esta cuenta"></i>`:''}</div><span class="cat-saldo" style="color:${tipo==='activo'?'var(--green)':tipo==='pasivo'?'var(--red)':tipo==='ingreso'?'var(--blue)':'var(--amber)'}">${fmtD(val)}</span></div>`+filasHijas(code,tipo==='activo'?'var(--green)':tipo==='pasivo'?'var(--red)':tipo==='ingreso'?'var(--blue)':'var(--amber)',1);
   };
 
   const activosPersCorrientes=cuentasPers.filter(c=>c.tipo==='activo'&&c.mayor==='1100');
@@ -14083,12 +14155,12 @@ function renderCatalogo(){
       ${cat('1103','CxC — Clientes',cxc_cli,'activo')}
       ${cat('1104','CxC — Bancos',cxc_ban,'activo')}
       ${cat('1105','CxC — Terceros',cxc_ter,'activo')}
-      ${activosPersCorrientes.map(c=>filaCuentaPersonalizada(c,'var(--green)')).join('')}
+      ${activosPersCorrientes.filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--green)')).join('')}
       <div class="cat-item" style="background:var(--green-light);font-weight:700"><span>Total Activos Corrientes</span><span style="color:var(--green)">${fmtD(saldoCaja+saldoBanco+cxc_cli+cxc_ban+cxc_ter+totalActivosPersCorr)}</span></div>
       <div class="cat-group-title" style="padding-left:28px;font-size:10px">1200 — Activos No Corrientes</div>
       ${cat('1201','Inventario de vehículos',valorInv,'activo')}
       ${(()=>{const codigoGer=(contData.codigosCuentasCatalogo&&contData.codigosCuentasCatalogo.gerTaller)||codigoLibre1200('1202');const nombreGer=(contData.nombresCuentasCatalogo&&contData.nombresCuentasCatalogo.gerTaller)||'Inventario Gerencia / Taller';return`<div class="cat-item"><div><span class="cat-code"${MODO==='admin'?` style="cursor:pointer" onclick="event.stopPropagation();editarCodigoCuentaCatalogo('gerTaller','${codigoGer}')" title="Editar el número de esta cuenta"`:''}>${codigoGer}</span>${nombreGer}${MODO==='admin'?` <i class="ti ti-pencil" style="font-size:10px;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();renombrarCuentaCatalogo('gerTaller','${nombreGer.replace(/'/g,"\\'")}')" title="Renombrar esta cuenta"></i>`:''}</div><span class="cat-saldo" style="color:var(--green)">${fmtD(valorInvGer)}</span></div>`;})()}
-      ${activosPersNoCorrientes.map(c=>filaCuentaPersonalizada(c,'var(--green)')).join('')}
+      ${activosPersNoCorrientes.filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--green)')).join('')}
       <div class="cat-item" style="background:var(--green-light);font-weight:700"><span>TOTAL ACTIVOS</span><span style="color:var(--green)">${fmtD(totalActivos+totalActivosPers)}</span></div>
 
       <div class="cat-group-title" style="margin-top:.5rem">2000 — PASIVOS</div>
@@ -14102,7 +14174,7 @@ function renderCatalogo(){
       ${cat('2107','TC Corporativa 2',cxp_tccorp2,'pasivo')}
       <!-- Costos de ventas no son pasivo en base efectivo -->
       ${cat('2107','Comisiones por pagar',com,'pasivo')}
-      ${cuentasPers.filter(c=>c.tipo==='pasivo').map(c=>filaCuentaPersonalizada(c,'var(--red)')).join('')}
+      ${cuentasPers.filter(c=>c.tipo==='pasivo').filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--red)')).join('')}
       <div class="cat-item" style="background:var(--red-light);font-weight:700"><span>TOTAL PASIVOS</span><span style="color:var(--red)">${fmtD(totalPasivos+totalPasivosPers)}</span></div>
 
       <div class="cat-group-title" style="margin-top:.5rem">3000 — PATRIMONIO / CAPITAL</div>
@@ -14115,7 +14187,7 @@ function renderCatalogo(){
       <div class="cat-group-title">4000 — INGRESOS</div>
       ${cat('4001','Ingresos por ventas de vehículos',ing,'ingreso')}
       ${cat('4002','Otros ingresos',(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.cat==='Otro ingreso').reduce((s,r)=>s+r.monto,0),'ingreso')}
-      ${cuentasPers.filter(c=>c.tipo==='ingreso').map(c=>filaCuentaPersonalizada(c,'var(--blue)')).join('')}
+      ${cuentasPers.filter(c=>c.tipo==='ingreso').filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--blue)')).join('')}
       <div class="cat-item" style="background:var(--blue-light);font-weight:700"><span>TOTAL INGRESOS</span><span style="color:var(--blue)">${fmtD(ing+totalIngresosPers)}</span></div>
 
       <div class="cat-group-title" style="margin-top:.5rem">5000 — COSTOS</div>
@@ -14144,7 +14216,7 @@ function renderCatalogo(){
       ${cat('6020','Insumos de limpieza',sumCat('Insumos de limpieza'),'gasto')}
       ${cat('6021','Oficial UAF',sumCat('Oficial UAF'),'gasto')}
       ${cat('6022','Cumpleaños y desayunos',sumCat('Cumpleaños y desayunos'),'gasto')}
-      ${gastosPersOperativos.map(c=>filaCuentaPersonalizada(c,'var(--amber)')).join('')}
+      ${gastosPersOperativos.filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--amber)')).join('')}
       <div class="cat-item" style="background:var(--amber-light);font-weight:700"><span>UTILIDAD OPERATIVA</span><span style="color:var(--amber)">${fmtD(ing-cos-com-totAdmin-totGastosOp-totReclamos-totTaller-totalGastosPersOperativos)}</span></div>
 
       <div class="cat-group-title" style="margin-top:.5rem">7000 — GASTOS NO OPERATIVOS</div>
@@ -14152,7 +14224,7 @@ function renderCatalogo(){
       ${cat('7002','Intereses tarjeta crédito',(contData.gastos||[]).filter(g=>g.cat==='Intereses tarjeta crédito').reduce((s,g)=>s+g.monto,0),'gasto')}
       ${cat('7003','Comisiones bancarias',(contData.gastos||[]).filter(g=>g.cat==='Comisiones bancarias').reduce((s,g)=>s+g.monto,0),'gasto')}
       ${cat('7004','Otros gastos no operativos',(contData.gastos||[]).filter(g=>['Multas / penalidades','Pérdida en venta de activo','Otros gastos no operativos'].includes(g.cat)).reduce((s,g)=>s+g.monto,0),'gasto')}
-      ${gastosPersNoOperativos.map(c=>filaCuentaPersonalizada(c,'var(--amber)')).join('')}
+      ${gastosPersNoOperativos.filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--amber)')).join('')}
       <div class="cat-item" style="background:${utilNeta>=0?'var(--green-light)':'var(--red-light)'};font-weight:700;font-size:14px"><span>UTILIDAD NETA</span><span style="color:${utilNeta>=0?'var(--green)':'var(--red)'}">${fmtD(utilNeta)}</span></div>
     </div>
   </div>`;
@@ -25279,7 +25351,7 @@ function restaurarSesionSiExiste(){
       const paginaGuardada=safeStorage.getItem('nicauto_page');
       if(paginaGuardada&&document.getElementById('page-'+paginaGuardada)){
         showPage(paginaGuardada);
-      } else if(['admin','coordinador','gerente1','gerente2'].includes(MODO)){showPage('dashboard');renderDash();}
+      } else if(puedeVerDashboard()){showPage('dashboard');renderDash();} else if(['coordinador'].includes(MODO)){showPage('dashboard');}
       else if(['gerencia'].includes(MODO)){showPage('inventario');}
       else if(MODO==='vendedor')showPage('listaprecios');
       else if(MODO==='legal')showPage('legal');
