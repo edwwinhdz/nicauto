@@ -1838,9 +1838,19 @@ body.no-delete .confirmDelete{display:none!important}
       <p style="font-size:11px;font-weight:600;color:var(--blue);margin-bottom:.625rem;text-transform:uppercase;letter-spacing:.04em"><i class="ti ti-arrows-exchange"></i> Registrar pago en módulo contable</p>
       <div class="form-row" style="margin-bottom:0">
         <div class="form-group" style="margin:0"><label>Medio de pago</label>
-          <select id="mv-mediopago"><option value="">No registrar ahora</option><option value="Caja (efectivo)">Caja (efectivo)</option><option value="Banco (transferencia)">Banco (transferencia)</option><option value="Tarjeta de crédito">Tarjeta de crédito</option><option value="Cheque">Cheque</option></select>
+          <select id="mv-mediopago" onchange="mvSugerirPagaCaja()"><option value="">No registrar ahora</option><option value="Caja (efectivo)">Caja (efectivo)</option><option value="Banco (transferencia)">Banco (transferencia)</option><option value="Tarjeta de crédito">Tarjeta de crédito</option><option value="Cheque">Cheque</option></select>
         </div>
         <div class="form-group" style="margin:0"><label>No. Recibo / Ref.</label><input id="mv-recibo" placeholder="REC-001…"></div>
+      </div>
+      <div class="form-row" style="margin-bottom:0;margin-top:.625rem">
+        <div class="form-group" style="margin:0"><label>¿De dónde sale el dinero? (Reporte de Caja)</label>
+          <select id="mv-pagacaja">
+            <option value="">No sale de caja (banco, tarjeta o cheque)</option>
+            <option value="cajafuerte">Caja fuerte</option>
+            <option value="cashjulio">Cash Julio M (Gerencia)</option>
+          </select>
+          <p style="font-size:10px;color:var(--text3);margin-top:3px">Si sale de Caja fuerte o Cash Julio M, la compra aparece sola como salida en Egresos de la caja del día de compra.</p>
+        </div>
       </div>
       <div class="form-row" style="margin-bottom:0">
         <div class="form-group" style="margin:0"><label>Agente de compra</label><select id="mv-agentecompra"><option value="">-- Seleccionar --</option></select></div>
@@ -4457,7 +4467,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-12-1200';
+const APP_VERSION='2026-10-12-1600';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -8368,7 +8378,7 @@ function abrirModalVehiculo(id){
   document.getElementById('mv-title').textContent=id?'Editar vehículo':'Agregar vehículo';
   const v=id?vehiculos.find(x=>x.id===id):null;
   document.getElementById('mv-id').value=id||'';
-  ['marca','modelo','anio','color','placa','tipo','precio','precioB','costo','km','motor','nomotor','chasis','trans','estado','obs','fechacompra','nombrecomprador','prestadoa'].forEach(f=>{
+  ['marca','modelo','anio','color','placa','tipo','precio','precioB','costo','km','motor','nomotor','chasis','trans','estado','obs','fechacompra','nombrecomprador','prestadoa','mediopago','pagacaja'].forEach(f=>{
     const el=document.getElementById('mv-'+f);
     if(el)el.value=v?v[f]||'':'';
   });
@@ -8487,11 +8497,27 @@ function calcMargenVehiculo(){
     pctBRealEl.textContent=`Margen real ${pctBRealVal}%`;
   } else { ganBRealEl.textContent='—';pctBRealEl.textContent='Sin precio B'; }
 }
+// Al elegir el medio de pago de la compra, se propone de dónde sale el dinero en la caja.
+function mvSugerirPagaCaja(){
+  const medio=document.getElementById('mv-mediopago')?.value||'';
+  const sel=document.getElementById('mv-pagacaja');
+  if(!sel)return;
+  if(medio==='Caja (efectivo)'){if(!sel.value)sel.value='cajafuerte';}
+  else sel.value='';
+}
 function guardarVehiculo(){
-  const f=['marca','modelo','anio','color','placa','tipo','precio','precioB','costo','km','motor','nomotor','chasis','trans','estado','obs','procedencia','fechacompra','nombrecomprador','cedulacomprador','direccioncomprador','nacimientocomprador','tel1','tel2','prendado','bancogravamen','agentecompra','mediopago','recibo','vendedorreserva','clientereserva','prestadoa','comisionEstimada'];
+  const f=['marca','modelo','anio','color','placa','tipo','precio','precioB','costo','km','motor','nomotor','chasis','trans','estado','obs','procedencia','fechacompra','nombrecomprador','cedulacomprador','direccioncomprador','nacimientocomprador','tel1','tel2','prendado','bancogravamen','agentecompra','mediopago','pagacaja','recibo','vendedorreserva','clientereserva','prestadoa','comisionEstimada'];
   const vals={};f.forEach(k=>{const el=document.getElementById('mv-'+k);if(el)vals[k]=el.value;});
   if(!vals.marca||!vals.modelo){alert('Marca y modelo son obligatorios');return;}
   vals.compraConfirmada=!!document.getElementById('mv-confirmarcompra')?.checked;
+  // Salida de caja por la compra: va en el día de la fecha de compra (o hoy, si no tiene).
+  if(vals.pagacaja){
+    const vPrev=vehiculos.find(v=>v.id===document.getElementById('mv-id').value);
+    vals.fechaPagoCaja=vals.fechacompra||vPrev?.fechaPagoCaja||hoyLocal();
+    if(!(parseFloat(vals.costo)>0)){alert('Para registrar la salida de caja hace falta el costo (precio de compra) del vehículo.');return;}
+    try{if(cdCierreDe(vals.fechaPagoCaja)&&!(vPrev&&vPrev.pagacaja===vals.pagacaja&&(vPrev.fechacompra||vPrev.fechaPagoCaja)===vals.fechaPagoCaja))
+      alert(`⚠️ La caja del ${vals.fechaPagoCaja} ya está cerrada, así que esta salida NO va a aparecer en ese cierre.\n\nSi corresponde a ese día, el Administrador tiene que reabrir la caja del ${vals.fechaPagoCaja} y volver a cerrarla.`);}catch(e){}
+  }
   const id=document.getElementById('mv-id').value||uid();
   const esNuevo=!vehiculos.find(v=>v.id===id);
   // Numeración automática de recibo de compra (req #9): si es nuevo y no se digitó
@@ -15907,6 +15933,17 @@ function cdLineasAuto(fecha){
   // Ajustes hechos a mano (columna donde cayó el dinero, quién lo recibió, o línea quitada)
   return lineas.map(l=>{const a=cdAjuste(l.key);return a?{...l,col:a.col||l.col,recibe:a.recibe||'',banco:a.banco!==undefined?a.banco:l.banco,oculta:!!a.oculta}:l;});
 }
+// Salidas automáticas: compras de vehículos propios (no consignación) pagadas con Caja fuerte o
+// Cash Julio M. Se arman del Inventario, así que si se corrige la compra, la caja se corrige sola.
+function cdEgresosAuto(fecha){
+  return(vehiculos||[]).filter(v=>(v.pagacaja==='cajafuerte'||v.pagacaja==='cashjulio')&&Number(v.costo||0)>0&&(v.fechacompra||v.fechaPagoCaja)===fecha)
+    .map(v=>{
+      const l={key:'C_'+v.id,fecha,auto:true,tipoLinea:'Compra',col:v.pagacaja,monto:Number(v.costo),recibo:v.recibo||'',
+        desc:`Compra de ${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.color?' '+v.color:''}${v.placa?' — '+v.placa:''}${v.nombrecomprador?' (a '+v.nombrecomprador+')':''}`};
+      const a=cdAjuste(l.key);
+      return a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,oculta:!!a.oculta}:l;
+    });
+}
 function cdMovsManual(fecha,tipo){
   return(contData.cajaDiariaMovs||[]).filter(m=>m.fecha===fecha&&m.tipo===tipo&&!m.anulado);
 }
@@ -15924,6 +15961,7 @@ function cdDiasPendientes(fecha){
   const cerrados=new Set(cdCierres().map(c=>c.fecha));
   const dias=new Set();
   (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
+  (vehiculos||[]).forEach(v=>{if((v.pagacaja==='cajafuerte'||v.pagacaja==='cashjulio')&&Number(v.costo||0)>0)dias.add(v.fechacompra||v.fechaPagoCaja);});
   (ventas||[]).forEach(v=>{if(v.fecha&&(v.estado==='Completada'||(v.estado==='Pendiente'&&Number(v.anticipo||0)>0)))dias.add(v.fecha);});
   return[...dias].filter(d=>d&&d>=ini&&d<fecha&&!cerrados.has(d)).sort();
 }
@@ -15949,7 +15987,7 @@ function cdCalcular(fecha){
   if(cierre)return{...cierre,cerrado:true};
   const saldoAnt=cdSaldoAnterior(fecha);
   const ingresos=[...cdLineasAuto(fecha).filter(l=>!l.oculta),...cdMovsManual(fecha,'ingreso').map(m=>({...m,key:m.id,manual:true}))];
-  const egresos=cdMovsManual(fecha,'egreso').map(m=>({...m,key:m.id,manual:true}));
+  const egresos=[...cdEgresosAuto(fecha).filter(l=>!l.oculta),...cdMovsManual(fecha,'egreso').map(m=>({...m,key:m.id,manual:true}))];
   const tot={};CD_COLS.forEach(c=>tot[c.k]=ingresos.filter(l=>l.col===c.k).reduce((s,l)=>s+Number(l.monto||0),0));
   const totalIngresos=Object.values(tot).reduce((s,n)=>s+n,0);
   const salidas={cajafuerte:egresos.filter(e=>(e.col||'cajafuerte')==='cajafuerte').reduce((s,e)=>s+Number(e.monto||0),0),
@@ -16115,6 +16153,21 @@ function cdAbrirMov(tipo,editId){
 }
 function cdEditarLinea(key,manual){
   if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m)cdAbrirMov(m.tipo,key);return;}
+  const eg=cdEgresosAuto(cdFecha).find(x=>x.key===key);
+  if(eg){
+    cdModal('Ajustar salida por compra',`
+      <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">${eg.desc}<br>Recibo ${eg.recibo||'—'} · ${fmtD(eg.monto)}</p>
+      <div class="form-group"><label>Sale de</label><select id="cd-col">${cdOpcionesCol(eg.col,true)}</select></div>
+      <p style="font-size:11px;color:var(--text3)">Para cambiar el monto, la fecha o el recibo, corregilos en la ficha del vehículo en Inventario.</p>`,
+    async()=>{
+      contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
+      const a=cdAjuste(key);
+      const nuevo={...(a||{}),id:key,col:cdVal('cd-col'),oculta:false};
+      if(a)Object.assign(a,nuevo);else contData.cajaDiariaAjustes.push(nuevo);
+      await cdGuardarTodo();
+    });
+    return;
+  }
   const l=cdLineasAuto(cdFecha).find(x=>x.key===key);if(!l)return;
   cdModal('Ajustar línea de venta',`
     <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">${l.cliente||''} — ${l.vehiculo||''}<br>${l.forma||''} · ${fmtD(l.monto)}</p>
@@ -16131,7 +16184,7 @@ function cdEditarLinea(key,manual){
   });
 }
 async function cdQuitarLinea(key,manual){
-  if(!confirm(manual?'¿Eliminar este movimiento de la caja?':'¿Quitar esta línea de la hoja de caja?\n\nLa venta NO se borra, solo deja de aparecer aquí.'))return;
+  if(!confirm(manual?'¿Eliminar este movimiento de la caja?':'¿Quitar esta línea de la hoja de caja?\n\nLa venta o compra NO se borra, solo deja de aparecer aquí.'))return;
   if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m){m.anulado=true;m.anuladoPor=getNombreUsuario();}}
   else{
     contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
