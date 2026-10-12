@@ -1360,7 +1360,7 @@ body.no-delete .confirmDelete{display:none!important}
     <div class="form-group"><label>Detalle de pago</label><input id="mfp-detalle" type="text" placeholder="Descripción del movimiento"></div>
     <div class="form-row">
       <div class="form-group"><label>Clasificación</label>
-        <select id="mfp-clasif"><option value="Inversión Vehículo">Inversión Vehículo</option><option value="Gastos Casa Don Julio">Gastos Casa Don Julio</option><option value="Gastos Operativos Autolote">Gastos Operativos Autolote</option><option value="Compra de vehículo">Compra de vehículo</option><option value="Otro">Otro</option></select></div>
+        <select id="mfp-clasif"><option value="Inversión Vehículo">Inversión Vehículo</option><option value="Gastos Casa Don Julio">Gastos Casa Don Julio</option><option value="Gastos Operativos Autolote">Gastos Operativos Autolote</option><option value="Compra de vehículo">Compra de vehículo</option><option value="Traslado de fondos">Traslado de fondos</option><option value="Otro">Otro</option></select></div>
       <div class="form-group"><label>Placa (si aplica)</label><input id="mfp-placa" type="text"></div>
     </div>
     <div class="form-group"><label>Forma de pago</label>
@@ -4467,7 +4467,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-12-1600';
+const APP_VERSION='2026-10-12-1700';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -6274,7 +6274,7 @@ function renderResumenLocalConsigWord(){
   const conteoDuenos={};
   consig.forEach(v=>{
     const vh=buscarVehiculoOConsig(v.vehiculoId);
-    const n=(vh&&vh.duenio)?vh.duenio:'Sin dueño especificado';
+    const n=nombreDuenioConsig(vh&&vh.duenio);
     conteoDuenos[n]=(conteoDuenos[n]||0)+1;
   });
   const filasDuenos=Object.entries(conteoDuenos).sort((a,b)=>b[1]-a[1]);
@@ -14425,7 +14425,9 @@ function datosReparacionesRango(){
   const grupos=lista.map(x=>{
     const reps=(x.v.reparaciones||[]).filter(r=>enRango(r.fecha)).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
     const subtotal=reps.reduce((s,r)=>s+Number(r.costo||0),0);
-    return{...x,reps,subtotal,primera:reps[0]?.fecha||'',ultima:reps[reps.length-1]?.fecha||''};
+    const fechaCompra=x.origen==='Consignación'?(x.v.fecha||''):(x.v.fechacompra||'');
+    const inicioMes=(d||hoyLocal()).slice(0,7)+'-01';
+    return{...x,reps,subtotal,primera:reps[0]?.fecha||'',ultima:reps[reps.length-1]?.fecha||'',fechaCompra,mesAnterior:!!fechaCompra&&fechaCompra<inicioMes};
   }).filter(g=>g.reps.length&&(!comprador||g.comprador===comprador))
     .sort((a,b)=>(a.primera||'').localeCompare(b.primera||''));
   const compradores=[...new Set(lista.filter(x=>(x.v.reparaciones||[]).some(r=>enRango(r.fecha))).map(x=>x.comprador))].sort();
@@ -14461,22 +14463,24 @@ function repReparaciones(){
     :`<div class="empty" style="padding:2rem"><i class="ti ti-tool"></i><p>No hay reparaciones entre ${d||'el inicio'} y ${h||'hoy'}.</p></div>`}`;
 }
 function tablaReparacionesRangoHTML(grupos,total){
+  const fc=g=>g.fechaCompra?(g.mesAnterior?`<span style="background:#FFE3E3;color:#C92A2A;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap" title="Comprado en un mes anterior">${g.fechaCompra} · mes anterior</span>`:`<span style="white-space:nowrap">${g.fechaCompra}</span>`):'—';
   return`<table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse">
-    <thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Taller</th><th>Pago</th><th>Factura</th><th style="text-align:right">Costo</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Comprador</th><th>F. compra</th><th>Tipo</th><th>Descripción</th><th>Taller</th><th>Pago</th><th>Factura</th><th style="text-align:right">Costo</th></tr></thead>
     <tbody>${grupos.map(g=>`
-      <tr style="background:#E7F5FF"><td colspan="7" style="padding:8px 10px">
+      <tr style="background:#E7F5FF"><td colspan="9" style="padding:8px 10px">
         <b>${g.v.marca||''} ${g.v.modelo||''} ${g.v.anio||''}</b> — ${g.v.placa||'sin placa'}
         ${g.origen==='Consignación'?' <span class="badge badge-purple" style="font-size:9px">Consig.</span>':''}
         <span style="margin-left:12px">${g.origen==='Consignación'?'Dueño':'Comprador'}: <b>${g.comprador}</b></span>
-        <span style="margin-left:12px;color:#495057">Del ${g.primera} al ${g.ultima}</span>
+        <span style="margin-left:12px;color:#495057">Reparaciones del ${g.primera} al ${g.ultima}</span>
+        <span style="margin-left:12px">${g.origen==='Consignación'?'Ingresó':'Comprado'}: ${fc(g)}</span>
       </td></tr>
       ${g.reps.map(r=>`<tr>
-        <td style="white-space:nowrap">${r.fecha||'—'}</td><td>${r.tipo||'—'}</td><td>${r.desc||'—'}</td>
+        <td style="white-space:nowrap">${r.fecha||'—'}</td><td>${g.comprador}</td><td>${fc(g)}</td><td>${r.tipo||'—'}</td><td>${r.desc||'—'}</td>
         <td>${r.taller||'—'}</td><td>${r.pago||'—'}</td><td>${r.factura||'—'}</td>
         <td style="text-align:right;white-space:nowrap">${fmtD(r.costo)}</td></tr>`).join('')}
-      <tr style="font-weight:700"><td colspan="6" style="text-align:right">Subtotal ${g.v.marca||''} ${g.v.modelo||''}:</td><td style="text-align:right;color:#E67700;white-space:nowrap">${fmtD(g.subtotal)}</td></tr>`).join('')}
+      <tr style="font-weight:700"><td colspan="8" style="text-align:right">Subtotal ${g.v.marca||''} ${g.v.modelo||''}:</td><td style="text-align:right;color:#E67700;white-space:nowrap">${fmtD(g.subtotal)}</td></tr>`).join('')}
     </tbody>
-    <tfoot><tr style="background:#FFF3BF;font-weight:800"><td colspan="6" style="text-align:right;padding:8px 10px">TOTAL INVERTIDO EN REPARACIONES:</td><td style="text-align:right;white-space:nowrap">${fmtD(total)}</td></tr></tfoot>
+    <tfoot><tr style="background:#FFF3BF;font-weight:800"><td colspan="8" style="text-align:right;padding:8px 10px">TOTAL INVERTIDO EN REPARACIONES:</td><td style="text-align:right;white-space:nowrap">${fmtD(total)}</td></tr></tfoot>
   </table>`;
 }
 function imprimirReparacionesRango(){
@@ -14501,14 +14505,14 @@ function imprimirReparacionesRango(){
 async function exportExcelReparacionesRango(){
   const{d,h,grupos,total}=datosReparacionesRango();
   if(!grupos.length){alert('No hay reparaciones en ese rango de fechas.');return;}
-  const rows=[['Vehículo','Placa','Origen','Comprador / Dueño','Rango de fechas','Fecha','Tipo','Descripción','Taller','Pago','Factura','Costo (USD)']];
+  const rows=[['Vehículo','Placa','Origen','Comprador / Dueño','Fecha de compra','¿Mes anterior?','Rango de fechas','Fecha','Tipo','Descripción','Taller','Pago','Factura','Costo (USD)']];
   grupos.forEach(g=>{
     const veh=`${g.v.marca||''} ${g.v.modelo||''} ${g.v.anio||''}`.trim();
     const rango=`${g.primera} al ${g.ultima}`;
-    g.reps.forEach(r=>rows.push([veh,g.v.placa||'',g.origen,g.comprador,rango,r.fecha||'',r.tipo||'',r.desc||'',r.taller||'',r.pago||'',r.factura||'',Number(r.costo||0)]));
-    rows.push(['','','','','','','','','','','Subtotal '+veh,g.subtotal]);
+    g.reps.forEach(r=>rows.push([veh,g.v.placa||'',g.origen,g.comprador,g.fechaCompra||'',g.mesAnterior?'Sí':'No',rango,r.fecha||'',r.tipo||'',r.desc||'',r.taller||'',r.pago||'',r.factura||'',Number(r.costo||0)]));
+    rows.push(['','','','','','','','','','','','','Subtotal '+veh,g.subtotal]);
   });
-  rows.push(['','','','','','','','','','','TOTAL GENERAL',total]);
+  rows.push(['','','','','','','','','','','','','TOTAL GENERAL',total]);
   await exportarExcelConFormato(rows,'reparaciones_nicauto','Reparaciones','Inversión en Reparaciones — Del '+(d||'inicio')+' al '+(h||'hoy'));
 }
 function repTable(headers,rows,emptyMsg){
@@ -15396,7 +15400,7 @@ function abrirLiquidacion(ventaId){
       <div style="font-size:11px;color:#666">Rotonda Plaza España 150 mts al lago MD, Managua, Nicaragua</div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:1rem">
-      <div style="font-size:18px;font-weight:800;color:#000">LIQUIDACIÓN DE VENTA</div>
+      <div style="font-size:18px;font-weight:800;color:#000">LIQUIDACIÓN DE VENTA${String(v.vehiculoId||'').startsWith('CONSIG_')?'<br>CONSIGNACIÓN':''}</div>
       <div style="text-align:right;font-size:12px">
         <div><b>No. Recibo:</b> ${v.recibo||'—'}</div>
         <div><b>Fecha:</b> ${v.fecha}</div>
@@ -16023,7 +16027,7 @@ function cdHojaHTML(h,enPantalla){
     <tbody>
       ${h.ingresos.length?h.ingresos.map(l=>`<tr>
         <td>${l.fecha}</td><td>${l.vendedor||''}</td><td>${l.cliente||''}</td>
-        <td>${l.vehiculo||l.desc||''}${l.forma?`<br><span style="font-size:9px;color:#868E96">${l.forma}</span>`:''}${l.col==='cxc'?`<br><span style="font-size:9px;font-weight:700;color:${l.banco?'#E67700':'#C92A2A'}">Banco: ${l.banco||'sin asignar'}</span>`:''}</td>
+        <td>${l.vehiculo||l.desc||''}${l.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">← Fondos JM</span>':''}${l.forma?`<br><span style="font-size:9px;color:#868E96">${l.forma}</span>`:''}${l.col==='cxc'?`<br><span style="font-size:9px;font-weight:700;color:${l.banco?'#E67700':'#C92A2A'}">Banco: ${l.banco||'sin asignar'}</span>`:''}</td>
         <td>${l.recibe||''}</td><td>${l.recibo||''}</td><td style="text-align:right">${f(Number(l.monto))}</td>
         ${cols.map(c=>`<td style="text-align:right">${l.col===c.k?f(Number(l.monto))+(c.k==='cxc'&&l.banco?`<br><span style="font-size:9px">${l.banco}</span>`:''):''}</td>`).join('')}
         <td style="text-align:right;font-weight:700">${f(Number(l.monto))}</td>${acciones(l)}
@@ -16042,7 +16046,7 @@ function cdHojaHTML(h,enPantalla){
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
     <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
     <tbody>${h.egresos.length?h.egresos.map(e=>`<tr>
-      <td>${e.fecha}</td><td>${e.desc||''}</td><td>${e.recibo||''}</td><td>${e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte'}</td>
+      <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}</td><td>${e.recibo||''}</td><td>${e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte'}</td>
       <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
       :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
   </table>
@@ -16137,7 +16141,11 @@ function cdAbrirMov(tipo,editId){
       <div class="form-group"><label>Recibe</label><input id="cd-recibe" value="${m?.recibe||''}"></div>`:''}
     <div class="form-row"><div class="form-group"><label>No. Recibo / ROC</label><input id="cd-recibo" value="${m?.recibo||''}"></div>
       <div class="form-group"><label>Monto (USD $)</label><input id="cd-monto" type="number" step="0.01" value="${m?.monto||''}"></div></div>
-    <div class="form-group"><label>${esIng?'Columna donde entra':'Sale de'}</label><select id="cd-col">${cdOpcionesCol(m?.col||'cajafuerte',!esIng)}</select></div>`,
+    <div class="form-group"><label>${esIng?'Columna donde entra':'Sale de'}</label><select id="cd-col">${cdOpcionesCol(m?.col||'cajafuerte',!esIng)}</select></div>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--purple-light);border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer">
+      <input type="checkbox" id="cd-trasladojm" ${m?.trasladoJM?'checked':''} style="width:16px;height:16px;margin-top:1px">
+      <span><b>Traslado de fondos con Don Julio (Fondos JM)</b><br>${esIng?'Don Julio manda este dinero a la caja: se registra como <b>Egreso</b> en Fondos JM.':'Este dinero se le entrega a Don Julio: se registra como <b>Ingreso</b> en Fondos JM.'}</span>
+    </label>`,
   async()=>{
     const monto=parseFloat(cdVal('cd-monto'));
     if(!monto||monto<=0){alert('El monto es obligatorio.');return;}
@@ -16145,11 +16153,32 @@ function cdAbrirMov(tipo,editId){
     contData.cajaDiariaMovs=contData.cajaDiariaMovs||[];
     const obj={...(m||{}),id:m?.id||('CDM_'+uid()),fecha:m?.fecha||cdFecha,tipo,desc:cdVal('cd-desc'),
       vendedor:cdVal('cd-vendedor'),cliente:cdVal('cd-cliente'),recibe:cdVal('cd-recibe'),recibo:cdVal('cd-recibo'),
-      monto,col:cdVal('cd-col'),registradoPor:m?.registradoPor||getNombreUsuario()};
+      monto,col:cdVal('cd-col'),registradoPor:m?.registradoPor||getNombreUsuario(),
+      trasladoJM:!!document.getElementById('cd-trasladojm')?.checked};
     const i=contData.cajaDiariaMovs.findIndex(x=>x.id===obj.id);
     if(i>=0)contData.cajaDiariaMovs[i]=obj;else contData.cajaDiariaMovs.push(obj);
+    cdSincronizarFondosJM(obj);
     await cdGuardarTodo();
   });
+}
+// Traslado de fondos con Don Julio: el movimiento de caja queda espejado en Fondos JM (en US$).
+// Salida de caja (se le da dinero a Don Julio) → Ingreso en Fondos JM.
+// Ingreso a caja (Don Julio manda dinero) → Egreso en Fondos JM.
+// Si se edita o se quita el movimiento en la caja, Fondos JM se actualiza solo.
+function cdSincronizarFondosJM(m){
+  contData.fondosJM=contData.fondosJM||[];
+  const idFJM='FJM_'+m.id;
+  const idx=contData.fondosJM.findIndex(f=>f.id===idFJM);
+  if(!m.trasladoJM||m.anulado){
+    if(idx>=0)contData.fondosJM.splice(idx,1);
+    return;
+  }
+  const f={id:idFJM,origenCajaMovId:m.id,
+    tipo:m.tipo==='egreso'?'Ingreso':'Egreso',monto:Number(m.monto||0),
+    fechaIngreso:m.fecha,fechaPago:m.fecha,
+    detalle:`Traslado ${m.tipo==='egreso'?'desde':'hacia'} Caja NICAUTO (${m.col==='cashjulio'?'Cash Julio M':'Caja fuerte'}) — ${m.desc||''}${m.recibo?' | Recibo '+m.recibo:''}`,
+    clasificacion:'Traslado de fondos',placa:'',formaPago:'Cash',registradoPor:m.registradoPor||getNombreUsuario()};
+  if(idx>=0)contData.fondosJM[idx]=f;else contData.fondosJM.push(f);
 }
 function cdEditarLinea(key,manual){
   if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m)cdAbrirMov(m.tipo,key);return;}
@@ -16185,7 +16214,7 @@ function cdEditarLinea(key,manual){
 }
 async function cdQuitarLinea(key,manual){
   if(!confirm(manual?'¿Eliminar este movimiento de la caja?':'¿Quitar esta línea de la hoja de caja?\n\nLa venta o compra NO se borra, solo deja de aparecer aquí.'))return;
-  if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m){m.anulado=true;m.anuladoPor=getNombreUsuario();}}
+  if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m){m.anulado=true;m.anuladoPor=getNombreUsuario();cdSincronizarFondosJM(m);}}
   else{
     contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
     const a=cdAjuste(key);if(a)a.oculta=true;else contData.cajaDiariaAjustes.push({id:key,oculta:true});
@@ -20173,7 +20202,7 @@ function renderConsig(){
   if(resumenBox){
     const porDuenio={};
     todos.filter(v=>v.estado!=='Vendido').forEach(v=>{
-      const nombre=v.duenio||'Sin dueño especificado';
+      const nombre=nombreDuenioConsig(v.duenio);
       if(!porDuenio[nombre])porDuenio[nombre]={cantidad:0,diasList:[]};
       porDuenio[nombre].cantidad++;
       const d=diasDesde(v.fecha);
@@ -20370,12 +20399,20 @@ function abrirModalConsig(id){
   cargarFotoGridExistenteGen('consig',v?.fotos);
   openOv('ov-consig');
 }
+// Nombre del dueño "limpio" para agrupar: sin espacios de más y sin importar mayúsculas, así
+// "Julio Mendoza Padre " y "julio mendoza padre" cuentan como la misma persona.
+function nombreDuenioConsig(n){
+  const limpio=String(n||'').replace(/\s+/g,' ').trim();
+  if(!limpio)return'Sin dueño especificado';
+  return limpio.toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase());
+}
 async function guardarConsig(){
   const marca=document.getElementById('mconsig-marca').value;if(!marca){alert('La marca es obligatoria');return;}
   const id=document.getElementById('mconsig-id').value||uid();
   const obj={id};
   ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','preciopactado','comision','estado','fecha','obs'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)obj[f]=el.value;});
   obj.fotos=fotoSlotsGen['consig']||[];
+  if(obj.duenio)obj.duenio=String(obj.duenio).replace(/\s+/g,' ').trim();
   // vehiculoId if opened from LP
   const vidLP=document.getElementById('mconsig-vehiculoId')?.value;
   if(vidLP)obj.vehiculoId=vidLP;
@@ -21779,6 +21816,7 @@ async function validarTodosPendientesRendicionCerrada(historialId){
   (hist.movs||[]).forEach(m=>{const k=claveDup(m);conteoClaves[k]=(conteoClaves[k]||0)+1;});
   const pendientes=(hist.movs||[]).filter(m=>!m.registradoContable&&!(conteoClaves[claveDup(m)]>1));
   if(!pendientes.length){alert('No hay gastos pendientes para validar (sin contar posibles duplicados).');return;}
+  if(!confirmarSiDuplicadosEnLote(pendientes))return;
   const totalUSD=pendientes.reduce((s,m)=>s+Number(m.monto||0)/Number(m.tasaUsada||36.50),0);
   if(!confirm(`Vas a validar y registrar ${pendientes.length} gasto(s) de ${fmtRDC(hist.numero)} de una sola vez, por un total de $${fmt(totalUSD)} USD.\n\nCada uno se va a conectar con la cuenta que tenga asignada ahora mismo — revisá las cuentas antes de continuar si no lo hiciste todavía.\n\n¿Confirmar?`))return;
   contData.gastos=contData.gastos||[];
@@ -21836,12 +21874,53 @@ async function validarTodosPendientesRendicionCerrada(historialId){
   abrirValidarRendicionCerrada(historialId);
   alert(`✅ Se registraron ${pendientes.length} gasto(s) en Contabilidad por un total de $${fmt(totalUSD)} USD.`);
 }
+// ======================== ALERTA DE GASTO DUPLICADO POR VEHÍCULO ========================
+// Al validar un gasto de Rendición se busca si el MISMO vehículo (misma placa) ya tiene otro gasto
+// con el mismo monto o el mismo concepto — en cualquier rendición (activa o cerrada) o en sus
+// Reparaciones. Si hay, se avisa antes de registrar, para no cargarle dos veces lo mismo.
+function normPlaca(p){return String(p||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+function normConcepto(t){return String(t||'').toLowerCase().replace(/^\[[^\]]*\]\s*/,'').replace(/\s+/g,' ').trim();}
+function buscarDuplicadosVehiculo(m){
+  const placa=normPlaca(m.placa);
+  if(!placa)return[];
+  const monto=Number(m.monto||0).toFixed(2),conc=normConcepto(m.desc);
+  const res=[];
+  const revisar=(x,origen)=>{
+    if(!x||x.id===m.id||normPlaca(x.placa)!==placa)return;
+    const mismoMonto=Number(x.monto||0).toFixed(2)===monto;
+    const mismoConc=conc&&normConcepto(x.desc)===conc;
+    if(mismoMonto||mismoConc)res.push(`• ${x.fecha||'—'} — ${x.desc||''} — C$${fmtNio(x.monto)} (${origen}${x.registradoContable?', ya registrado':''})`);
+  };
+  (getRendicionMovs()||[]).forEach(x=>revisar(x,'Rendición activa'));
+  (contData.rendicionHistorial||[]).forEach(h=>(h.movs||[]).forEach(x=>revisar(x,fmtRDC(h.numero))));
+  // Reparaciones del vehículo que no vienen de una rendición (cargadas a mano)
+  const veh=[...(vehiculos||[]),...(contData.consignacion||[])].find(v=>normPlaca(v.placa)===placa);
+  (veh?.reparaciones||[]).filter(r=>!r.rendicionMovId).forEach(r=>{
+    const mismoConc=conc&&normConcepto(r.desc)===conc;
+    const mismoMonto=r.montoOrigenCordobas!=null&&Number(r.montoOrigenCordobas).toFixed(2)===monto;
+    if(mismoConc||mismoMonto)res.push(`• ${r.fecha||'—'} — ${r.desc||''} — $${fmt(r.costo)} (Reparaciones del vehículo)`);
+  });
+  return res;
+}
+function confirmarSiDuplicadoVehiculo(m){
+  if(m.registradoContable)return true; // ya estaba conectado: es solo una revisión
+  const dups=buscarDuplicadosVehiculo(m);
+  if(!dups.length)return true;
+  return confirm(`⚠️ POSIBLE GASTO DUPLICADO — placa ${m.placa}\n\nVas a validar:\n"${m.desc||''}" — C$${fmtNio(m.monto)}\n\nEste vehículo ya tiene:\n${dups.slice(0,8).join('\n')}${dups.length>8?'\n…y '+(dups.length-8)+' más':''}\n\n¿Es un gasto distinto y querés registrarlo igual?`);
+}
+function confirmarSiDuplicadosEnLote(lista){
+  const con=lista.filter(m=>!m.registradoContable).map(m=>({m,d:buscarDuplicadosVehiculo(m)})).filter(x=>x.d.length);
+  if(!con.length)return true;
+  const txt=con.slice(0,10).map(x=>`• ${x.m.placa}: "${x.m.desc||''}" C$${fmtNio(x.m.monto)}`).join('\n');
+  return confirm(`⚠️ ${con.length} gasto(s) podrían estar DUPLICADOS en el mismo vehículo (misma placa con el mismo monto o concepto):\n\n${txt}${con.length>10?'\n…':''}\n\nRevisalos uno por uno si tenés duda. ¿Validar todos igual?`);
+}
 async function validarYRegistrarRendicionHistorialUSD(historialId,movId){
   if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador (Edwin) puede validar y registrar gastos en el sistema contable.');return;}
   const hist=(contData.rendicionHistorial||[]).find(h=>h.id===historialId);
   if(!hist)return;
   const m=(hist.movs||[]).find(x=>x.id===movId);
   if(!m)return;
+  if(!confirmarSiDuplicadoVehiculo(m))return;
   const tasa=Number(m.tasaUsada||36.50);
   const montoUSD=Number(m.monto||0)/tasa;
   if(!confirm(`Este gasto de C$ ${fmtNio(m.monto)} (de ${fmtRDC(hist.numero)}, ya cerrada) se registrará en Contabilidad como $${fmt(montoUSD)} USD (tasa C$${tasa.toFixed(2)} x US$1).\n\n¿Confirmar?`))return;
@@ -22117,6 +22196,7 @@ async function validarTodosPendientesRendicionActiva(){
   if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador (Edwin) puede validar y registrar gastos en el sistema contable.');return;}
   const pendientes=(getRendicionMovs()||[]).filter(m=>!m.registradoContable);
   if(!pendientes.length){alert('No hay gastos pendientes de validar en la rendición activa.');return;}
+  if(!confirmarSiDuplicadosEnLote(pendientes))return;
   const cfg=getRendicionConfig();
   const tasa=Number(cfg.tasaCambio||36.50);
   const totalUSD=pendientes.reduce((s,m)=>s+Number(m.monto||0)/tasa,0);
@@ -22174,6 +22254,7 @@ async function validarYRegistrarRendicionUSD(movId){
   const movs=getRendicionMovs();
   const m=movs.find(x=>x.id===movId);
   if(!m)return;
+  if(!confirmarSiDuplicadoVehiculo(m))return;
   const cfg=getRendicionConfig();
   const tasa=Number(cfg.tasaCambio||36.50);
   const montoUSD=Number(m.monto||0)/tasa;
