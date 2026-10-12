@@ -4457,7 +4457,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-08-1530';
+const APP_VERSION='2026-10-12-1200';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11436,6 +11436,14 @@ async function guardarGasto(){
     responsable,vehId,esReparacion,
     fotoComprobante:mgtoDocData
   };
+  // Al editar se conservan los datos de origen del gasto (de qué Rendición, Registro Directo o
+  // Comprobante de Diario vino). Antes se perdían, y al volver a entrar el sistema creía que
+  // faltaba ese gasto y lo reconstruía otra vez — quedaba DUPLICADO.
+  const gPrevio=(contData.gastos||[]).find(x=>x.id===obj.id);
+  if(gPrevio){
+    ['origenMovId','origenRegistroDirecto','comprobanteDiarioId','vehiculoRef','creadoPor','fechaRegistro'].forEach(k=>{if(gPrevio[k]!==undefined&&obj[k]===undefined)obj[k]=gPrevio[k];});
+    if(!obj.fotoComprobante&&gPrevio.fotoComprobante)obj.fotoComprobante=gPrevio.fotoComprobante;
+  }
   marcarEdicion(obj);
   const i=(contData.gastos||[]).findIndex(x=>x.id===obj.id);
   obj.numeroControl=isNew?siguienteNumeroControl():((i>=0?contData.gastos[i].numeroControl:null)||siguienteNumeroControl());
@@ -15904,11 +15912,36 @@ function cdMovsManual(fecha,tipo){
 }
 function cdCierres(){return(contData.cajaDiariaCierres||[]).filter(c=>!c.anulado).sort((a,b)=>a.fecha.localeCompare(b.fecha));}
 function cdCierreDe(fecha){return cdCierres().find(c=>c.fecha===fecha);}
+// Primer día que maneja la Caja Diaria (el primer cierre o el primer movimiento manual). Los días
+// anteriores a este no se toman en cuenta para pedir cierres pendientes.
+function cdInicio(){
+  const fechas=[...cdCierres().map(c=>c.fecha),...(contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).map(m=>m.fecha)].filter(Boolean).sort();
+  return fechas[0]||hoyLocal();
+}
+// Días con movimiento (manual o ventas/reservas) que todavía NO se cerraron, antes de 'fecha'.
+function cdDiasPendientes(fecha){
+  const ini=cdInicio();
+  const cerrados=new Set(cdCierres().map(c=>c.fecha));
+  const dias=new Set();
+  (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
+  (ventas||[]).forEach(v=>{if(v.fecha&&(v.estado==='Completada'||(v.estado==='Pendiente'&&Number(v.anticipo||0)>0)))dias.add(v.fecha);});
+  return[...dias].filter(d=>d&&d>=ini&&d<fecha&&!cerrados.has(d)).sort();
+}
 function cdSaldoAnterior(fecha){
   const prev=cdCierres().filter(c=>c.fecha<fecha).pop();
-  if(prev)return{cajafuerte:prev.saldoFinal.cajafuerte,cashjulio:prev.saldoFinal.cashjulio,desde:'Cierre del '+prev.fecha};
-  const ini=(contData.cajaDiariaSaldoInicial||[]).find(x=>x.id==='inicial')||{};
-  return{cajafuerte:Number(ini.cajafuerte||0),cashjulio:Number(ini.cashjulio||0),desde:'Saldo inicial',editable:true};
+  let base;
+  if(prev)base={cajafuerte:prev.saldoFinal.cajafuerte,cashjulio:prev.saldoFinal.cashjulio,desde:'Cierre del '+prev.fecha};
+  else{
+    const ini=(contData.cajaDiariaSaldoInicial||[]).find(x=>x.id==='inicial')||{};
+    base={cajafuerte:Number(ini.cajafuerte||0),cashjulio:Number(ini.cashjulio||0),desde:'Saldo inicial',editable:true};
+  }
+  // Si quedaron días sin cerrar entre el último cierre y hoy, se arrastran sus movimientos para
+  // que el saldo anterior sea el real (antes se saltaba esos días y el saldo quedaba mal).
+  const pend=cdDiasPendientes(fecha).filter(d=>!prev||d>prev.fecha);
+  if(!pend.length)return base;
+  const ult=cdCalcular(pend[pend.length-1]);
+  return{cajafuerte:ult.saldoFinal.cajafuerte,cashjulio:ult.saldoFinal.cashjulio,
+    desde:'Arrastrado del '+pend[pend.length-1]+' (día SIN cerrar)',pendientes:pend};
 }
 // Arma la hoja completa de un día (en vivo, o la foto guardada si ya está cerrado)
 function cdCalcular(fecha){
@@ -15992,7 +16025,13 @@ function renderAuxiliares(){
   const h=cdCalcular(cdFecha);
   const sa=h.saldoAnterior;
   const historial=cdCierres().slice().reverse();
+  const pendientes=h.cerrado?[]:cdDiasPendientes(cdFecha);
   el.innerHTML=`
+  ${pendientes.length?`<div style="background:#FFF3BF;border:2px solid #FAB005;border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <i class="ti ti-alert-triangle-filled" style="color:#F08C00;font-size:20px"></i>
+    <span style="flex:1;font-size:13px">Falta cerrar la caja de: <b>${pendientes.join(', ')}</b>. Cerrá primero ${pendientes.length===1?'ese día':'esos días, en orden'}, para que el saldo anterior quede amarrado.</span>
+    <button class="btn btn-sm btn-primary" onclick="cdFecha='${pendientes[0]}';renderAuxiliares()"><i class="ti ti-arrow-right"></i>Ir a cerrar el ${pendientes[0]}</button>
+  </div>`:''}
   <style>.cd-tbl th,.cd-tbl td{border:1px solid var(--border);padding:4px 6px;vertical-align:top}</style>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
     <label style="font-size:12px">Día:</label>
@@ -16112,6 +16151,8 @@ function cdEditarSaldoInicial(){
   });
 }
 async function cdCerrarDia(){
+  const pend=cdDiasPendientes(cdFecha);
+  if(pend.length){alert(`⚠️ Antes de cerrar el ${cdFecha} hay que cerrar: ${pend.join(', ')}.\n\nLos cierres van en orden, para que cada día arranque con el saldo final del anterior.`);cdFecha=pend[0];renderAuxiliares();return;}
   const h=cdCalcular(cdFecha);
   if(!confirm(`¿Cerrar la caja del ${cdFecha}?\n\nSaldo final Caja fuerte: ${fmtD(h.saldoFinal.cajafuerte)}\nSaldo final Cash Julio M: ${fmtD(h.saldoFinal.cashjulio)}\n\nQueda guardado en el historial y ya no se puede modificar (solo el Administrador puede reabrirlo).`))return;
   const ahora=new Date();
@@ -21990,7 +22031,21 @@ async function corregirCampoMovRendicionHistorial(historialId,movId,campo,valor)
   const m=(hist.movs||[]).find(x=>x.id===movId);
   if(!m)return;
   m[campo]=valor;
+  sincronizarGastoDesdeMovRendicion(m,campo,valor);
   await saveOne('contable',{id:'main',...contData});
+}
+// Si el movimiento ya estaba registrado en Contabilidad, el cambio de cuenta o fecha también se
+// aplica a su gasto — antes solo cambiaba en la Rendición y el Estado de Resultados seguía igual.
+function sincronizarGastoDesdeMovRendicion(m,campo,valor){
+  if(!m||!m.registradoContable)return;
+  const g=(contData.gastos||[]).find(x=>x.origenMovId===m.id);
+  if(!g)return;
+  if(campo==='cuenta'){
+    const cuentaReal=(valor||'').includes(' - ')?valor.split(' - ').slice(1).join(' - ').trim():(valor||g.cat);
+    g.cat=cuentaReal||g.cat;
+  } else if(campo==='fecha'&&valor){g.fecha=valor;}
+  else return;
+  marcarEdicion(g);
 }
 // Corrige un campo (por ahora, la cuenta) de un movimiento de la rendición ACTIVA — solo
 // guarda el cambio, igual que su equivalente para rendiciones cerradas. NO valida/registra en
@@ -22000,6 +22055,7 @@ async function corregirCampoMovRendicionActiva(movId,campo,valor){
   const m=(contData.rendicionMovs||[]).find(x=>x.id===movId);
   if(!m)return;
   m[campo]=valor;
+  sincronizarGastoDesdeMovRendicion(m,campo,valor);
   await saveOne('contable',{id:'main',...contData});
 }
 // Valida y registra en Contabilidad, de una sola vez, todos los gastos pendientes de la
