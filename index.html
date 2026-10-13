@@ -4467,7 +4467,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-13-1000';
+const APP_VERSION='2026-10-13-1015';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -7338,8 +7338,11 @@ function renderListaPrecios(){
       <input type="text" id="lp-fmontomax" inputmode="decimal" placeholder="Precio hasta" style="width:105px;padding:6px 10px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" oninput="renderListaPrecios()">
     </div>
     <div style="display:flex;align-items:center;gap:6px">
-      <label for="lp-festado" style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">Estado:</label>
-      <select id="lp-festado" onchange="renderListaPrecios()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--blue);border-radius:var(--radius);background:var(--surface);font-weight:600"><option value="">Todos</option></select>
+      <span style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">Estado:</span>
+      <div style="position:relative">
+        <button type="button" id="lp-festado-btn" onclick="lpToggleEstados(event)" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--blue);border-radius:var(--radius);background:var(--surface);font-weight:600;cursor:pointer;white-space:nowrap">Todos <i class="ti ti-chevron-down" style="font-size:11px"></i></button>
+        <div id="lp-festado-panel" style="display:none;position:absolute;top:110%;left:0;z-index:50;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);box-shadow:0 6px 18px rgba(0,0,0,.15);padding:8px;min-width:190px"></div>
+      </div>
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <label for="lp-orden" style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap"><i class="ti ti-arrows-sort"></i> Ordenar:</label>
@@ -7357,7 +7360,7 @@ function renderListaPrecios(){
       <span style="color:var(--text3);font-size:12px">—</span>
       <input type="date" id="lp-ffechahasta" style="padding:5px 8px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" onchange="renderListaPrecios()">
     </div>
-    <button class="btn btn-sm" onclick="document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';document.getElementById('lp-festado').value='';renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
+    <button class="btn btn-sm" onclick="document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';lpEstadosSel=[];renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
     lpCont.parentNode.insertBefore(filtBar,lpCont);
     try{const o=safeStorage.getItem('lp_orden');if(o)document.getElementById('lp-orden').value=o;}catch(e){}
   }
@@ -7377,23 +7380,13 @@ function renderListaPrecios(){
     selColorLP.value=valorPrevio;
   }
   // Estados que existen hoy en el inventario (Disponible, Reservado, Taller…), para el filtro.
-  const selEstLP=document.getElementById('lp-festado');
-  const festado=selEstLP?.value||'';
-  if(selEstLP){
-    const estados=[...new Set(vehiculos.filter(v=>v.estado!=='Vendido'&&v.estado).map(v=>v.estado))].sort();
-    const firma=estados.join('|');
-    if(selEstLP.dataset.firma!==firma){
-      selEstLP.innerHTML='<option value="">Todos</option>'+estados.map(e=>`<option value="${e}">${e}</option>`).join('');
-      selEstLP.value=estados.includes(festado)?festado:'';
-      selEstLP.dataset.firma=firma;
-    }
-  }
+  lpPintarEstados();
   const orden=document.getElementById('lp-orden')?.value||'tipo';
   let veh=vehiculos.filter(v=>v.estado!=='Vendido');
   if(q)veh=veh.filter(v=>((v.marca||'')+(v.modelo||'')+(v.placa||'')).toLowerCase().includes(q));
   if(ftipo)veh=veh.filter(v=>v.tipo===ftipo);
   if(fcolor)veh=veh.filter(v=>v.color===fcolor);
-  if(selEstLP&&selEstLP.value)veh=veh.filter(v=>v.estado===selEstLP.value);
+  if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
   if(fmontomin!=null)veh=veh.filter(v=>Number(v.precio||0)>=fmontomin);
   if(fmontomax!=null)veh=veh.filter(v=>Number(v.precio||0)<=fmontomax);
   if(ffechadesde)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=ffechadesde);
@@ -7428,6 +7421,38 @@ async function quitarAlertaLlaveLP(vehiculoId){
   await saveOne('contable',{id:'main',...contData});
   renderListaPrecios();
 }
+// Filtro de Estado con selección múltiple (ej. Disponible + Reservado). Vacío = todos.
+let lpEstadosSel=[];
+function lpPintarEstados(){
+  const panel=document.getElementById('lp-festado-panel'),btn=document.getElementById('lp-festado-btn');
+  if(!panel||!btn)return;
+  const estados=[...new Set(vehiculos.filter(v=>v.estado!=='Vendido'&&v.estado).map(v=>v.estado))].sort();
+  lpEstadosSel=lpEstadosSel.filter(e=>estados.includes(e));
+  const cuenta=e=>vehiculos.filter(v=>v.estado===e).length;
+  panel.innerHTML=estados.map(e=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 2px;cursor:pointer;white-space:nowrap">
+      <input type="checkbox" value="${e}" ${lpEstadosSel.includes(e)?'checked':''} onchange="lpCambiarEstado(this)" style="width:15px;height:15px"> ${e} <span style="color:var(--text3);margin-left:auto">${cuenta(e)}</span></label>`).join('')
+    +`<div style="display:flex;gap:6px;border-top:1px solid var(--border);margin-top:6px;padding-top:6px">
+      <button type="button" class="btn btn-sm" onclick="lpEstadosSel=[];renderListaPrecios()">Todos</button>
+      <button type="button" class="btn btn-sm btn-primary" onclick="document.getElementById('lp-festado-panel').style.display='none'">Listo</button></div>`;
+  btn.innerHTML=(lpEstadosSel.length?(lpEstadosSel.length<=2?lpEstadosSel.join(', '):lpEstadosSel.length+' estados'):'Todos')+' <i class="ti ti-chevron-down" style="font-size:11px"></i>';
+  btn.style.borderColor=lpEstadosSel.length?'var(--purple)':'var(--blue)';
+}
+function lpCambiarEstado(chk){
+  if(chk.checked){if(!lpEstadosSel.includes(chk.value))lpEstadosSel.push(chk.value);}
+  else lpEstadosSel=lpEstadosSel.filter(e=>e!==chk.value);
+  const abierto=document.getElementById('lp-festado-panel')?.style.display==='block';
+  renderListaPrecios();
+  if(abierto)document.getElementById('lp-festado-panel').style.display='block';
+}
+function lpToggleEstados(ev){
+  ev.stopPropagation();
+  const p=document.getElementById('lp-festado-panel');if(!p)return;
+  p.style.display=p.style.display==='block'?'none':'block';
+}
+document.addEventListener('click',e=>{
+  const p=document.getElementById('lp-festado-panel');
+  if(p&&p.style.display==='block'&&!p.contains(e.target)&&e.target.id!=='lp-festado-btn')p.style.display='none';
+});
 // Ordena la Lista de Precios según lo elegido. "Por tipo" agrupa con un encabezado por tipo
 // (ej. SUV (8)); dentro de cada tipo van por marca y modelo.
 function ordenarListaPrecios(veh,orden){
@@ -12747,8 +12772,7 @@ async function exportExcelListaPrecios(){
   if(fmontomax!=null)veh=veh.filter(v=>Number(v.precio||0)<=fmontomax);
   if(ffechadesde)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=ffechadesde);
   if(ffechahasta)veh=veh.filter(v=>v.fechacompra&&v.fechacompra<=ffechahasta);
-  const festadoX=document.getElementById('lp-festado')?.value||'';
-  if(festadoX)veh=veh.filter(v=>v.estado===festadoX);
+  if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
   const ordenX=document.getElementById('lp-orden')?.value||'tipo';
   const rows=[['Tipo','Vehículo','Placa','Km','Trans.','Color','Motor','Días en lote','Lista A (USD)','Lista B (USD)','Comisión','Estado']];
   ordenarListaPrecios(veh,ordenX).forEach(v=>{
