@@ -4467,7 +4467,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-12-1700';
+const APP_VERSION='2026-10-13-1000';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -7337,14 +7337,29 @@ function renderListaPrecios(){
       <span style="color:var(--text3);font-size:12px">—</span>
       <input type="text" id="lp-fmontomax" inputmode="decimal" placeholder="Precio hasta" style="width:105px;padding:6px 10px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" oninput="renderListaPrecios()">
     </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label for="lp-festado" style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">Estado:</label>
+      <select id="lp-festado" onchange="renderListaPrecios()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--blue);border-radius:var(--radius);background:var(--surface);font-weight:600"><option value="">Todos</option></select>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label for="lp-orden" style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap"><i class="ti ti-arrows-sort"></i> Ordenar:</label>
+      <select id="lp-orden" onchange="try{safeStorage.setItem('lp_orden',this.value)}catch(e){};renderListaPrecios()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--purple);border-radius:var(--radius);background:var(--surface);font-weight:600">
+        <option value="tipo">Por tipo de vehículo (SUV, Sedán…)</option>
+        <option value="dias">Más días en lote primero</option>
+        <option value="precioDesc">Precio: mayor a menor</option>
+        <option value="precioAsc">Precio: menor a mayor</option>
+        <option value="marca">Marca A–Z</option>
+      </select>
+    </div>
     <div style="display:flex;align-items:center;gap:4px">
       <label for="lp-ffechadesde" style="font-size:11px;color:var(--text2);white-space:nowrap">Compra desde:</label>
       <input type="date" id="lp-ffechadesde" style="padding:5px 8px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" onchange="renderListaPrecios()">
       <span style="color:var(--text3);font-size:12px">—</span>
       <input type="date" id="lp-ffechahasta" style="padding:5px 8px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" onchange="renderListaPrecios()">
     </div>
-    <button class="btn btn-sm" onclick="document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
+    <button class="btn btn-sm" onclick="document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';document.getElementById('lp-festado').value='';renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
     lpCont.parentNode.insertBefore(filtBar,lpCont);
+    try{const o=safeStorage.getItem('lp_orden');if(o)document.getElementById('lp-orden').value=o;}catch(e){}
   }
   const q=(document.getElementById('lp-q')?.value||'').toLowerCase();
   const ftipo=document.getElementById('lp-ftipo')?.value||'';
@@ -7361,10 +7376,24 @@ function renderListaPrecios(){
     selColorLP.innerHTML='<option value="">Todos</option>'+coloresUnicos.map(c=>`<option value="${c}">${c}</option>`).join('');
     selColorLP.value=valorPrevio;
   }
+  // Estados que existen hoy en el inventario (Disponible, Reservado, Taller…), para el filtro.
+  const selEstLP=document.getElementById('lp-festado');
+  const festado=selEstLP?.value||'';
+  if(selEstLP){
+    const estados=[...new Set(vehiculos.filter(v=>v.estado!=='Vendido'&&v.estado).map(v=>v.estado))].sort();
+    const firma=estados.join('|');
+    if(selEstLP.dataset.firma!==firma){
+      selEstLP.innerHTML='<option value="">Todos</option>'+estados.map(e=>`<option value="${e}">${e}</option>`).join('');
+      selEstLP.value=estados.includes(festado)?festado:'';
+      selEstLP.dataset.firma=firma;
+    }
+  }
+  const orden=document.getElementById('lp-orden')?.value||'tipo';
   let veh=vehiculos.filter(v=>v.estado!=='Vendido');
   if(q)veh=veh.filter(v=>((v.marca||'')+(v.modelo||'')+(v.placa||'')).toLowerCase().includes(q));
   if(ftipo)veh=veh.filter(v=>v.tipo===ftipo);
   if(fcolor)veh=veh.filter(v=>v.color===fcolor);
+  if(selEstLP&&selEstLP.value)veh=veh.filter(v=>v.estado===selEstLP.value);
   if(fmontomin!=null)veh=veh.filter(v=>Number(v.precio||0)>=fmontomin);
   if(fmontomax!=null)veh=veh.filter(v=>Number(v.precio||0)<=fmontomax);
   if(ffechadesde)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=ffechadesde);
@@ -7380,7 +7409,7 @@ function renderListaPrecios(){
         <th style="width:36px">#</th><th>Vehículo</th><th>Foto</th><th>Placa</th><th>Km</th><th>Trans.</th><th>Color</th><th>Motor</th>
         <th>Días</th><th>Lista A</th><th>Lista B</th><th>Comisión</th><th>Estado</th><th>Precio Gerencia</th><th>Reserva</th><th>Proforma</th><th>Recibo</th><th>Factura</th><th>Cierre Venta</th><th>Compartir</th><th>Cuota</th><th>QR</th>
       </tr></thead>
-      <tbody>${sortByTipo(veh).map((v,i)=>lpRow(v,i)).join('')}</tbody>
+      <tbody>${lpFilasOrdenadas(veh,orden)}</tbody>
     </table>
   </div>
   <div id="lp-detail-panel" style="display:none;margin-top:1rem"></div>`;
@@ -7398,6 +7427,33 @@ async function quitarAlertaLlaveLP(vehiculoId){
   contData.llaveAlertaOculta[vehiculoId]=true;
   await saveOne('contable',{id:'main',...contData});
   renderListaPrecios();
+}
+// Ordena la Lista de Precios según lo elegido. "Por tipo" agrupa con un encabezado por tipo
+// (ej. SUV (8)); dentro de cada tipo van por marca y modelo.
+function ordenarListaPrecios(veh,orden){
+  const marcaMod=v=>((v.marca||'')+' '+(v.modelo||'')).trim().toLowerCase();
+  const a=[...veh];
+  if(orden==='dias')a.sort((x,y)=>(x.fechacompra||'9999').localeCompare(y.fechacompra||'9999'));
+  else if(orden==='precioDesc')a.sort((x,y)=>Number(y.precio||0)-Number(x.precio||0));
+  else if(orden==='precioAsc')a.sort((x,y)=>Number(x.precio||0)-Number(y.precio||0));
+  else if(orden==='marca')a.sort((x,y)=>marcaMod(x).localeCompare(marcaMod(y)));
+  else return sortByTipo(a);
+  return a;
+}
+function lpFilasOrdenadas(veh,orden){
+  const lista=ordenarListaPrecios(veh,orden);
+  if(orden!=='tipo')return lista.map((v,i)=>lpRow(v,i)).join('');
+  const conteo={};lista.forEach(v=>{const t=v.tipo||'Sin tipo';conteo[t]=(conteo[t]||0)+1;});
+  let html='',actual=null;
+  lista.forEach((v,i)=>{
+    const t=v.tipo||'Sin tipo';
+    if(t!==actual){
+      actual=t;
+      html+=`<tr class="lp-grupo"><td colspan="22" style="background:var(--blue-light);color:var(--blue);font-weight:800;font-size:13px;padding:8px 12px;letter-spacing:.02em"><i class="ti ti-car"></i> ${t} <span style="font-weight:600;font-size:11px;opacity:.8">(${conteo[t]})</span></td></tr>`;
+    }
+    html+=lpRow(v,i);
+  });
+  return html;
 }
 function lpRow(v,idx){
   const dias=diasDesde(v.fechacompra);
@@ -7953,7 +8009,11 @@ function renderDash(){
 
 // ======================== INVENTARIO ========================
 const TIPO_ORDER=['Pickup','Sedán','SUV','Van','Hatchback','Microbus','Camion','Otro'];
-function sortByTipo(arr){return [...arr].sort((a,b)=>{const ia=TIPO_ORDER.indexOf(a.tipo)||99,ib=TIPO_ORDER.indexOf(b.tipo)||99;return ia-ib;});}
+function sortByTipo(arr){
+  const pos=t=>{const i=TIPO_ORDER.indexOf(t);return i<0?99:i;};
+  const mm=v=>((v.marca||'')+' '+(v.modelo||'')).trim().toLowerCase();
+  return [...arr].sort((a,b)=>(pos(a.tipo)-pos(b.tipo))||String(a.tipo||'').localeCompare(String(b.tipo||''))||mm(a).localeCompare(mm(b)));
+}
 
 // ======================== CORREGIR REPARACIONES REGISTRADAS EN CÓRDOBAS (bug de moneda) ========================
 // Antes de la corrección, las reparaciones conectadas desde Rendición de Cuentas guardaban el monto
@@ -12533,7 +12593,7 @@ function ejecutarImpresionConfigurada(){
   cfg.cols.forEach((label,i)=>{
     if(!seleccionadas.includes(i)){
       const n=i+1;
-      css+=`#${tableId} thead th:nth-child(${n}),#${tableId} tbody td:nth-child(${n}),#${tableId} tfoot td:nth-child(${n}){display:none !important}\n`;
+      css+=`#${tableId} thead th:nth-child(${n}),#${tableId} tbody tr:not(.lp-grupo) td:nth-child(${n}),#${tableId} tfoot td:nth-child(${n}){display:none !important}\n`;
     }
   });
   // Ocultar la(s) tarjeta(s) de la tabla hermana para imprimir cada lista de forma independiente
@@ -12687,10 +12747,14 @@ async function exportExcelListaPrecios(){
   if(fmontomax!=null)veh=veh.filter(v=>Number(v.precio||0)<=fmontomax);
   if(ffechadesde)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=ffechadesde);
   if(ffechahasta)veh=veh.filter(v=>v.fechacompra&&v.fechacompra<=ffechahasta);
-  const rows=[['Vehículo','Placa','Km','Trans.','Color','Motor','Días en lote','Lista A (USD)','Lista B (USD)','Comisión','Estado']];
-  sortByTipo(veh).forEach(v=>{
+  const festadoX=document.getElementById('lp-festado')?.value||'';
+  if(festadoX)veh=veh.filter(v=>v.estado===festadoX);
+  const ordenX=document.getElementById('lp-orden')?.value||'tipo';
+  const rows=[['Tipo','Vehículo','Placa','Km','Trans.','Color','Motor','Días en lote','Lista A (USD)','Lista B (USD)','Comisión','Estado']];
+  ordenarListaPrecios(veh,ordenX).forEach(v=>{
     const dias=diasDesde(v.fechacompra);
     rows.push([
+      v.tipo||'',
       `${v.marca||''} ${v.modelo||''} ${v.anio||''}`.trim(),
       v.placa||'',
       Number(v.km||0),
