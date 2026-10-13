@@ -909,11 +909,12 @@ body.no-delete .confirmDelete{display:none!important}
   <div class="section-header">
     <h2 class="section-title"><i class="ti ti-books"></i> Políticas y Manuales</h2>
     <div id="pol-btn-subir" style="display:none">
+      <button class="btn" onclick="comprimirDocumentosExistentes()" style="color:var(--purple);border-color:var(--purple)" title="Achica los PDFs que ya están subidos"><i class="ti ti-file-zip"></i>Comprimir documentos</button>
       <button class="btn btn-primary" onclick="document.getElementById('pol-file-input').click()"><i class="ti ti-upload"></i>Subir documento</button>
-      <input type="file" id="pol-file-input" style="display:none" onchange="subirDocumentoPolitica(this)">
+      <input type="file" id="pol-file-input" accept="application/pdf,.pdf" style="display:none" onchange="subirDocumentoPolitica(this)">
     </div>
   </div>
-  <p style="font-size:12px;color:var(--text2);margin-bottom:1rem"><i class="ti ti-info-circle"></i> Documentos y manuales de la empresa — para consultar y descargar. Máximo recomendado por archivo: 5 MB.</p>
+  <p style="font-size:12px;color:var(--text2);margin-bottom:1rem"><i class="ti ti-info-circle"></i> Documentos y manuales de la empresa — para consultar y descargar. Los PDF se comprimen automáticamente al subirlos (son solo de lectura).</p>
   <div class="card" style="margin-bottom:1.5rem">
     <div class="card-head"><h3><i class="ti ti-file-text"></i> Documentos</h3></div>
     <div id="pol-lista-docs" style="padding:1rem">Cargando…</div>
@@ -4487,7 +4488,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-13-1600';
+const APP_VERSION='2026-10-13-1630';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -13074,7 +13075,7 @@ async function renderPoliticas(){
       <td style="font-weight:700"><i class="ti ti-file-type-pdf" style="color:var(--red);margin-right:4px"></i>${d.nombre}</td>
       <td>${d.fecha}</td>
       <td>${d.subidoPor}</td>
-      <td>${(d.tamano/1024).toFixed(0)} KB</td>
+      <td>${(d.tamano/1024).toFixed(0)} KB${d.comprimido?` <span style="font-size:9px;color:var(--green)" title="Original: ${((d.tamanoOriginal||0)/1024).toFixed(0)} KB">comprimido</span>`:''}</td>
       <td><div class="tbl-actions">
         <button class="btn btn-sm" onclick="visualizarDocumentoPolitica('${d.id}')" title="Visualizar"><i class="ti ti-eye"></i></button>
         <button class="btn btn-sm" onclick="descargarDocumentoPolitica('${d.id}')" title="Descargar"><i class="ti ti-download"></i></button>
@@ -13096,14 +13097,100 @@ async function renderPoliticas(){
       </div>
     </div>`).join(''):'<p style="text-align:center;color:var(--text3);padding:.5rem">Todavía no hay comentarios.</p>';
 }
+// ======================== COMPRESIÓN DE PDF (solo lectura) ========================
+// Cada página se vuelve a dibujar como imagen JPEG a ~130 dpi y se arma un PDF nuevo. Para
+// documentos escaneados (CamScanner, fotos) baja el peso varias veces; el texto se sigue leyendo
+// bien pero ya no se puede seleccionar/copiar — está bien porque son documentos de consulta.
+// Si el resultado no queda más liviano que el original, se conserva el original.
+function cargarScriptUnaVez(url){
+  window._scriptsCargados=window._scriptsCargados||{};
+  if(window._scriptsCargados[url])return window._scriptsCargados[url];
+  return window._scriptsCargados[url]=new Promise((ok,mal)=>{
+    const sc=document.createElement('script');sc.src=url;sc.onload=()=>ok(true);sc.onerror=()=>{delete window._scriptsCargados[url];mal(new Error('No se pudo cargar '+url));};
+    document.head.appendChild(sc);
+  });
+}
+async function cargarLibreriasPDF(){
+  await cargarScriptUnaVez('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+  await cargarScriptUnaVez('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+function dataUrlABytes(dataUrl){
+  const b=atob(dataUrl.split(',')[1]);const u=new Uint8Array(b.length);
+  for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;
+}
+async function comprimirPDFDataUrl(dataUrl,alProgreso){
+  await cargarLibreriasPDF();
+  const bytesOrig=dataUrlABytes(dataUrl);
+  const antes=bytesOrig.length; // se mide ANTES: pdf.js se queda con el buffer y lo deja vacío
+  const pdf=await window.pdfjsLib.getDocument({data:bytesOrig}).promise;
+  const {jsPDF}=window.jspdf;
+  let doc=null;
+  const ANCHO_PX=1100,CALIDAD=0.55;
+  for(let n=1;n<=pdf.numPages;n++){
+    if(alProgreso)alProgreso(n,pdf.numPages);
+    const pagina=await pdf.getPage(n);
+    const v1=pagina.getViewport({scale:1}); // en puntos PDF
+    const escala=Math.min(2,ANCHO_PX/v1.width);
+    const vp=pagina.getViewport({scale:escala});
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.round(vp.width);canvas.height=Math.round(vp.height);
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    await pagina.render({canvasContext:ctx,viewport:vp}).promise;
+    const img=canvas.toDataURL('image/jpeg',CALIDAD);
+    const orient=v1.width>v1.height?'l':'p';
+    if(!doc)doc=new jsPDF({orientation:orient,unit:'pt',format:[v1.width,v1.height],compress:true});
+    else doc.addPage([v1.width,v1.height],orient);
+    doc.addImage(img,'JPEG',0,0,v1.width,v1.height,undefined,'FAST');
+    canvas.width=canvas.height=0;
+  }
+  const b64=doc.output('datauristring').split(',')[1];
+  const nuevo='data:application/pdf;base64,'+b64;
+  const despues=Math.floor(b64.length*3/4);
+  try{await pdf.destroy();}catch(e){}
+  return despues<antes*0.95?{dataUrl:nuevo,antes,despues,comprimido:true}:{dataUrl,antes,despues:antes,comprimido:false};
+}
+async function comprimirDocumentosExistentes(){
+  if(MODO!=='admin'){alert('⛔ Solo el Administrador puede hacer esto.');return;}
+  const docs=getPoliticasDocs();
+  if(!docs.length){alert('No hay documentos.');return;}
+  if(!confirm(`Se van a comprimir los ${docs.length} documento(s) que ya están subidos.\n\nPuede tardar uno o dos minutos — no cierres esta pantalla mientras tanto.\n\n¿Continuar?`))return;
+  let totalAntes=0,totalDespues=0,hechos=0;
+  for(const d of docs){
+    try{
+      showToast?.(`⏳ Comprimiendo "${d.nombre}"…`,'blue');
+      const original=await obtenerArchivoPolitica(d);
+      if(!original||!/^data:application\/pdf/.test(original)){continue;}
+      const r=await comprimirPDFDataUrl(original);
+      totalAntes+=r.antes;totalDespues+=r.despues;
+      if(r.comprimido){
+        await sbSet('contable','politica_doc_'+d.id,{data:r.dataUrl,nombre:d.nombre,tipo:d.tipo,docId:d.id,comprimido:true,tamanoOriginal:r.antes});
+        d.tamano=r.despues;d.comprimido=true;d.tamanoOriginal=r.antes;hechos++;
+      }
+    }catch(e){console.error('No se pudo comprimir',d.nombre,e);}
+  }
+  await guardarPoliticasDocs();
+  renderPoliticas();
+  alert(`✅ Listo. Se comprimieron ${hechos} documento(s).\n\nAntes: ${(totalAntes/1048576).toFixed(1)} MB\nAhora: ${(totalDespues/1048576).toFixed(1)} MB`);
+}
 async function subirDocumentoPolitica(input){
   const file=input.files[0];
   if(!file)return;
-  if(file.size>5*1024*1024){alert('⚠️ El archivo pesa más de 5 MB — elegí uno más liviano, por favor.');input.value='';return;}
+  if(file.size>25*1024*1024){alert('⚠️ El archivo pesa más de 25 MB — elegí uno más liviano, por favor.');input.value='';return;}
   const reader=new FileReader();
   reader.onload=async function(){
+    let data=reader.result,tamano=file.size,comprimido=false;
+    if(/pdf/i.test(file.type)||/\.pdf$/i.test(file.name)){
+      try{
+        showToast?.('⏳ Comprimiendo el PDF antes de subirlo…','blue');
+        const r=await comprimirPDFDataUrl(data);
+        if(r.comprimido){data=r.dataUrl;tamano=r.despues;comprimido=true;}
+      }catch(e){console.warn('No se pudo comprimir, se sube el original:',e);}
+    }
+    if(tamano>6*1024*1024){alert(`⚠️ Aun comprimido, el archivo pesa ${(tamano/1048576).toFixed(1)} MB. Dividilo en partes más pequeñas, por favor.`);input.value='';return;}
     const nuevoDoc={
-      id:uid(),nombre:file.name,tipo:file.type,tamano:file.size,data:reader.result,
+      id:uid(),nombre:file.name,tipo:file.type,tamano,data,comprimido,tamanoOriginal:comprimido?file.size:undefined,
       subidoPor:getNombreUsuario(),fecha:hoyLocal()
     };
     politicasDocsData.push(nuevoDoc);
@@ -13122,7 +13209,7 @@ async function subirDocumentoPolitica(input){
       return;
     }
     renderPoliticas();
-    alert('✅ Documento subido correctamente.');
+    alert(`✅ Documento subido correctamente.${nuevoDoc.comprimido?`\n\nSe comprimió de ${(file.size/1048576).toFixed(1)} MB a ${(nuevoDoc.tamano/1048576).toFixed(1)} MB.`:''}`);
   };
   reader.readAsDataURL(file);
 }
