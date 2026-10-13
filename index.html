@@ -779,6 +779,7 @@ body.no-delete .confirmDelete{display:none!important}
       <span id="lp-modo-badge" style="display:none;background:var(--amber-light);color:var(--amber);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:600"><i class="ti ti-eye"></i> Modo Vendedor</span>
       <span id="lp-modo-ops-badge" style="display:none;background:var(--purple-light);color:var(--purple);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:600"><i class="ti ti-tool"></i> Modo Operaciones</span>
       <button class="btn" onclick="abrirComparadorVehiculos()" style="color:var(--purple);border-color:var(--purple)"><i class="ti ti-arrows-left-right"></i>Comparar</button>
+      <button class="btn" onclick="abrirImprimirLP()" style="color:var(--blue);border-color:var(--blue)"><i class="ti ti-printer"></i>Imprimir</button>
       <button class="btn" onclick="exportExcelListaPrecios()"><i class="ti ti-download"></i>Excel</button>
       <button class="btn" onclick="renderListaPrecios()"><i class="ti ti-refresh"></i>Actualizar</button>
     </div>
@@ -4467,7 +4468,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-13-1015';
+const APP_VERSION='2026-10-13-1030';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -12756,6 +12757,155 @@ function downloadCSV(csv,name){
 }
 
 // Exportar Lista de Precios a Excel manteniendo el formato/colores del sistema
+// ======================== IMPRIMIR LISTA DE PRECIOS ========================
+// Imprime lo que está filtrado y ordenado en pantalla, eligiendo columnas, orientación, tamaño de
+// letra y si se ajusta todo a UNA sola hoja. El mismo cuadro exporta a Excel con esas columnas.
+const LP_PRINT_COLS=[
+  {k:'n',t:'#'},{k:'tipo',t:'Tipo'},{k:'veh',t:'Vehículo'},{k:'placa',t:'Placa'},{k:'km',t:'Km'},
+  {k:'trans',t:'Trans.'},{k:'color',t:'Color'},{k:'motor',t:'Motor'},{k:'dias',t:'Días en lote'},
+  {k:'listaA',t:'Lista A'},{k:'listaB',t:'Lista B'},{k:'comision',t:'Comisión'},{k:'estado',t:'Estado'}
+];
+function lpVehiculosFiltrados(){
+  const val=id=>document.getElementById(id)?.value||'';
+  const q=val('lp-q').toLowerCase(),ftipo=val('lp-ftipo'),fcolor=val('lp-fcolor');
+  const fmin=parseFloat(val('lp-fmontomin')),fmax=parseFloat(val('lp-fmontomax'));
+  const fd=val('lp-ffechadesde'),fh=val('lp-ffechahasta');
+  let veh=vehiculos.filter(v=>v.estado!=='Vendido');
+  if(q)veh=veh.filter(v=>((v.marca||'')+(v.modelo||'')+(v.placa||'')).toLowerCase().includes(q));
+  if(ftipo)veh=veh.filter(v=>v.tipo===ftipo);
+  if(fcolor)veh=veh.filter(v=>v.color===fcolor);
+  if(!isNaN(fmin))veh=veh.filter(v=>Number(v.precio||0)>=fmin);
+  if(!isNaN(fmax))veh=veh.filter(v=>Number(v.precio||0)<=fmax);
+  if(fd)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=fd);
+  if(fh)veh=veh.filter(v=>v.fechacompra&&v.fechacompra<=fh);
+  if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
+  return ordenarListaPrecios(veh,val('lp-orden')||'tipo');
+}
+function lpValorCol(v,k,i,paraExcel){
+  const d=diasDesde(v.fechacompra);
+  const money=n=>paraExcel?(Number(n)||''):(Number(n)?fmtD(n):'—');
+  switch(k){
+    case'n':return i+1;
+    case'tipo':return v.tipo||'';
+    case'veh':return `${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}`.trim();
+    case'placa':return v.placa||'';
+    case'km':return paraExcel?Number(v.km||0):(v.km?Number(v.km).toLocaleString('es-NI'):'—');
+    case'trans':return v.trans||'';
+    case'color':return v.color||'';
+    case'motor':return v.motor||'';
+    case'dias':return d===null?'':d;
+    case'listaA':return money(v.precio);
+    case'listaB':return money(v.precioB);
+    case'comision':return v.comisionLP?(paraExcel?Number(v.comisionLP):fmtD(v.comisionLP)):'';
+    case'estado':return v.estado||'';
+  }
+  return'';
+}
+function lpPrefsImpresion(){
+  let p=null;try{p=JSON.parse(safeStorage.getItem('lp_print_prefs')||'null');}catch(e){}
+  return Object.assign({cols:LP_PRINT_COLS.map(c=>c.k),orient:'landscape',ajuste:'una',letra:'10',agrupar:true},p||{});
+}
+function abrirImprimirLP(){
+  const pr=lpPrefsImpresion();
+  const n=lpVehiculosFiltrados().length;
+  let ov=document.getElementById('ov-imprimir-lp');
+  if(!ov){ov=document.createElement('div');ov.className='overlay';ov.id='ov-imprimir-lp';document.body.appendChild(ov);}
+  const sel=(id,opts,actual)=>`<select id="${id}">${opts.map(([v,t])=>`<option value="${v}" ${String(actual)===v?'selected':''}>${t}</option>`).join('')}</select>`;
+  ov.innerHTML=`<div class="modal" style="max-width:560px">
+    <div class="modal-head"><h3><i class="ti ti-printer"></i> Imprimir Lista de Precios</h3><button class="btn-ghost btn" onclick="closeOv('ov-imprimir-lp')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem"><i class="ti ti-info-circle"></i> Se imprimen los <b>${n} vehículo(s)</b> que tenés filtrados en pantalla, en el mismo orden.</p>
+      <div class="form-row">
+        <div class="form-group"><label>Hoja</label>${sel('lpp-orient',[['landscape','Horizontal'],['portrait','Vertical']],pr.orient)}</div>
+        <div class="form-group"><label>Ajuste</label>${sel('lpp-ajuste',[['una','Todo en 1 sola hoja'],['ancho','Ajustar al ancho (varias hojas)'],['normal','Tamaño normal']],pr.ajuste)}</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Tamaño de letra</label>${sel('lpp-letra',[['8','Muy pequeña'],['10','Pequeña'],['12','Normal'],['14','Grande']],pr.letra)}</div>
+        <div class="form-group" style="display:flex;align-items:flex-end"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0 0 8px"><input type="checkbox" id="lpp-agrupar" ${pr.agrupar?'checked':''} style="width:16px;height:16px"> Agrupar por tipo (SUV, Sedán…)</label></div>
+      </div>
+      <div class="form-group"><label style="display:flex;justify-content:space-between;align-items:center">Columnas
+        <span style="font-weight:400"><a href="#" onclick="event.preventDefault();document.querySelectorAll('.lpp-col').forEach(c=>c.checked=true)">Todas</a> · <a href="#" onclick="event.preventDefault();document.querySelectorAll('.lpp-col').forEach(c=>c.checked=false)">Ninguna</a></span></label>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px 10px;margin-top:4px">
+          ${LP_PRINT_COLS.map(c=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" class="lpp-col" value="${c.k}" ${pr.cols.includes(c.k)?'checked':''} style="width:15px;height:15px"> ${c.t}</label>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeOv('ov-imprimir-lp')">Cancelar</button>
+      <button class="btn" onclick="lpEjecutar('excel')"><i class="ti ti-download"></i>Exportar Excel</button>
+      <button class="btn btn-primary" onclick="lpEjecutar('imprimir')"><i class="ti ti-printer"></i>Imprimir</button>
+    </div>
+  </div>`;
+  openOv('ov-imprimir-lp');
+}
+function lpLeerPrefs(){
+  const pr={cols:[...document.querySelectorAll('.lpp-col:checked')].map(c=>c.value),
+    orient:document.getElementById('lpp-orient').value,ajuste:document.getElementById('lpp-ajuste').value,
+    letra:document.getElementById('lpp-letra').value,agrupar:document.getElementById('lpp-agrupar').checked};
+  try{safeStorage.setItem('lp_print_prefs',JSON.stringify(pr));}catch(e){}
+  return pr;
+}
+async function lpEjecutar(accion){
+  const pr=lpLeerPrefs();
+  if(!pr.cols.length){alert('Elegí al menos una columna.');return;}
+  const cols=LP_PRINT_COLS.filter(c=>pr.cols.includes(c.k));
+  const veh=lpVehiculosFiltrados();
+  if(!veh.length){alert('No hay vehículos con los filtros actuales.');return;}
+  if(accion==='excel'){
+    const rows=[cols.map(c=>c.t)];
+    veh.forEach((v,i)=>rows.push(cols.map(c=>lpValorCol(v,c.k,i,true))));
+    await exportarExcelConFormato(rows,'lista_precios_nicauto','Lista de Precios','Lista de Precios');
+    return;
+  }
+  const filtros=[];
+  if(lpEstadosSel.length)filtros.push('Estado: '+lpEstadosSel.join(', '));
+  const ft=document.getElementById('lp-ftipo')?.value;if(ft)filtros.push('Tipo: '+ft);
+  const fc=document.getElementById('lp-fcolor')?.value;if(fc)filtros.push('Color: '+fc);
+  const conteo={};veh.forEach(v=>{const t=v.tipo||'Sin tipo';conteo[t]=(conteo[t]||0)+1;});
+  let cuerpo='',actual=null;
+  veh.forEach((v,i)=>{
+    const t=v.tipo||'Sin tipo';
+    if(pr.agrupar&&t!==actual){actual=t;cuerpo+=`<tr class="grp"><td colspan="${cols.length}">${t} (${conteo[t]})</td></tr>`;}
+    cuerpo+=`<tr>${cols.map(c=>`<td class="${['listaA','listaB','comision','km','dias'].includes(c.k)?'num':''}">${lpValorCol(v,c.k,i,false)}</td>`).join('')}</tr>`;
+  });
+  const ahora=new Date();
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lista de Precios — NICAUTO</title>
+  <style>
+    @page{size:letter ${pr.orient};margin:8mm}
+    body{font-family:Arial,sans-serif;margin:0;color:#212529;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    #hoja{font-size:${pr.letra}px;${pr.ajuste==='normal'?'':'transform-origin:top left;'}}
+    table{border-collapse:collapse;width:100%}
+    th{background:#1971C2;color:#fff;padding:4px 6px;text-align:left;white-space:nowrap}
+    td{padding:3px 6px;border-bottom:1px solid #DEE2E6;white-space:nowrap}
+    td.num{text-align:right}
+    tr:nth-child(even) td{background:#F8F9FA}
+    tr.grp td{background:#E7F5FF !important;color:#1971C2;font-weight:800;padding:5px 6px;border-bottom:2px solid #1971C2}
+    thead{display:table-header-group}
+    tr{page-break-inside:avoid}
+    .pie{display:flex;justify-content:space-between;font-size:.85em;color:#868E96;margin-top:6px}
+  </style></head><body><div id="hoja">
+    ${encabezadoNicautoHTML('Lista de Precios',`${veh.length} vehículo(s)${filtros.length?' — '+filtros.join(' · '):''}`)}
+    <table><thead><tr>${cols.map(c=>`<th>${c.t}</th>`).join('')}</tr></thead><tbody>${cuerpo}</tbody></table>
+    <div class="pie"><span>Generado desde NICAUTO</span><span>Impreso el ${ahora.toLocaleDateString('es-NI')} ${ahora.toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'})} por ${getNombreUsuario()}</span></div>
+  </div>
+  <script>
+    window.onload=function(){
+      var h=document.getElementById('hoja'),ajuste='${pr.ajuste}',hor='${pr.orient}'==='landscape';
+      // Área imprimible de una hoja carta con márgenes de 8 mm, en píxeles (96 por pulgada)
+      var W=(hor?11:8.5)*96-62, H=(hor?8.5:11)*96-62;
+      if(ajuste!=='normal'){
+        var z=Math.min(1,W/h.scrollWidth);
+        if(ajuste==='una')z=Math.min(z,H/h.scrollHeight);
+        if(z<1){h.style.zoom=z;}
+      }
+      setTimeout(function(){window.focus();window.print();},150);
+    };
+  <\/script></body></html>`;
+  const win=window.open('','_blank');
+  if(!win){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  win.document.open();win.document.write(html);win.document.close();
+  closeOv('ov-imprimir-lp');
+}
 async function exportExcelListaPrecios(){
   const q=(document.getElementById('lp-q')?.value||'').toLowerCase();
   const ftipo=document.getElementById('lp-ftipo')?.value||'';
