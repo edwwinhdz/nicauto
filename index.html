@@ -4468,7 +4468,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-13-1030';
+const APP_VERSION='2026-10-13-1115';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -16381,9 +16381,14 @@ function cdAbrirMov(tipo,editId){
       <div class="form-group"><label>Monto (USD $)</label><input id="cd-monto" type="number" step="0.01" value="${m?.monto||''}"></div></div>
     <div class="form-group"><label>${esIng?'Columna donde entra':'Sale de'}</label><select id="cd-col">${cdOpcionesCol(m?.col||'cajafuerte',!esIng)}</select></div>
     <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--purple-light);border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer">
-      <input type="checkbox" id="cd-trasladojm" ${m?.trasladoJM?'checked':''} style="width:16px;height:16px;margin-top:1px">
-      <span><b>Traslado de fondos con Don Julio (Fondos JM)</b><br>${esIng?'Don Julio manda este dinero a la caja: se registra como <b>Egreso</b> en Fondos JM.':'Este dinero se le entrega a Don Julio: se registra como <b>Ingreso</b> en Fondos JM.'}</span>
-    </label>`,
+      <input type="checkbox" id="cd-trasladojm" ${m?.trasladoJM?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-fjm-wrap').style.display=this.checked?'block':'none'">
+      <span><b>Traslado de fondos con Don Julio (Fondos JM)</b><br>El monto también se registra en la hoja Fondos JM.</span>
+    </label>
+    <div class="form-group" id="cd-fjm-wrap" style="display:${m?.trasladoJM?'block':'none'};margin-top:.5rem"><label>En Fondos JM, registrarlo como</label>
+      <select id="cd-fjmtipo">
+        <option value="Ingreso" ${(m?.fjmTipo||cdFjmTipoSugerido(tipo,m?.col))==='Ingreso'?'selected':''}>Ingreso para Don Julio (suma a su saldo)</option>
+        <option value="Egreso" ${(m?.fjmTipo||cdFjmTipoSugerido(tipo,m?.col))==='Egreso'?'selected':''}>Egreso para Don Julio (resta de su saldo)</option>
+      </select></div>`,
   async()=>{
     const monto=parseFloat(cdVal('cd-monto'));
     if(!monto||monto<=0){alert('El monto es obligatorio.');return;}
@@ -16392,7 +16397,8 @@ function cdAbrirMov(tipo,editId){
     const obj={...(m||{}),id:m?.id||('CDM_'+uid()),fecha:m?.fecha||cdFecha,tipo,desc:cdVal('cd-desc'),
       vendedor:cdVal('cd-vendedor'),cliente:cdVal('cd-cliente'),recibe:cdVal('cd-recibe'),recibo:cdVal('cd-recibo'),
       monto,col:cdVal('cd-col'),registradoPor:m?.registradoPor||getNombreUsuario(),
-      trasladoJM:!!document.getElementById('cd-trasladojm')?.checked};
+      trasladoJM:!!document.getElementById('cd-trasladojm')?.checked,
+      fjmTipo:document.getElementById('cd-trasladojm')?.checked?(document.getElementById('cd-fjmtipo')?.value||''):''};
     const i=contData.cajaDiariaMovs.findIndex(x=>x.id===obj.id);
     if(i>=0)contData.cajaDiariaMovs[i]=obj;else contData.cajaDiariaMovs.push(obj);
     cdSincronizarFondosJM(obj);
@@ -16403,6 +16409,12 @@ function cdAbrirMov(tipo,editId){
 // Salida de caja (se le da dinero a Don Julio) → Ingreso en Fondos JM.
 // Ingreso a caja (Don Julio manda dinero) → Egreso en Fondos JM.
 // Si se edita o se quita el movimiento en la caja, Fondos JM se actualiza solo.
+// Sugerencia por defecto: si el dinero queda en manos de Don Julio (salida de caja hacia él, o
+// entrada a la columna Cash Julio M) es Ingreso para él; si sale de lo suyo hacia la caja, Egreso.
+function cdFjmTipoSugerido(tipo,col){
+  if(tipo==='egreso')return'Ingreso';
+  return col==='cashjulio'?'Ingreso':'Egreso';
+}
 function cdSincronizarFondosJM(m){
   contData.fondosJM=contData.fondosJM||[];
   const idFJM='FJM_'+m.id;
@@ -16412,7 +16424,7 @@ function cdSincronizarFondosJM(m){
     return;
   }
   const f={id:idFJM,origenCajaMovId:m.id,
-    tipo:m.tipo==='egreso'?'Ingreso':'Egreso',monto:Number(m.monto||0),
+    tipo:m.fjmTipo||cdFjmTipoSugerido(m.tipo,m.col),monto:Number(m.monto||0),
     fechaIngreso:m.fecha,fechaPago:m.fecha,
     detalle:`Traslado ${m.tipo==='egreso'?'desde':'hacia'} Caja NICAUTO (${m.col==='cashjulio'?'Cash Julio M':'Caja fuerte'}) — ${m.desc||''}${m.recibo?' | Recibo '+m.recibo:''}`,
     clasificacion:'Traslado de fondos',placa:'',formaPago:'Cash',registradoPor:m.registradoPor||getNombreUsuario()};
