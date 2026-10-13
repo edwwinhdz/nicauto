@@ -3680,7 +3680,11 @@ let saving=false;
 // los gastos de Registro Directo). Ahora se recuerda qué ids venían del servidor ("base"); al
 // guardar, se respetan los borrados hechos en esta sesión y se conserva todo lo nuevo de otros.
 window._baseListas=window._baseListas||{};
-function setBaseLista(campo,lista){window._baseListas[campo]=new Set((lista||[]).filter(x=>x&&x.id!=null).map(x=>x.id));}
+function setBaseLista(campo,lista){
+  window._baseListas[campo]=new Set((lista||[]).filter(x=>x&&x.id!=null).map(x=>x.id));
+  const fila={gastos:'gastos_data',recibos:'recibos_data',compras:'compras_data',cuentas:'cuentas_data',tallerRegistros:'taller_data'}[campo];
+  if(fila){window._firmaListasGuardadas=window._firmaListasGuardadas||{};window._firmaListasGuardadas[fila]=JSON.stringify(lista||[]);}
+}
 // Indicador de guardado
 function showSaving(){
   let el=document.getElementById('save-indicator');
@@ -3722,9 +3726,18 @@ async function cargarPoliticasDocs(){
     return true;
   }catch(e){console.error('Error cargando documentos de Políticas:',e);return false;}
 }
+// Cada PDF vive en su PROPIA fila ('politica_doc_<id>'); la lista 'politicas_docs' solo guarda
+// nombre, fecha, tamaño, etc. Antes los 6 PDFs (20 MB) viajaban juntos cada vez que alguien
+// abría Políticas y Manuales, y eso tumbaba la base de datos para todos.
 async function guardarPoliticasDocs(){
   try{
-    await sbSet('contable','politicas_docs',{documentos:politicasDocsData});
+    for(const d of politicasDocsData){
+      if(d.data){
+        await sbSet('contable','politica_doc_'+d.id,{data:d.data,nombre:d.nombre,tipo:d.tipo,docId:d.id});
+        delete d.data;d.enArchivo=true;
+      }
+    }
+    await sbSet('contable','politicas_docs',{documentos:politicasDocsData.map(({data,...r})=>r)});
     return true;
   }catch(e){
     console.error('Error guardando documentos de Políticas:',e);
@@ -4307,6 +4320,12 @@ async function saveOne(table,obj){
       // si el servidor ya tiene datos reales y la versión local a punto de guardar está vacía,
       // NUNCA se sobrescribe — se avisa como fallo en vez de borrar en silencio.
       const guardarListaConProteccion=async(idFila,campo,listaLocal)=>{
+        // Si esta lista no cambió desde el último guardado de esta sesión, no se vuelve a subir —
+        // antes cada guardado (aunque fuera solo un movimiento de caja) volvía a mandar Gastos,
+        // Compras (con fotos), Cuentas, etc. completos, y eso cargaba de más el servidor.
+        window._firmaListasGuardadas=window._firmaListasGuardadas||{};
+        const firma=JSON.stringify(listaLocal);
+        if(window._firmaListasGuardadas[idFila]===firma)return;
         if(listaLocal.length===0){
           const remotoActual=await obtenerFilaRemotaPorId('contable',idFila);
           if(remotoActual&&remotoActual[campo]&&remotoActual[campo].length>0){
@@ -4331,7 +4350,7 @@ async function saveOne(table,obj){
           }
         }
         const ok=await guardarFilaSeparada(idFila,{[campo]:listaFinal});
-        if(ok)setBaseLista(campo,listaFinal);
+        if(ok){setBaseLista(campo,listaFinal);window._firmaListasGuardadas[idFila]=JSON.stringify(listaFinal);}
       };
       // Papelera de Borrados: mismo caso — un registro por cada vehículo/venta/consignación
       // borrado, que se consulta casi nunca pero se guarda seguido. A diferencia de los otros
@@ -4468,7 +4487,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-13-1115';
+const APP_VERSION='2026-10-13-1600';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -13110,11 +13129,19 @@ async function subirDocumentoPolitica(input){
 // Igual que visualizarDocumentoPolitica: se convierte el data:URL (base64) a un Blob real antes
 // de descargar. Un enlace <a download> apuntando directo a un data:URL grande falla en silencio
 // en varios navegadores (no pasa nada, ni error ni descarga) — con Blob no hay ese límite.
-function descargarDocumentoPolitica(id){
+async function obtenerArchivoPolitica(d){
+  if(d.data)return d.data;
+  const fila=await obtenerFilaRemotaPorId('contable','politica_doc_'+d.id);
+  return fila?.data||null;
+}
+async function descargarDocumentoPolitica(id){
   const d=getPoliticasDocs().find(x=>x.id===id);
   if(!d)return;
+  showToast?.('⏳ Descargando documento…','blue');
+  const dataUrl=await obtenerArchivoPolitica(d);
+  if(!dataUrl){alert('⚠️ No se pudo traer el documento (problema de conexión). Probá de nuevo en un momento.');return;}
   try{
-    const partes=d.data.split(',');
+    const partes=dataUrl.split(',');
     const mime=partes[0].match(/:(.*?);/)[1];
     const binario=atob(partes[1]);
     const bytes=new Uint8Array(binario.length);
@@ -13132,22 +13159,27 @@ function descargarDocumentoPolitica(id){
 }
 // Abre el documento en una pestaña nueva para VERLO ahí mismo (con el visor de PDF del
 // navegador), sin forzar la descarga — para eso ya está el botón de Descargar aparte.
-function visualizarDocumentoPolitica(id){
+async function visualizarDocumentoPolitica(id){
   const d=getPoliticasDocs().find(x=>x.id===id);
   if(!d)return;
+  // La pestaña se abre ANTES de traer el archivo, para que el navegador no la bloquee.
+  const ventana=window.open('','_blank');
+  if(!ventana){alert('Permitir ventanas emergentes para poder visualizar el documento.');return;}
+  try{ventana.document.write('<p style="font-family:Arial;padding:2rem;color:#555">Cargando documento…</p>');}catch(e){}
+  const dataUrl=await obtenerArchivoPolitica(d);
+  if(!dataUrl){try{ventana.close();}catch(e){}alert('⚠️ No se pudo traer el documento (problema de conexión). Probá de nuevo en un momento.');return;}
   // Convertir el data:URL (base64) a un Blob real antes de abrirlo — los enlaces data: directos
   // tienen un límite de tamaño en varios navegadores, y por eso los PDFs grandes se quedaban en
   // blanco. Con un Blob, no hay ese límite.
   try{
-    const partes=d.data.split(',');
+    const partes=dataUrl.split(',');
     const mime=partes[0].match(/:(.*?);/)[1];
     const binario=atob(partes[1]);
     const bytes=new Uint8Array(binario.length);
     for(let i=0;i<binario.length;i++)bytes[i]=binario.charCodeAt(i);
     const blob=new Blob([bytes],{type:mime});
     const url=URL.createObjectURL(blob);
-    const ventana=window.open(url,'_blank');
-    if(!ventana){alert('Permitir ventanas emergentes para poder visualizar el documento.');return;}
+    ventana.location.href=url;
   }catch(e){
     console.error('Error al visualizar el documento:',e);
     alert('⚠️ No se pudo abrir el documento para visualizar. Probá con "Descargar" en su lugar.');
@@ -13187,6 +13219,7 @@ async function eliminarDocumentoPolitica(id){
     alert('⚠️ No se pudo eliminar por un problema de conexión. Probá de nuevo en unos segundos.');
     return;
   }
+  try{await sbDel('contable','politica_doc_'+id);}catch(e){console.warn('No se pudo borrar el archivo del documento:',e);}
   renderPoliticas();
 }
 async function enviarComentarioPolitica(){
