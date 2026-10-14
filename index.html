@@ -745,6 +745,7 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="tab" onclick="showContTab('posicionfinanciera')">Posición Financiera</button>
     <button class="tab" onclick="showContTab('notasef')"><i class="ti ti-notes" style="font-size:13px"></i> Notas a los EF</button>
     <button class="tab" id="tab-fondosjm" onclick="showContTab('fondosjm')" style="display:none">Fondos JM</button>
+    <button class="tab" id="tab-bancos" onclick="showContTab('bancos')" style="display:none"><i class="ti ti-building-bank" style="font-size:13px"></i> Bancos</button>
     <button class="tab" id="tab-fondosgo" onclick="showContTab('fondosgo')" style="display:none">Fondos GO</button>
   </div>
   <div id="cont-planilla" class="cont-tab" style="display:none"></div>
@@ -768,6 +769,7 @@ body.no-delete .confirmDelete{display:none!important}
   <div id="cont-posicionfinanciera" class="cont-tab" style="display:none"></div>
   <div id="cont-notasef" class="cont-tab" style="display:none"></div>
   <div id="cont-fondosjm" class="cont-tab" style="display:none"></div>
+  <div id="cont-bancos" class="cont-tab" style="display:none"></div>
   <div id="cont-fondosgo" class="cont-tab" style="display:none"></div>
 </div>
 
@@ -4489,7 +4491,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-14-1700';
+const APP_VERSION='2026-10-14-1800';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -8027,7 +8029,7 @@ function renderDash(){
   const cxcPend=(contData.cuentas||[]).filter(ct=>ct.tipo&&ct.tipo.startsWith('CxC')&&ct.estado!=='Pagada').reduce((s,ct)=>s+ct.saldo,0);
   const cxpPend=(contData.cuentas||[]).filter(ct=>ct.tipo&&ct.tipo.startsWith('CxP')&&ct.estado!=='Pagada').reduce((s,ct)=>s+ct.saldo,0);
   const saldoCaja=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0);
-  const saldoBanco=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0);
+  const saldoBanco=bancosTotal(); // hoja Bancos
   // Capital Contable = Total Activos - Total Pasivos
   const totalActCap=saldoCaja+saldoBanco+valorInv+inventarioGerTaller().valor+cxcPend;
   const totalPasCap=cxpPend;
@@ -10447,11 +10449,13 @@ function showContTab(t){
   document.querySelectorAll('.cont-tab').forEach(x=>x.style.display='none');
   document.getElementById('cont-'+t).style.display='block';
   const tabs=['caja','cuentas','cd','gastos','cajachica','planilla','catalogo','balance','estado','flujo','periodos','auxiliares','costosfijos','proyeccion','posicionfinanciera','notasef','fondosjm','fondosgo'];
-  document.querySelectorAll('#page-contable .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',tabs[i]===t));
+  document.querySelectorAll('#page-contable .tab-bar .tab').forEach(x=>x.classList.toggle('active',(x.getAttribute('onclick')||'').includes("'"+t+"'")));
+  const tabBan=document.getElementById('tab-bancos');
+  if(tabBan)tabBan.style.display=puedeVerBancos()?'inline-flex':'none';
   const tabJM=document.getElementById('tab-fondosjm'),tabGO=document.getElementById('tab-fondosgo');
   if(tabJM)tabJM.style.display=(MODO==='admin'||MODO==='gerente1')?'inline-flex':'none';
   if(tabGO)tabGO.style.display=(MODO==='admin'||MODO==='gerente2')?'inline-flex':'none';
-  ({caja:renderCaja,cuentas:renderCuentas,cd:renderComprobanteDiario,gastos:renderGastos,cajachica:renderCajaChicaMenor,planilla:renderPlanillaContable,comisiones:renderComisionesContable,catalogo:renderCatalogo,balance:renderBalance,estado:renderEstado,flujo:renderFlujo,periodos:renderPeriodosCerrados,auxiliares:renderAuxiliares,costosfijos:renderCostosFijos,proyeccion:renderProyeccion,posicionfinanciera:renderPosicionFinanciera,notasef:renderNotasEF,fondosjm:renderFondosJM,fondosgo:renderFondosGO})[t]?.();
+  ({caja:renderCaja,cuentas:renderCuentas,cd:renderComprobanteDiario,gastos:renderGastos,cajachica:renderCajaChicaMenor,planilla:renderPlanillaContable,comisiones:renderComisionesContable,catalogo:renderCatalogo,balance:renderBalance,estado:renderEstado,flujo:renderFlujo,periodos:renderPeriodosCerrados,auxiliares:renderAuxiliares,costosfijos:renderCostosFijos,proyeccion:renderProyeccion,posicionfinanciera:renderPosicionFinanciera,notasef:renderNotasEF,fondosjm:renderFondosJM,fondosgo:renderFondosGO,bancos:renderBancos})[t]?.();
 }
 
 // ======================== POSICIÓN FINANCIERA (hoja nueva, aún NO conectada a datos automáticos) ========================
@@ -11465,6 +11469,143 @@ async function agregarTodosEmpleadosCxC(){
   renderCuentas();
   alert(`✅ Se agregaron ${agregados} empleado(s) nuevo(s) a Cuentas por Cobrar (en $0).`);
 }
+// ======================== BANCOS (auxiliares BAC JM, BAC GO, La Fise, Ficohsa) ========================
+// Cada cuenta lleva saldo inicial, ingresos y salidas. Los ingresos que en el Reporte de Caja caen
+// en la columna de un banco entran SOLOS aquí (se leen de la caja, no se copian, así que si se
+// corrige la caja se corrige el banco). El gran total de los 4 es el saldo de Bancos del Balance.
+// Salidas/pagos e ingresos manuales: solo el Administrador y Don Julio.
+const BANCOS_CTAS=[{k:'BACJM',t:'BAC JM'},{k:'BACGO',t:'BAC GO'},{k:'LAFISE',t:'La Fise'},{k:'FICOHSA',t:'Ficohsa'}];
+const CD_COL_BANCO={bac:'BACJM',bacgisselle:'BACGO',lafise:'LAFISE',ficohsa:'FICOHSA'};
+function puedeVerBancos(){return['admin','gerente1','gerente2','coordinador'].includes(MODO);}
+function puedeMoverBancos(){return MODO==='admin'||MODO==='gerente1';}
+function bancoSaldoInicial(k){const x=(contData.bancosSaldoInicial||[]).find(b=>b.id===k);return x?{monto:Number(x.monto||0),fecha:x.fecha||''}:{monto:0,fecha:''};}
+// Ingresos que vienen del Reporte de Caja (columnas BAC D.Julio, BAC Gisselle, La Fise, Ficohsa)
+function bancosMovsDesdeCaja(){
+  const res=[];
+  let inicio;try{inicio=cdInicio();}catch(e){return res;}
+  const dias=new Set();
+  cdCierres().forEach(c=>dias.add(c.fecha));
+  (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
+  (ventas||[]).forEach(v=>{if(v.fecha)dias.add(v.fecha);});
+  [...dias].filter(d=>d&&d>=inicio&&d<=hoyLocal()).sort().forEach(d=>{
+    let h;try{h=cdCalcular(d);}catch(e){return;}
+    (h.ingresos||[]).forEach(l=>{
+      const k=CD_COL_BANCO[l.col];if(!k)return;
+      res.push({id:'CJ_'+(l.key||l.id),cuenta:k,fecha:d,tipo:'ingreso',monto:Number(l.monto||0),auto:true,
+        desc:`Caja ${d}: ${[l.cliente,l.vehiculo||l.desc].filter(Boolean).join(' — ')}${l.forma?' ('+l.forma+')':''}`,ref:l.recibo||'',nota:l.nota||''});
+    });
+  });
+  return res;
+}
+function bancosMovs(k){
+  const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
+  return[...bancosMovsDesdeCaja().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+}
+function bancoSaldo(k,hasta){
+  const ini=bancoSaldoInicial(k);
+  return ini.monto+bancosMovs(k).filter(m=>!hasta||(m.fecha||'')<=hasta).reduce((s,m)=>s+(m.tipo==='ingreso'?1:-1)*Number(m.monto||0),0);
+}
+function bancosTotal(hasta){return BANCOS_CTAS.reduce((s,b)=>s+bancoSaldo(b.k,hasta),0);}
+function renderBancos(){
+  const el=document.getElementById('cont-bancos');if(!el)return;
+  const puede=puedeMoverBancos();
+  window._bancoAbierto=window._bancoAbierto||{};
+  const tarjetas=BANCOS_CTAS.map(b=>{
+    const ini=bancoSaldoInicial(b.k);
+    const movs=bancosMovs(b.k);
+    let saldo=ini.monto;
+    const filas=movs.map(m=>{saldo+=(m.tipo==='ingreso'?1:-1)*Number(m.monto||0);return{...m,saldo};});
+    const ing=movs.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+Number(m.monto||0),0);
+    const egr=movs.filter(m=>m.tipo!=='ingreso').reduce((s,m)=>s+Number(m.monto||0),0);
+    const abierto=window._bancoAbierto[b.k]!==false;
+    return`<div class="card" style="margin-bottom:1rem">
+      <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <h3 style="cursor:pointer" onclick="window._bancoAbierto['${b.k}']=${!abierto};renderBancos()"><i class="ti ti-chevron-${abierto?'down':'right'}"></i> <i class="ti ti-building-bank"></i> ${b.t}
+          <span style="font-weight:800;color:${saldo>=0?'var(--green)':'var(--red)'};margin-left:8px">${fmtD(saldo)}</span></h3>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${puede?`<button class="btn btn-sm" onclick="bancoSaldoInicialModal('${b.k}')"><i class="ti ti-flag"></i>Saldo inicial</button>
+          <button class="btn btn-sm btn-primary" onclick="bancoMovModal('${b.k}','ingreso')"><i class="ti ti-plus"></i>Ingreso</button>
+          <button class="btn btn-sm btn-danger" onclick="bancoMovModal('${b.k}','egreso')"><i class="ti ti-minus"></i>Salida / Pago</button>`:''}
+        </div>
+      </div>
+      ${abierto?`<div style="display:flex;gap:1rem;flex-wrap:wrap;padding:.5rem 1rem;font-size:12px;color:var(--text2)">
+        <span>Saldo inicial${ini.fecha?' ('+ini.fecha+')':''}: <b>${fmtD(ini.monto)}</b></span><span>Ingresos: <b style="color:var(--green)">${fmtD(ing)}</b></span><span>Salidas: <b style="color:var(--red)">${fmtD(egr)}</b></span></div>
+      <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+        <thead><tr><th>Fecha</th><th>Descripción</th><th>Ref. / Recibo</th><th style="text-align:right">Ingreso</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th><th></th></tr></thead>
+        <tbody>${filas.length?filas.map(m=>`<tr>
+          <td style="white-space:nowrap">${m.fecha||'—'}</td>
+          <td>${m.desc||''}${m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
+          <td>${m.ref||'—'}</td>
+          <td style="text-align:right;color:var(--green)">${m.tipo==='ingreso'?fmtD(m.monto):''}</td>
+          <td style="text-align:right;color:var(--red)">${m.tipo!=='ingreso'?fmtD(m.monto):''}</td>
+          <td style="text-align:right;font-weight:700">${fmtD(m.saldo)}</td>
+          <td>${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
+        </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Sin movimientos</td></tr>'}</tbody>
+      </table></div>`:''}
+    </div>`;
+  }).join('');
+  const total=bancosTotal();
+  el.innerHTML=`${encabezadoNicautoHTML('Bancos','Auxiliares por cuenta bancaria')}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1rem">
+      ${BANCOS_CTAS.map(b=>`<div class="stat-card"><div class="stat-label">${b.t}</div><div class="stat-value" style="font-size:18px;color:${bancoSaldo(b.k)>=0?'var(--green)':'var(--red)'}">${fmtD(bancoSaldo(b.k))}</div></div>`).join('')}
+      <div class="stat-card" style="border:2px solid var(--blue)"><div class="stat-label">GRAN TOTAL BANCOS</div><div class="stat-value stat-blue" style="font-size:20px">${fmtD(total)}</div></div>
+    </div>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:1rem"><i class="ti ti-info-circle"></i> Lo que en el Reporte de Caja entra en las columnas <b>BAC (D.Julio) → BAC JM</b>, <b>BAC Gisselle → BAC GO</b>, <b>La Fise</b> y <b>Ficohsa</b> aparece aquí solo. El gran total es el saldo de <b>Bancos</b> en el Balance General.${puede?'':' Solo el Administrador y Don Julio pueden registrar movimientos.'}</p>
+    ${tarjetas}`;
+}
+function bancoModal(titulo,cuerpo,onGuardar){
+  let ov=document.getElementById('ov-bancos');
+  if(!ov){ov=document.createElement('div');ov.className='overlay';ov.id='ov-bancos';document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="modal" style="max-width:480px"><div class="modal-head"><h3>${titulo}</h3><button class="btn-ghost btn" onclick="closeOv('ov-bancos')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">${cuerpo}</div>
+    <div class="modal-foot"><button class="btn" onclick="closeOv('ov-bancos')">Cancelar</button><button class="btn btn-primary" id="bn-guardar"><i class="ti ti-check"></i>Guardar</button></div></div>`;
+  document.getElementById('bn-guardar').onclick=onGuardar;
+  openOv('ov-bancos');
+}
+function bancoMovModal(k,tipo,editId){
+  if(!puedeMoverBancos()){alert('⛔ Solo el Administrador y Don Julio pueden registrar movimientos de banco.');return;}
+  const m=editId?(contData.bancosMovs||[]).find(x=>x.id===editId):null;
+  const nombre=(BANCOS_CTAS.find(b=>b.k===k)||{}).t;
+  bancoModal(`${tipo==='ingreso'?'Ingreso a':'Salida / pago de'} ${nombre}`,`
+    <div class="form-row"><div class="form-group"><label>Fecha</label><input type="date" id="bn-fecha" value="${m?.fecha||hoyLocal()}"></div>
+    <div class="form-group"><label>Monto (USD $)</label><input type="number" step="0.01" id="bn-monto" value="${m?.monto||''}"></div></div>
+    <div class="form-group"><label>Descripción</label><input id="bn-desc" value="${m?.desc||''}" placeholder="${tipo==='ingreso'?'Ej. Depósito de financiamiento La Fise — Venta Verna':'Ej. Pago de tarjeta, transferencia a proveedor…'}"></div>
+    <div class="form-group"><label>Referencia / No. de transferencia</label><input id="bn-ref" value="${m?.ref||''}"></div>
+    <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="bn-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px">${m?.nota||''}</textarea></div>`,
+  async()=>{
+    const monto=parseFloat(document.getElementById('bn-monto').value);
+    if(!monto||monto<=0){alert('El monto es obligatorio.');return;}
+    const desc=document.getElementById('bn-desc').value.trim();
+    if(!desc){alert('Escribí una descripción.');return;}
+    contData.bancosMovs=contData.bancosMovs||[];
+    const obj={...(m||{}),id:m?.id||('BNM_'+uid()),cuenta:k,tipo,fecha:document.getElementById('bn-fecha').value||hoyLocal(),monto,desc,
+      ref:document.getElementById('bn-ref').value.trim(),nota:document.getElementById('bn-nota').value.trim(),registradoPor:m?.registradoPor||getNombreUsuario()};
+    marcarEdicion(obj);
+    const i=contData.bancosMovs.findIndex(x=>x.id===obj.id);
+    if(i>=0)contData.bancosMovs[i]=obj;else contData.bancosMovs.push(obj);
+    await saveOne('contable',{id:'main',...contData});closeOv('ov-bancos');renderBancos();
+  });
+}
+async function bancoAnularMov(id){
+  if(!puedeMoverBancos())return;
+  const m=(contData.bancosMovs||[]).find(x=>x.id===id);if(!m)return;
+  if(!confirm(`¿Quitar este movimiento de ${fmtD(m.monto)}?`))return;
+  m.anulado=true;m.anuladoPor=getNombreUsuario();m.anuladoFecha=hoyLocal();
+  await saveOne('contable',{id:'main',...contData});renderBancos();
+}
+function bancoSaldoInicialModal(k){
+  if(!puedeMoverBancos())return;
+  const ini=bancoSaldoInicial(k);
+  bancoModal(`Saldo inicial — ${(BANCOS_CTAS.find(b=>b.k===k)||{}).t}`,`
+    <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">El saldo que tenía la cuenta al empezar a llevarla en el sistema. Después se mueve solo con los ingresos y salidas.</p>
+    <div class="form-row"><div class="form-group"><label>Saldo (USD $)</label><input type="number" step="0.01" id="bn-ini" value="${ini.monto||''}"></div>
+    <div class="form-group"><label>A la fecha</label><input type="date" id="bn-ini-fecha" value="${ini.fecha||hoyLocal()}"></div></div>`,
+  async()=>{
+    contData.bancosSaldoInicial=(contData.bancosSaldoInicial||[]).filter(b=>b.id!==k);
+    contData.bancosSaldoInicial.push({id:k,monto:parseFloat(document.getElementById('bn-ini').value)||0,fecha:document.getElementById('bn-ini-fecha').value,por:getNombreUsuario()});
+    await saveOne('contable',{id:'main',...contData});closeOv('ov-bancos');renderBancos();
+  });
+}
 // ======================== CxC BANCOS (por banco + historial por mes) ========================
 const BANCOS_CXC=['BAC','Credex','Ficohsa','La Fise','Banpro'];
 // Banco que debe cada cuenta: el elegido a mano, o el que dice "Persona/Entidad" si es un banco,
@@ -11879,7 +12020,8 @@ function renderBalance(){
   const recIng=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&hastaCorte(r.fecha));
   const recEgr=(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&hastaCorte(r.fecha));
   const saldoCaja=recIng.filter(r=>r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0)-recEgr.filter(r=>r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0);
-  const saldoBanco=recIng.filter(r=>r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0)-recEgr.filter(r=>r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0);
+  // Bancos: gran total de la hoja Bancos (BAC JM, BAC GO, La Fise, Ficohsa) a la fecha de corte.
+  const saldoBanco=bancosTotal(fechaCorte||undefined);
   const valorInv=vehiculos.filter(v=>v.estado!=='Vendido'&&hastaCorte(v.fechacompra)).reduce((s,v)=>s+Number(v.precio),0);
   const invGerTall=inventarioGerTaller(f=>hastaCorte(f));
   const valorInvGer=invGerTall.valor;
@@ -11941,7 +12083,8 @@ function renderBalance(){
       <h4>Activos corrientes</h4>
       <div id="bal-drop-corriente" ondragover="event.preventDefault();this.style.background='var(--green-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaPersonalizadaBalance(event,'activo','corriente')" style="border-radius:6px;min-height:20px;transition:background .15s">
       ${rc('Caja (efectivo)',fmtD(saldoCaja),'caja')}
-      ${rc('Banco (depósitos)',fmtD(saldoBanco),'banco')}
+      <div class="contable-row" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="showContTab('bancos')" title="Ver la hoja Bancos"><span>Bancos <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i></span><span>${fmtD(saldoBanco)}</span></div>
+      ${BANCOS_CTAS.map(b=>`<div class="contable-row" style="font-size:11px;color:var(--text2);padding-left:24px"><span>↳ ${b.t}</span><span>${fmtD(bancoSaldo(b.k,fechaCorte||undefined))}</span></div>`).join('')}
       ${rc('Cuentas por cobrar — Clientes',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Cliente'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Cliente')}
       ${rc('Cuentas por cobrar — Bancos',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco'&&c.estado!=='Pagada'&&hastaCorte(c.fecha)).reduce((s,c)=>s+c.saldo,0)),'CxC-Banco')}
       ${(()=>{const pb={};(contData.cuentas||[]).filter(c=>cxcBancoPendiente(c)&&hastaCorte(c.fecha)).forEach(c=>{const b=bancoDeCxC(c)||'Sin asignar';pb[b]=(pb[b]||0)+Number(c.saldo||0);});
@@ -12564,7 +12707,7 @@ function buildContext(){
   const totAdmin=(contData.gastos||[]).filter(g=>gastosAdminCats.includes(g.cat)).reduce((s,g)=>s+g.monto,0);
   const totNoOp=(contData.gastos||[]).filter(g=>!gastosAdminCats.includes(g.cat)).reduce((s,g)=>s+g.monto,0);
   const saldoCaja=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0);
-  const saldoBanco=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0);
+  const saldoBanco=bancosTotal(); // hoja Bancos
   return`Eres el asistente Copilot de AutoLote Pro. Responde en español, conciso y directo. Base contable: EFECTIVO (no acumulativa).
 
 PERSONAS: ${clientes.map(c=>`${c.nombre}(${c.rol})`).join(', ')}
@@ -12637,7 +12780,7 @@ function exportContable(){
   const totAdmin=(contData.gastos||[]).filter(g=>gastosAdminCats.includes(g.cat)).reduce((s,g)=>s+g.monto,0);
   const totNoOp=(contData.gastos||[]).filter(g=>!gastosAdminCats.includes(g.cat)).reduce((s,g)=>s+g.monto,0);
   const saldoCaja=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0);
-  const saldoBanco=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0);
+  const saldoBanco=bancosTotal(); // hoja Bancos
   const txt=`AUTOLOTE PRO - REPORTE CONTABLE (BASE EFECTIVO)\n${'='.repeat(50)}\nFecha: ${new Date().toLocaleDateString('es-NI')}\n\nCaja y Banco\n${'-'.repeat(30)}\nSaldo Caja: $${fmt(saldoCaja)}\nSaldo Banco: $${fmt(saldoBanco)}\n\nESTADO DE RESULTADOS\n${'-'.repeat(30)}\nIngresos por ventas: $${fmt(ing)}\nCosto de ventas: ($${fmt(cos)})\nUtilidad bruta: $${fmt(ing-cos)}\nComisiones: ($${fmt(com)})\nGastos administrativos: ($${fmt(totAdmin)})\nGastos no operativos: ($${fmt(totNoOp)})\nUTILIDAD NETA: $${fmt(ing-cos-com-totAdmin-totNoOp)}\n\nCUENTAS POR COBRAR\n${'-'.repeat(30)}\n${(contData.cuentas||[]).filter(c=>c.tipo.startsWith('CxC')).map(c=>`${c.tipo} | ${c.persona} | $${fmt(c.saldo)} | ${c.estado}`).join('\n')||'Sin registros'}\n\nCUENTAS POR PAGAR\n${'-'.repeat(30)}\n${(contData.cuentas||[]).filter(c=>c.tipo.startsWith('CxP')).map(c=>`${c.tipo} | ${c.persona} | $${fmt(c.saldo)} | ${c.estado}`).join('\n')||'Sin registros'}\n\nINVENTARIO\n${'-'.repeat(30)}\n${vehiculos.map(v=>`${v.marca} ${v.modelo} ${v.anio} [${v.trans||'—'}] - $${v.precio} [${v.estado}]`).join('\n')}`;
   const a=document.createElement('a');a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(txt);a.download='autolote_contable.txt';a.click();
 }
@@ -14622,7 +14765,7 @@ function renderCatalogo(){
   const totTaller=sumCat('Insumos de taller')+sumCat('Insumos de alistamiento')+sumCat('Mantenimiento de equipos');
   const totNoOp=(contData.gastos||[]).filter(g=>!gastosAdminCats.includes(g.cat)&&!gastosOperativosCats.includes(g.cat)).reduce((s,g)=>s+g.monto,0);
   const saldoCaja=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0);
-  const saldoBanco=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0)-(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&r.medio==='Banco (transferencia)').reduce((s,r)=>s+r.monto,0);
+  const saldoBanco=bancosTotal(); // hoja Bancos
   const valorInv=vehiculos.filter(v=>v.estado!=='Vendido').reduce((s,v)=>s+Number(v.precio||0),0);
   const valorInvGer=inventarioGerTaller().valor;
   const cxc_cli=(contData.cuentas||[]).filter(c=>c.tipo==='CxC-Cliente'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0);
@@ -16413,7 +16556,7 @@ function cdLineasAuto(fecha){
     }
   });
   // Ajustes hechos a mano (columna donde cayó el dinero, quién lo recibió, o línea quitada)
-  return lineas.map(l=>{const a=cdAjuste(l.key);return a?{...l,col:a.col||l.col,recibe:a.recibe||'',banco:a.banco!==undefined?a.banco:l.banco,oculta:!!a.oculta}:l;});
+  return lineas.map(l=>{const a=cdAjuste(l.key);return a?{...l,col:a.col||l.col,recibe:a.recibe||'',banco:a.banco!==undefined?a.banco:l.banco,nota:a.nota||'',oculta:!!a.oculta}:l;});
 }
 // Salidas automáticas: compras de vehículos propios (no consignación) pagadas con Caja fuerte o
 // Cash Julio M. Se arman del Inventario, así que si se corrige la compra, la caja se corrige sola.
@@ -16423,7 +16566,7 @@ function cdEgresosAuto(fecha){
       const l={key:'C_'+v.id,fecha,auto:true,tipoLinea:'Compra',col:v.pagacaja,monto:Number(v.costo),recibo:v.recibo||'',
         desc:`Compra de ${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.color?' '+v.color:''}${v.placa?' — '+v.placa:''}${v.nombrecomprador?' (a '+v.nombrecomprador+')':''}`};
       const a=cdAjuste(l.key);
-      return a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,oculta:!!a.oculta}:l;
+      return a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,nota:a.nota||'',oculta:!!a.oculta}:l;
     });
 }
 function cdMovsManual(fecha,tipo){
@@ -16505,7 +16648,7 @@ function cdHojaHTML(h,enPantalla){
     <tbody>
       ${h.ingresos.length?h.ingresos.map(l=>`<tr>
         <td>${l.fecha}</td><td>${l.vendedor||''}</td><td>${l.cliente||''}</td>
-        <td>${l.vehiculo||l.desc||''}${l.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">← Fondos JM</span>':''}${l.forma?`<br><span style="font-size:9px;color:#868E96">${l.forma}</span>`:''}${l.col==='cxc'?`<br><span style="font-size:9px;font-weight:700;color:${l.banco?'#E67700':'#C92A2A'}">Banco: ${l.banco||'sin asignar'}</span>`:''}</td>
+        <td>${l.vehiculo||l.desc||''}${l.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">← Fondos JM</span>':''}${l.forma?`<br><span style="font-size:9px;color:#868E96">${l.forma}</span>`:''}${l.col==='cxc'?`<br><span style="font-size:9px;font-weight:700;color:${l.banco?'#E67700':'#C92A2A'}">Banco: ${l.banco||'sin asignar'}</span>`:''}${l.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${l.nota}</div>`:''}${CD_COL_BANCO[l.col]?`<div style="font-size:9px;color:#1971C2"><i class="ti ti-building-bank"></i> Entra a ${(BANCOS_CTAS.find(b=>b.k===CD_COL_BANCO[l.col])||{}).t||''} (hoja Bancos)</div>`:''}</td>
         <td>${l.recibe||''}</td><td>${l.recibo||''}</td><td style="text-align:right">${f(Number(l.monto))}</td>
         ${cols.map(c=>`<td style="text-align:right">${l.col===c.k?f(Number(l.monto))+(c.k==='cxc'&&l.banco?`<br><span style="font-size:9px">${l.banco}</span>`:''):''}</td>`).join('')}
         <td style="text-align:right;font-weight:700">${f(Number(l.monto))}</td>${acciones(l)}
@@ -16524,7 +16667,7 @@ function cdHojaHTML(h,enPantalla){
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
     <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
     <tbody>${h.egresos.length?h.egresos.map(e=>`<tr>
-      <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}</td><td>${e.recibo||''}</td><td>${e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte'}</td>
+      <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte'}</td>
       <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
       :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
   </table>
@@ -16620,6 +16763,7 @@ function cdAbrirMov(tipo,editId){
     <div class="form-row"><div class="form-group"><label>No. Recibo / ROC</label><input id="cd-recibo" value="${m?.recibo||''}"></div>
       <div class="form-group"><label>Monto (USD $)</label><input id="cd-monto" type="number" step="0.01" value="${m?.monto||''}"></div></div>
     <div class="form-group"><label>${esIng?'Columna donde entra':'Sale de'}</label><select id="cd-col">${cdOpcionesCol(m?.col||'cajafuerte',!esIng)}</select></div>
+    <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="cd-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px" placeholder="Ej. el cliente pagó en dos partes; recibo físico extraviado…">${(m?.nota)||''}</textarea></div>
     <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--purple-light);border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer">
       <input type="checkbox" id="cd-trasladojm" ${m?.trasladoJM?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-fjm-wrap').style.display=this.checked?'block':'none'">
       <span><b>Traslado de fondos con Don Julio (Fondos JM)</b><br>El monto también se registra en la hoja Fondos JM.</span>
@@ -16637,6 +16781,7 @@ function cdAbrirMov(tipo,editId){
     const obj={...(m||{}),id:m?.id||('CDM_'+uid()),fecha:m?.fecha||cdFecha,tipo,desc:cdVal('cd-desc'),
       vendedor:cdVal('cd-vendedor'),cliente:cdVal('cd-cliente'),recibe:cdVal('cd-recibe'),recibo:cdVal('cd-recibo'),
       monto,col:cdVal('cd-col'),registradoPor:m?.registradoPor||getNombreUsuario(),
+      nota:cdVal('cd-nota'),
       trasladoJM:!!document.getElementById('cd-trasladojm')?.checked,
       fjmTipo:document.getElementById('cd-trasladojm')?.checked?(document.getElementById('cd-fjmtipo')?.value||''):''};
     const i=contData.cajaDiariaMovs.findIndex(x=>x.id===obj.id);
@@ -16677,11 +16822,12 @@ function cdEditarLinea(key,manual){
     cdModal('Ajustar salida por compra',`
       <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">${eg.desc}<br>Recibo ${eg.recibo||'—'} · ${fmtD(eg.monto)}</p>
       <div class="form-group"><label>Sale de</label><select id="cd-col">${cdOpcionesCol(eg.col,true)}</select></div>
+      <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="cd-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px" placeholder="Ej. el cliente pagó en dos partes; recibo físico extraviado…">${(eg.nota)||''}</textarea></div>
       <p style="font-size:11px;color:var(--text3)">Para cambiar el monto, la fecha o el recibo, corregilos en la ficha del vehículo en Inventario.</p>`,
     async()=>{
       contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
       const a=cdAjuste(key);
-      const nuevo={...(a||{}),id:key,col:cdVal('cd-col'),oculta:false};
+      const nuevo={...(a||{}),id:key,col:cdVal('cd-col'),nota:cdVal('cd-nota'),oculta:false};
       if(a)Object.assign(a,nuevo);else contData.cajaDiariaAjustes.push(nuevo);
       await cdGuardarTodo();
     });
@@ -16693,11 +16839,12 @@ function cdEditarLinea(key,manual){
     <div class="form-group"><label>Columna donde cayó el dinero</label><select id="cd-col" onchange="document.getElementById('cd-banco-wrap').style.display=this.value==='cxc'?'block':'none'">${cdOpcionesCol(l.col)}</select></div>
     <div class="form-group" id="cd-banco-wrap" style="display:${l.col==='cxc'?'block':'none'}"><label>Banco que financia (Cuenta por cobrar)</label>
       <select id="cd-banco"><option value="">-- Seleccionar --</option>${CD_BANCOS.map(b=>`<option ${b===l.banco?'selected':''}>${b}</option>`).join('')}</select></div>
-    <div class="form-group"><label>Recibe</label><input id="cd-recibe" value="${l.recibe||''}"></div>`,
+    <div class="form-group"><label>Recibe</label><input id="cd-recibe" value="${l.recibe||''}"></div>
+    <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="cd-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px" placeholder="Ej. el cliente pagó en dos partes; recibo físico extraviado…">${(l.nota)||''}</textarea></div>`,
   async()=>{
     contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
     const a=cdAjuste(key);
-    const nuevo={...(a||{}),id:key,col:cdVal('cd-col'),recibe:cdVal('cd-recibe'),banco:cdVal('cd-banco'),oculta:false};
+    const nuevo={...(a||{}),id:key,col:cdVal('cd-col'),recibe:cdVal('cd-recibe'),banco:cdVal('cd-banco'),nota:cdVal('cd-nota'),oculta:false};
     if(a)Object.assign(a,nuevo);else contData.cajaDiariaAjustes.push(nuevo);
     await cdGuardarTodo();
   });
