@@ -4489,7 +4489,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-14-1310';
+const APP_VERSION='2026-10-14-1700';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11465,6 +11465,65 @@ async function agregarTodosEmpleadosCxC(){
   renderCuentas();
   alert(`✅ Se agregaron ${agregados} empleado(s) nuevo(s) a Cuentas por Cobrar (en $0).`);
 }
+// ======================== CxC BANCOS (por banco + historial por mes) ========================
+const BANCOS_CXC=['BAC','Credex','Ficohsa','La Fise','Banpro'];
+// Banco que debe cada cuenta: el elegido a mano, o el que dice "Persona/Entidad" si es un banco,
+// o el banco de la venta de ese vehículo.
+function bancoDeCxC(c){
+  if(c.banco)return c.banco;
+  const norm=t=>String(t||'').toLowerCase().replace(/\s+/g,'');
+  const porNombre=BANCOS_CXC.find(b=>norm(b)===norm(c.persona)||(norm(c.persona)==='lafise'&&b==='La Fise'));
+  if(porNombre)return porNombre;
+  const vtas=(ventas||[]).filter(v=>Number(v.bancario||0)>0&&v.banco);
+  const porVenta=(c.origenVentaId&&vtas.find(v=>v.id===c.origenVentaId))||(c.vehId&&vtas.find(v=>v.vehiculoId===c.vehId));
+  if(porVenta)return porVenta.banco;
+  const ref=(String(c.desc||'').match(/Ref:\s*([\w-]+)/)||[])[1];
+  const porRecibo=ref&&vtas.find(v=>String(v.recibo||'')===ref||String(v.reciboBanco||'')===ref);
+  if(porRecibo)return porRecibo.banco;
+  return'';
+}
+function cxcBancoPendiente(c){return c.tipo==='CxC-Banco'&&c.estado!=='Pagada'&&Number(c.saldo||0)>0.005;}
+async function asignarBancoCxC(id,banco){
+  const c=(contData.cuentas||[]).find(x=>x.id===id);
+  if(!c)return;
+  c.banco=banco;marcarEdicion(c);
+  await saveOne('contable',{id:'main',...contData});
+  renderCuentas();
+}
+function toggleMesCxCBanco(m){
+  window._cxcBancoMesesAbiertos=window._cxcBancoMesesAbiertos||new Set();
+  if(window._cxcBancoMesesAbiertos.has(m))window._cxcBancoMesesAbiertos.delete(m);else window._cxcBancoMesesAbiertos.add(m);
+  renderCuentas();
+}
+function tablaCxCBancos(tblRows){
+  const todas=(contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco');
+  const pend=todas.filter(cxcBancoPendiente).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const hist=todas.filter(c=>!cxcBancoPendiente(c));
+  const puede=MODO==='admin'||MODO==='coordinador';
+  const total=pend.reduce((s,c)=>s+Number(c.saldo||0),0);
+  const porBanco={};pend.forEach(c=>{const b=bancoDeCxC(c)||'Sin asignar';porBanco[b]=(porBanco[b]||0)+Number(c.saldo||0);});
+  const selBanco=c=>{const b=bancoDeCxC(c);
+    return puede?`<select onclick="event.stopPropagation()" onchange="asignarBancoCxC('${c.id}',this.value)" style="font-size:12px;padding:3px 6px;font-weight:700;${b?'':'border-color:var(--red);color:var(--red)'}">
+      <option value="">-- Elegir --</option>${BANCOS_CXC.map(x=>`<option ${x===b?'selected':''}>${x}</option>`).join('')}</select>`
+      :`<b>${b||'<span style="color:var(--red)">Sin asignar</span>'}</b>`;};
+  const filaPend=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+'</td><td onclick="event.stopPropagation()">'+selBanco(c)+'</td>');
+  window._cxcBancoMesesAbiertos=window._cxcBancoMesesAbiertos||new Set();
+  const meses=[...new Set(hist.map(c=>(c.fecha||'').slice(0,7)||'sin-fecha'))].sort().reverse();
+  const nm=m=>m==='sin-fecha'?'Sin fecha':new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'});
+  const filaHist=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+'</td><td>'+(bancoDeCxC(c)||'—')+'</td>');
+  return`<div class="card" style="margin-bottom:1rem">
+    <div class="card-head"><h3><i class="ti ti-building-bank"></i> CxC — Bancos <span style="font-weight:400;font-size:12px;color:var(--text2)">— ${fmtD(total)} pendiente</span></h3>
+      <button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'CxC-Banco')"><i class="ti ti-plus"></i>Nueva</button></div>
+    ${pend.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:.75rem 1rem 0">${Object.entries(porBanco).sort((a,b)=>b[1]-a[1]).map(([b,t])=>`<span style="background:${b==='Sin asignar'?'var(--red-light)':'var(--green-light)'};color:${b==='Sin asignar'?'var(--red)':'var(--green)'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700"><i class="ti ti-building-bank"></i> ${b}: ${fmtD(t)}</span>`).join('')}</div>`:''}
+    <table class="tbl"><thead><tr><th>Fecha</th><th>Banco que debe</th><th>Persona/Entidad</th><th>Monto</th><th>Saldo</th><th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
+    <tbody>${pend.length?pend.map(filaPend).join(''):'<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:1rem">No hay cuentas por cobrar a bancos pendientes</td></tr>'}
+    ${pend.length?`<tr style="background:var(--surface2);font-weight:800"><td colspan="4" style="text-align:right">TOTAL POR COBRAR A BANCOS:</td><td>${fmtD(total)}</td><td colspan="5"></td></tr>`:''}
+    ${hist.length?`<tr><td colspan="10" style="background:var(--surface2);font-size:12px;font-weight:700;color:var(--text2);padding:8px 12px"><i class="ti ti-history"></i> Historial — cobradas o en cero (${hist.length})</td></tr>`:''}
+    ${meses.map(m=>{const lista=hist.filter(c=>((c.fecha||'').slice(0,7)||'sin-fecha')===m).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));const ab=window._cxcBancoMesesAbiertos.has(m);
+      return`<tr style="cursor:pointer" onclick="toggleMesCxCBanco('${m}')"><td colspan="10" style="font-size:12px;color:var(--text2);padding:6px 12px"><i class="ti ti-chevron-${ab?'down':'right'}"></i> <span style="text-transform:capitalize">${nm(m)}</span> (${lista.length})${ab?'':' — clic para ver'}</td></tr>`+(ab?lista.map(filaHist).join(''):'');}).join('')}
+    </tbody></table>
+  </div>`;
+}
 function renderCuentas(){
   const cuentas=contData.cuentas||[];
   const cxcTipos=['CxC-Cliente','CxC-Banco','CxC-Tercero','CxC-Empleado'];
@@ -11524,7 +11583,7 @@ function renderCuentas(){
   </div>
   <div class="section-header" style="margin-top:.5rem"><h3 style="font-size:15px;font-weight:700;color:var(--green)"><i class="ti ti-arrow-up-circle"></i> Cuentas por Cobrar</h3></div>
   ${tablaTipo('CxC-Cliente','CxC — Clientes','<i class="ti ti-user"></i>')}
-  ${tablaTipo('CxC-Banco','CxC — Bancos','<i class="ti ti-building-bank"></i>')}
+  ${tablaCxCBancos(tblRows)}
   ${tablaTipo('CxC-Empleado','CxC — Empleados','<i class="ti ti-id-badge-2"></i>').replace('<i class="ti ti-plus"></i>Nueva</button>','<i class="ti ti-plus"></i>Nueva</button><button class="btn btn-sm" onclick="agregarTodosEmpleadosCxC()" title="Crea una cuenta en $0 para cada empleado del sistema que todavía no tenga una"><i class="ti ti-users-plus"></i>Agregar todos</button>')}
   ${tablaTipo('CxC-Tercero','CxC — Terceros / Ajenos','<i class="ti ti-users"></i>')}
   ${cxcInversorFilas.length?tablaTipo('CxC-Inversor','CxC — Inversores','<i class="ti ti-briefcase"></i>',cxcInversorFilas):''}
@@ -11884,7 +11943,9 @@ function renderBalance(){
       ${rc('Caja (efectivo)',fmtD(saldoCaja),'caja')}
       ${rc('Banco (depósitos)',fmtD(saldoBanco),'banco')}
       ${rc('Cuentas por cobrar — Clientes',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Cliente'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Cliente')}
-      ${rc('Cuentas por cobrar — Bancos',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Banco')}
+      ${rc('Cuentas por cobrar — Bancos',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco'&&c.estado!=='Pagada'&&hastaCorte(c.fecha)).reduce((s,c)=>s+c.saldo,0)),'CxC-Banco')}
+      ${(()=>{const pb={};(contData.cuentas||[]).filter(c=>cxcBancoPendiente(c)&&hastaCorte(c.fecha)).forEach(c=>{const b=bancoDeCxC(c)||'Sin asignar';pb[b]=(pb[b]||0)+Number(c.saldo||0);});
+        return Object.entries(pb).map(([b,t])=>`<div class="contable-row" style="font-size:11px;color:var(--text2);padding-left:24px"><span>↳ ${b}</span><span>${fmtD(t)}</span></div>`).join('');})()}
       ${rc('Cuentas por cobrar — Terceros',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Tercero'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Tercero')}
       ${rc('Cuentas por cobrar — Inversores',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Inversor'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Inversor')}
       ${(hayCuentaPersCxCEmp&&cxcEmpleados===0)?'':rc('Cuentas por cobrar — Empleados',fmtD(cxcEmpleados),'CxC-Empleado')}
