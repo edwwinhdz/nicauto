@@ -806,6 +806,7 @@ body.no-delete .confirmDelete{display:none!important}
         <button class="btn btn-primary" onclick="abrirModalCtrlCliente()"><i class="ti ti-plus"></i>Nuevo contacto</button>
       </div>
     </div>
+    <div id="ctrcli-bitacora" style="margin-bottom:1rem"></div>
     <div class="toolbar">
       <div class="search-wrap"><i class="ti ti-search"></i><input type="text" id="ctrcli-q2" placeholder="Nombre, celular, email…" oninput="renderCtrlClientesLP()"></div>
       <select id="ctrcli-fvend2" onchange="renderCtrlClientesLP()"><option value="">Todos los vendedores</option></select>
@@ -4488,7 +4489,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-13-1630';
+const APP_VERSION='2026-10-14-1310';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5576,6 +5577,7 @@ function showLPTab(t){
 
 function renderCtrlClientesLP(){
   actualizarVigenciaCitas();
+  try{renderBitacoraCtrCliLP();}catch(e){console.warn('Bitácora clientes:',e);}
   const q=(document.getElementById('ctrcli-q2')?.value||'').toLowerCase();
   const fv=document.getElementById('ctrcli-fvend2')?.value||'';
   const fe=document.getElementById('ctrcli-fest2')?.value||'';
@@ -5585,7 +5587,14 @@ function renderCtrlClientesLP(){
   const comoMap={'redes_pagina':'📱 Redes página','redes_vendedor':'📲 Redes vendedor','llego_solo':'🚶 Llegó solo','referido':'👥 Referido'};
   const tbody=document.getElementById('tbl-ctrcli2');
   if(!tbody)return;
-  tbody.innerHTML=data.length?data.map((x,i)=>{
+  // Agrupado por mes: el mes actual siempre visible; los meses anteriores quedan plegados en una
+  // fila de título (clic para ver u ocultar). Si hay búsqueda escrita, se abren todos solos.
+  window._ctrcliMesesAbiertos=window._ctrcliMesesAbiertos||new Set();
+  const mesActual=hoyLocal().slice(0,7);
+  const mesDe=x=>(x.fecha||'').slice(0,7)||'sin-fecha';
+  const nombreMesCtr=m=>m==='sin-fecha'?'Sin fecha':new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'});
+  const meses=[...new Set(data.map(mesDe))].sort((a,b)=>a==='sin-fecha'?1:b==='sin-fecha'?-1:b.localeCompare(a));
+  const filaFn=(x,i)=>{
     const vnd=clientes.find(c=>c.id===x.vendId);
     const alertaLlamada=citaRequiereLlamada(x)?`<span title="🔴 Llamar al cliente hoy — cita programada" style="color:#fff;background:var(--red);border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;animation:pulseAlerta 1.2s infinite;margin-right:4px"><i class="ti ti-phone-call" style="font-size:12px"></i></span>`:'';
     return`<tr>
@@ -5603,10 +5612,60 @@ function renderCtrlClientesLP(){
         <button class="btn btn-sm" onclick="editCtrlCliente('${x.id}')"><i class="ti ti-${puedeEditarCtrlCliente(x)?'edit':'eye'}"></i></button>
         ${puedeEditarCtrlCliente(x)?`<button class="btn btn-sm btn-danger" onclick="delCtrlCliente('${x.id}')"><i class="ti ti-trash"></i></button>`:''}
       </div></td>
-    </tr>`;}).join(''):`<tr><td colspan="11"><div class="empty"><i class="ti ti-address-book"></i><p>No hay contactos registrados</p></div></td></tr>`;
+    </tr>`;};
+  let n=0,html='';
+  meses.forEach(m=>{
+    const lista=data.filter(x=>mesDe(x)===m).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    const esActual=m===mesActual;
+    const abierto=esActual||!!q||window._ctrcliMesesAbiertos.has(m);
+    html+=`<tr style="cursor:${esActual?'default':'pointer'}" ${esActual?'':`onclick="toggleMesCtrCliLP('${m}')"`}><td colspan="11" style="background:${esActual?'var(--blue-light)':'var(--surface2)'};font-weight:800;font-size:13px;padding:8px 12px;color:${esActual?'var(--blue)':'var(--text2)'}">
+      ${esActual?'<i class="ti ti-calendar"></i>':`<i class="ti ti-chevron-${abierto?'down':'right'}"></i>`} <span style="text-transform:capitalize">${nombreMesCtr(m)}</span>
+      <span style="font-weight:600;font-size:11px;opacity:.8">(${lista.length} contacto${lista.length===1?'':'s'})${esActual?' — mes actual':abierto?'':' — clic para ver'}</span></td></tr>`;
+    if(abierto)html+=lista.map(x=>filaFn(x,n++)).join('');else n+=lista.length;
+  });
+  tbody.innerHTML=data.length?html:`<tr><td colspan="11"><div class="empty"><i class="ti ti-address-book"></i><p>No hay contactos registrados</p></div></td></tr>`;
   setTimeout(()=>makeResizable('tbl-ctrcli2-table'),200);
 }
 
+// Bitácora por vendedor: cuántos clientes REGISTRÓ cada uno (por la fecha de registro) y cuántos
+// CITÓ (por la fecha de la cita), mes a mes, con el total de cada mes y el acumulado de cada vendedor.
+function renderBitacoraCtrCliLP(){
+  const el=document.getElementById('ctrcli-bitacora');
+  if(!el)return;
+  const abierto=window._ctrcliBitAbierta!==false;
+  const nombreVend=id=>{const c=clientes.find(x=>x.id===id);return c?c.nombre:'Sin vendedor';};
+  const mesesSet=new Set();
+  ctrlClientes.forEach(x=>{if(x.fecha)mesesSet.add(x.fecha.slice(0,7));if(x.cita)mesesSet.add(String(x.cita).slice(0,7));});
+  mesesSet.add(hoyLocal().slice(0,7));
+  const meses=[...mesesSet].filter(m=>/^\d{4}-\d{2}$/.test(m)).sort();
+  const vendIds=[...new Set(ctrlClientes.map(x=>x.vendId||''))];
+  const filas=vendIds.map(id=>{
+    const delV=ctrlClientes.filter(x=>(x.vendId||'')===id);
+    const porMes={};meses.forEach(m=>porMes[m]={r:0,c:0});
+    delV.forEach(x=>{const mr=(x.fecha||'').slice(0,7);if(porMes[mr])porMes[mr].r++;const mc=String(x.cita||'').slice(0,7);if(x.cita&&porMes[mc])porMes[mc].c++;});
+    return{nombre:nombreVend(id),porMes,totR:delV.length,totC:delV.filter(x=>x.cita).length};
+  }).sort((a,b)=>b.totR-a.totR);
+  const nm=m=>new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'short',year:'2-digit'});
+  const celda=(r,c)=>`<td style="text-align:center;white-space:nowrap"><b>${r||'·'}</b> <span style="color:var(--purple)">/ ${c||'·'}</span></td>`;
+  const totMes=m=>({r:filas.reduce((s,f)=>s+f.porMes[m].r,0),c:filas.reduce((s,f)=>s+f.porMes[m].c,0)});
+  el.innerHTML=`<div class="card">
+    <div class="card-head" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="window._ctrcliBitAbierta=${!abierto};renderBitacoraCtrCliLP()">
+      <h3><i class="ti ti-notebook"></i> Bitácora por vendedor — registrados / citados</h3><i class="ti ti-chevron-${abierto?'up':'down'}"></i></div>
+    ${abierto?`<div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th>Vendedor</th>${meses.map(m=>`<th style="text-align:center;text-transform:capitalize">${nm(m)}</th>`).join('')}<th style="text-align:center;background:var(--blue-light)">Acumulado</th></tr></thead>
+      <tbody>${filas.map(f=>`<tr><td style="font-weight:700;white-space:nowrap">${f.nombre}</td>${meses.map(m=>celda(f.porMes[m].r,f.porMes[m].c)).join('')}
+        <td style="text-align:center;background:var(--blue-light);font-weight:800;white-space:nowrap">${f.totR} <span style="color:var(--purple)">/ ${f.totC}</span></td></tr>`).join('')}</tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL DEL MES</td>${meses.map(m=>{const t=totMes(m);return celda(t.r,t.c);}).join('')}
+        <td style="text-align:center;background:var(--blue-light);white-space:nowrap">${ctrlClientes.length} <span style="color:var(--purple)">/ ${ctrlClientes.filter(x=>x.cita).length}</span></td></tr></tfoot>
+    </table></div>
+    <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem"><b>Registrados</b> (negro) se cuentan por la fecha en que se registró el cliente; <span style="color:var(--purple)"><b>citados</b></span> por la fecha de la cita.</p>`:''}
+  </div>`;
+}
+function toggleMesCtrCliLP(m){
+  window._ctrcliMesesAbiertos=window._ctrcliMesesAbiertos||new Set();
+  if(window._ctrcliMesesAbiertos.has(m))window._ctrcliMesesAbiertos.delete(m);else window._ctrcliMesesAbiertos.add(m);
+  renderCtrlClientesLP();
+}
 // Override renderListaPrecios to reset to precios tab
 const _origRenderLP=window.renderListaPrecios;
 
