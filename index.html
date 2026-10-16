@@ -568,6 +568,8 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <select id="inv-ftipo" onchange="renderInv()"><option value="">Todos los tipos</option><option>Sedán</option><option>SUV</option><option>Pickup</option><option>Van</option><option>Hatchback</option><option>Otro</option></select>
     <select id="inv-fcolor" onchange="renderInv()"><option value="">Todos los colores</option></select>
+    <select id="inv-fdias" onchange="renderInv()" title="Antigüedad (días en lote desde la compra)" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--amber);border-radius:var(--radius);background:var(--surface);font-weight:600">
+      <option value="">Antigüedad: todas</option><option value="0-30">0 – 30 días</option><option value="31-60">31 – 60 días</option><option value="61-90">61 – 90 días</option><option value="91-120">91 – 120 días</option><option value="121-99999">Más de 120 días</option></select>
     <div style="display:flex;align-items:center;gap:4px">
       <input type="text" id="inv-fmontomin" inputmode="decimal" placeholder="Precio desde" style="width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:12px" oninput="renderInv()">
       <span style="color:var(--text3);font-size:12px">—</span>
@@ -2500,6 +2502,16 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-group"><label>Persona / entidad</label><input id="mcta-persona" placeholder="Nombre del cliente, banco, inversor…"></div>
     <div class="form-group"><label>Descripción</label><textarea id="mcta-desc" rows="2" placeholder="Concepto, referencia…"></textarea></div>
+    <div id="mcta-pago-box" style="background:var(--green-light);border-radius:var(--radius);padding:.75rem;margin-top:.5rem">
+      <p style="font-size:12px;font-weight:700;color:var(--green);margin:0 0 .5rem"><i class="ti ti-receipt"></i> Cancelar / abonar con recibo</p>
+      <div class="form-row">
+        <div class="form-group"><label>No. de recibo</label><input id="mcta-pago-recibo" placeholder="Ej. 425"></div>
+        <div class="form-group"><label>Monto pagado (USD $)</label><input id="mcta-pago-monto" type="number" step="0.01" placeholder="Saldo completo"></div>
+        <div class="form-group"><label>Fecha del pago</label><input id="mcta-pago-fecha" type="date"></div>
+      </div>
+      <p style="font-size:10px;color:var(--text2);margin:0">Si ponés un número de recibo, al guardar se registra el pago: baja el saldo y, si llega a $0, la cuenta queda <b>Pagada</b>. Si dejás el monto vacío se cancela el saldo completo.</p>
+      <div id="mcta-pagos-hist" style="margin-top:.5rem;font-size:11px"></div>
+    </div>
   </div>
   <div class="modal-foot">
     <button class="btn" onclick="closeOv('ov-cuenta')">Cancelar</button>
@@ -4491,7 +4503,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-14-1800';
+const APP_VERSION='2026-10-15-1800';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -7419,6 +7431,8 @@ function renderListaPrecios(){
       <span style="color:var(--text3);font-size:12px">—</span>
       <input type="text" id="lp-fmontomax" inputmode="decimal" placeholder="Precio hasta" style="width:105px;padding:6px 10px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" oninput="renderListaPrecios()">
     </div>
+    <select id="lp-fdias" onchange="renderListaPrecios()" title="Antigüedad (días en lote desde la compra)" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--amber);border-radius:var(--radius);background:var(--surface);font-weight:600">
+      <option value="">Antigüedad: todas</option><option value="0-30">0 – 30 días</option><option value="31-60">31 – 60 días</option><option value="61-90">61 – 90 días</option><option value="91-120">91 – 120 días</option><option value="121-99999">Más de 120 días</option></select>
     <div style="display:flex;align-items:center;gap:6px">
       <span style="font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap">Estado:</span>
       <div style="position:relative">
@@ -7442,7 +7456,7 @@ function renderListaPrecios(){
       <span style="color:var(--text3);font-size:12px">—</span>
       <input type="date" id="lp-ffechahasta" style="padding:5px 8px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" onchange="renderListaPrecios()">
     </div>
-    <button class="btn btn-sm" onclick="document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';lpEstadosSel=[];renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
+    <button class="btn btn-sm" onclick="document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';document.getElementById('lp-fdias').value='';lpEstadosSel=[];renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
     lpCont.parentNode.insertBefore(filtBar,lpCont);
     try{const o=safeStorage.getItem('lp_orden');if(o)document.getElementById('lp-orden').value=o;}catch(e){}
   }
@@ -7469,6 +7483,7 @@ function renderListaPrecios(){
   if(ftipo)veh=veh.filter(v=>v.tipo===ftipo);
   if(fcolor)veh=veh.filter(v=>v.color===fcolor);
   if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
+  {const fdias=document.getElementById('lp-fdias')?.value||'';if(fdias)veh=veh.filter(v=>enRangoDias(v,fdias));}
   if(fmontomin!=null)veh=veh.filter(v=>Number(v.precio||0)>=fmontomin);
   if(fmontomax!=null)veh=veh.filter(v=>Number(v.precio||0)<=fmontomax);
   if(ffechadesde)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=ffechadesde);
@@ -8116,6 +8131,14 @@ function renderDash(){
 
 // ======================== INVENTARIO ========================
 const TIPO_ORDER=['Pickup','Sedán','SUV','Van','Hatchback','Microbus','Camion','Otro'];
+// Filtro de antigüedad: rango "desde-hasta" en días desde la fecha de compra.
+function enRangoDias(v,rango){
+  if(!rango)return true;
+  const [a,b]=rango.split('-').map(Number);
+  const d=diasDesde(v.fechacompra);
+  if(d===null)return false;
+  return d>=a&&d<=b;
+}
 function sortByTipo(arr){
   const pos=t=>{const i=TIPO_ORDER.indexOf(t);return i<0?99:i;};
   const mm=v=>((v.marca||'')+' '+(v.modelo||'')).trim().toLowerCase();
@@ -8338,6 +8361,7 @@ function renderInv(){
     &&(fmontomax==null||Number(v.precio||0)<=fmontomax)
     &&(!ffechadesde||(v.fechacompra&&v.fechacompra>=ffechadesde))
     &&(!ffechahasta||(v.fechacompra&&v.fechacompra<=ffechahasta))
+    &&enRangoDias(v,document.getElementById('inv-fdias')?.value||'')
   ).sort((a,b)=>(a.fechacompra||'9999').localeCompare(b.fechacompra||'9999'));
   document.getElementById('tbl-inv').innerHTML=data.length?data.map((v,idx)=>{
     return filaInventario(v,idx);}).join(''):`<tr><td colspan="20"><div class="empty"><i class="ti ti-car-garage"></i><p>No hay vehículos</p></div></td></tr>`;
@@ -9793,6 +9817,7 @@ function autoFill(){
   // principal, con sus hasta 3 adelantos sumados), y si no hay, se usa el mecanismo antiguo de
   // Caja y Banco como respaldo.
   const reservaPrincipal=(v.reservas||[])[0];
+  let reserva=null; // se usa más abajo en el resumen; antes estaba fuera de alcance y daba error
   if(reservaPrincipal){
     const adelantos=(reservaPrincipal.adelantos&&reservaPrincipal.adelantos.length)?reservaPrincipal.adelantos:(reservaPrincipal.monto?[{recibo:reservaPrincipal.recibo||'',monto:reservaPrincipal.monto}]:[]);
     const totalAdelantos=adelantos.reduce((s,a)=>s+Number(a.monto||0),0);
@@ -9803,7 +9828,7 @@ function autoFill(){
       if(comp)document.getElementById('mvt-comprador').value=comp.id;
     }
   } else {
-    const reserva=(contData.recibos||[]).find(r=>r.vehId===vid&&r.cat==='Reserva de cliente');
+    reserva=(contData.recibos||[]).find(r=>r.vehId===vid&&r.cat==='Reserva de cliente')||null;
     if(reserva){
       document.getElementById('mvt-anticipo').value=parseFloat(reserva.monto||0).toFixed(2);
       document.getElementById('mvt-recibo-anticipo').value=reserva.ref||'';
@@ -9812,6 +9837,13 @@ function autoFill(){
         if(comp)document.getElementById('mvt-comprador').value=comp.id;
       }
     }
+  }
+  // El "Comprador" de la venta es el agente que compró el carro (se llenó al ingresarlo).
+  if(v.agentecompra){
+    const norm=t=>String(t||'').toLowerCase().replace(/\s+/g,' ').trim();
+    const ag=clientes.find(c=>norm(c.nombre)===norm(v.agentecompra))||clientes.find(c=>norm(c.nombre).startsWith(norm(v.agentecompra))||norm(v.agentecompra).startsWith(norm(c.nombre)));
+    const sel=document.getElementById('mvt-comprador');
+    if(ag&&sel&&[...sel.options].some(o=>o.value===ag.id))sel.value=ag.id;
   }
   const reps=(v.reparaciones||[]);
   const totRep=reps.reduce((s,r)=>s+Number(r.costo),0);
@@ -9964,18 +9996,20 @@ async function sincronizarCxCBancoDesdeVenta(v){
   contData.cuentas=contData.cuentas||[];
   const existente=contData.cuentas.find(c=>c.origenVentaId===v.id&&c.tipo==='CxC-Banco');
   const bancario=Number(v.bancario||0);
-  if(!v.banco||bancario<=0){
+  if(!v.banco||bancario<=0||v.bancarioTipo==='transferencia'){
     return; // esta venta no tiene financiamiento — no se toca nada existente, por si ya tiene pagos
   }
   if(existente){
+    // si todavía no se ha cobrado nada, el saldo sigue al monto financiado
+    if(!(existente.historialPagos||[]).length&&existente.estado!=='Pagada')existente.saldo=bancario;
     existente.monto=bancario;
-    existente.persona=v.banco;
+    existente.persona=v.banco;existente.banco=v.banco;
   } else {
     const comp=clientes.find(x=>x.id===v.compradorId);
     contData.cuentas.push({
       id:uid(),fecha:v.fecha,vence:'',tipo:'CxC-Banco',estado:'Pendiente',
-      monto:bancario,saldo:bancario,persona:v.banco,
-      desc:`Financiamiento ${v.banco} — Venta ${v.numeroControl||''} — ${comp?.nombre||v.nombreFactura||'Cliente'}`,
+      monto:bancario,saldo:bancario,persona:v.banco,banco:v.banco,vehId:v.vehiculoId,
+      desc:`Financiamiento ${v.banco} — Venta ${v.numeroControl||''} — ${v.nombreFactura||comp?.nombre||'Cliente'}`,
       origenVentaId:v.id
     });
   }
@@ -10018,6 +10052,7 @@ async function guardarVenta(){
   const ventaConfirmada=!!document.getElementById('mvt-confirmarventa')?.checked;
 
   if(!vehiculoId||!precio){alert('Vehículo y precio de venta son obligatorios');return;}
+  if(bancario>0&&bancarioTipo!=='transferencia'&&!banco){alert('⚠️ Hay un monto financiado por banco: elegí el banco ("Banco del depósito") para que la Cuenta por Cobrar quede a nombre de ese banco.');return;}
 
   // Handle consignacion vehicles
   const esConsig=vehiculoId.startsWith('CONSIG_');
@@ -10168,8 +10203,10 @@ async function guardarVenta(){
       // CxC banco pendiente — solo si es financiamiento del banco. Si el cliente ya transfirió
       // el dinero directamente (bancarioTipo='transferencia'), el monto ya quedó reflejado
       // arriba como DÉBITO BANCO y no hay nada pendiente por cobrar.
-      if(bancarioTipo!=='transferencia'){
-        contData.cuentas.push({id:uid(),fecha,vence:'',
+      // La CxC del banco ya la crea sincronizarCxCBancoDesdeVenta (con el banco elegido). Antes se
+      // creaba OTRA aquí a nombre del vendedor y quedaba duplicada.
+      if(bancarioTipo!=='transferencia'&&!(contData.cuentas||[]).some(c=>c.tipo==='CxC-Banco'&&c.origenVentaId===id)){
+        contData.cuentas.push({id:uid(),fecha,vence:'',origenVentaId:id,banco:banco||'',
           tipo:'CxC-Banco',estado:'Pendiente',
           monto:bancario,saldo:bancario,
           persona:comp?.nombre||compNombre,vehId:vehIdPartida,
@@ -11380,6 +11417,13 @@ function abrirModalCuenta(id,tipoDefault){
   document.getElementById('mcta-saldo').value=c?c.saldo:'';
   document.getElementById('mcta-persona').value=c?c.persona||'':'';
   document.getElementById('mcta-desc').value=c?c.desc||'':'';
+  document.getElementById('mcta-pago-recibo').value='';
+  document.getElementById('mcta-pago-monto').value='';
+  document.getElementById('mcta-pago-fecha').value=hoyLocal();
+  const histEl=document.getElementById('mcta-pagos-hist');
+  if(histEl)histEl.innerHTML=(c&&c.historialPagos&&c.historialPagos.length)?'<b>Pagos registrados:</b><br>'+c.historialPagos.map(p=>`${p.fecha} — ${fmtD(p.monto)}${p.recibo?' — Recibo '+p.recibo:''} (${p.registradoPor||''})`).join('<br>'):'';
+  const pagoBox=document.getElementById('mcta-pago-box');
+  if(pagoBox)pagoBox.style.display=(c&&(MODO==='admin'||MODO==='coordinador'))?'block':'none';
   // Ver el comprobante/detalle es libre para todos; modificar una cuenta existente es solo del Administrador (req #17)
   const soloLectura=!!c&&MODO!=='admin'&&MODO!=='coordinador';
   ['mcta-fecha','mcta-vence','mcta-tipo','mcta-estado','mcta-monto','mcta-saldo','mcta-persona','mcta-desc'].forEach(idc=>{
@@ -11394,7 +11438,9 @@ function guardarCuenta(){
   if(idExistente&&MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador (Edwin) puede modificar una cuenta existente.');return;}
   const monto=document.getElementById('mcta-monto').value;
   if(!monto){alert('El monto es obligatorio');return;}
+  const previa=idExistente?(contData.cuentas||[]).find(x=>x.id===idExistente):null;
   const obj={
+    ...(previa||{}), // conserva banco, venta de origen, vehículo, historial de pagos, etc.
     id:idExistente||uid(),
     fecha:document.getElementById('mcta-fecha').value,
     vence:document.getElementById('mcta-vence').value,
@@ -11405,6 +11451,18 @@ function guardarCuenta(){
     persona:document.getElementById('mcta-persona').value,
     desc:document.getElementById('mcta-desc').value
   };
+  // Pago con número de recibo
+  const reciboPago=(document.getElementById('mcta-pago-recibo')?.value||'').trim();
+  if(previa&&reciboPago){
+    const montoPago=parseFloat(document.getElementById('mcta-pago-monto').value)||obj.saldo;
+    if(montoPago>0){
+      obj.historialPagos=[...(obj.historialPagos||[]),{fecha:document.getElementById('mcta-pago-fecha').value||hoyLocal(),monto:montoPago,recibo:reciboPago,registradoPor:getNombreUsuario()}];
+      obj.saldo=Math.max(0,parseFloat((obj.saldo-montoPago).toFixed(2)));
+      obj.reciboCancelacion=reciboPago;
+      obj.estado=obj.saldo<=0.005?'Pagada':'Parcial';
+    }
+  }
+  marcarEdicion(obj);
   if(obj.estado==='Pagada'&&obj.saldo>0.01){
     if(!confirm(`El estado es "Pagada" pero el Saldo quedó en ${fmtD(obj.saldo)}.\n\n¿Poner el Saldo en $0.00 para que coincida con "Pagada"?\n\n(Aceptar = corregir a $0.00 · Cancelar = guardar tal cual, con el saldo que puso)`))obj.saldo=0;
   }
@@ -11427,10 +11485,12 @@ async function registrarPagoCuenta(id){
   const monto=parseFloat(montoStr);
   if(isNaN(monto)||monto<=0){alert('Ingresá un monto válido mayor a cero.');return;}
   if(monto>c.saldo+0.01&&!confirm(`El pago (${fmtD(monto)}) es MAYOR al saldo pendiente (${fmtD(c.saldo)}). ¿Continuar de todos modos?`))return;
+  const recibo=(prompt('No. de recibo con que se cancela/abona (opcional):','')||'').trim();
   c.historialPagos=c.historialPagos||[];
-  c.historialPagos.push({fecha:hoyLocal(),monto,registradoPor:getNombreUsuario()});
+  c.historialPagos.push({fecha:hoyLocal(),monto,recibo,registradoPor:getNombreUsuario()});
+  if(recibo)c.reciboCancelacion=recibo;
   c.saldo=Math.max(0,parseFloat((c.saldo-monto).toFixed(2)));
-  if(c.saldo===0)c.estado='Pagada';
+  c.estado=c.saldo===0?'Pagada':'Parcial';
   await saveOne('contable',{id:'main',...contData});
   renderCuentas();
   alert(`✅ Pago de ${fmtD(monto)} registrado. Saldo restante: ${fmtD(c.saldo)}.`);
@@ -11647,23 +11707,70 @@ function tablaCxCBancos(tblRows){
     return puede?`<select onclick="event.stopPropagation()" onchange="asignarBancoCxC('${c.id}',this.value)" style="font-size:12px;padding:3px 6px;font-weight:700;${b?'':'border-color:var(--red);color:var(--red)'}">
       <option value="">-- Elegir --</option>${BANCOS_CXC.map(x=>`<option ${x===b?'selected':''}>${x}</option>`).join('')}</select>`
       :`<b>${b||'<span style="color:var(--red)">Sin asignar</span>'}</b>`;};
-  const filaPend=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+'</td><td onclick="event.stopPropagation()">'+selBanco(c)+'</td>');
+  const diasCel=c=>{const d=diasDesde(c.fecha);const col=d===null?'var(--text3)':d<=15?'var(--green)':d<=30?'var(--amber)':'var(--red)';
+    return`<td style="text-align:center"><span style="font-weight:800;color:${col}" title="Días desde que se entregó el vehículo (fecha de la cuenta)">${d===null?'—':d+' d'}</span></td>`;};
+  const filaPend=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+'</td>'+diasCel(c)+'<td onclick="event.stopPropagation()">'+selBanco(c)+'</td>');
   window._cxcBancoMesesAbiertos=window._cxcBancoMesesAbiertos||new Set();
   const meses=[...new Set(hist.map(c=>(c.fecha||'').slice(0,7)||'sin-fecha'))].sort().reverse();
   const nm=m=>m==='sin-fecha'?'Sin fecha':new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'});
-  const filaHist=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+'</td><td>'+(bancoDeCxC(c)||'—')+'</td>');
+  const filaHist=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+'</td><td style="text-align:center;font-size:11px;color:var(--text3)">'+(c.historialPagos&&c.historialPagos.length?Math.max(0,Math.round((new Date(c.historialPagos[c.historialPagos.length-1].fecha)-new Date(c.fecha))/86400000))+' d':'—')+'</td><td>'+(bancoDeCxC(c)||'—')+'</td>');
   return`<div class="card" style="margin-bottom:1rem">
     <div class="card-head"><h3><i class="ti ti-building-bank"></i> CxC — Bancos <span style="font-weight:400;font-size:12px;color:var(--text2)">— ${fmtD(total)} pendiente</span></h3>
-      <button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'CxC-Banco')"><i class="ti ti-plus"></i>Nueva</button></div>
+      <div style="display:flex;gap:4px">${botonesReporteCuentas(['CxC-Banco'],'CxC - Bancos')}<button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'CxC-Banco')"><i class="ti ti-plus"></i>Nueva</button></div></div>
     ${pend.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:.75rem 1rem 0">${Object.entries(porBanco).sort((a,b)=>b[1]-a[1]).map(([b,t])=>`<span style="background:${b==='Sin asignar'?'var(--red-light)':'var(--green-light)'};color:${b==='Sin asignar'?'var(--red)':'var(--green)'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700"><i class="ti ti-building-bank"></i> ${b}: ${fmtD(t)}</span>`).join('')}</div>`:''}
-    <table class="tbl"><thead><tr><th>Fecha</th><th>Banco que debe</th><th>Persona/Entidad</th><th>Monto</th><th>Saldo</th><th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
-    <tbody>${pend.length?pend.map(filaPend).join(''):'<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:1rem">No hay cuentas por cobrar a bancos pendientes</td></tr>'}
-    ${pend.length?`<tr style="background:var(--surface2);font-weight:800"><td colspan="4" style="text-align:right">TOTAL POR COBRAR A BANCOS:</td><td>${fmtD(total)}</td><td colspan="5"></td></tr>`:''}
-    ${hist.length?`<tr><td colspan="10" style="background:var(--surface2);font-size:12px;font-weight:700;color:var(--text2);padding:8px 12px"><i class="ti ti-history"></i> Historial — cobradas o en cero (${hist.length})</td></tr>`:''}
+    <table class="tbl"><thead><tr><th>Fecha</th><th>Días</th><th>Banco que debe</th><th>Persona/Entidad</th><th>Monto</th><th>Saldo</th><th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
+    <tbody>${pend.length?pend.map(filaPend).join(''):'<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:1rem">No hay cuentas por cobrar a bancos pendientes</td></tr>'}
+    ${pend.length?`<tr style="background:var(--surface2);font-weight:800"><td colspan="5" style="text-align:right">TOTAL POR COBRAR A BANCOS:</td><td>${fmtD(total)}</td><td colspan="5"></td></tr>`:''}
+    ${hist.length?`<tr><td colspan="11" style="background:var(--surface2);font-size:12px;font-weight:700;color:var(--text2);padding:8px 12px"><i class="ti ti-history"></i> Historial — cobradas o en cero (${hist.length})</td></tr>`:''}
     ${meses.map(m=>{const lista=hist.filter(c=>((c.fecha||'').slice(0,7)||'sin-fecha')===m).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));const ab=window._cxcBancoMesesAbiertos.has(m);
-      return`<tr style="cursor:pointer" onclick="toggleMesCxCBanco('${m}')"><td colspan="10" style="font-size:12px;color:var(--text2);padding:6px 12px"><i class="ti ti-chevron-${ab?'down':'right'}"></i> <span style="text-transform:capitalize">${nm(m)}</span> (${lista.length})${ab?'':' — clic para ver'}</td></tr>`+(ab?lista.map(filaHist).join(''):'');}).join('')}
+      return`<tr style="cursor:pointer" onclick="toggleMesCxCBanco('${m}')"><td colspan="11" style="font-size:12px;color:var(--text2);padding:6px 12px"><i class="ti ti-chevron-${ab?'down':'right'}"></i> <span style="text-transform:capitalize">${nm(m)}</span> (${lista.length})${ab?'':' — clic para ver'}</td></tr>`+(ab?lista.map(filaHist).join(''):'');}).join('')}
     </tbody></table>
   </div>`;
+}
+// ======================== IMPRIMIR / EXPORTAR CUENTAS ========================
+const NOMBRE_TIPO_CUENTA={'CxC-Cliente':'CxC — Clientes','CxC-Banco':'CxC — Bancos','CxC-Empleado':'CxC — Empleados','CxC-Tercero':'CxC — Terceros / Ajenos','CxC-Inversor':'CxC — Inversores',
+  'CxP-Inversor':'CxP — Inversores','CxP-Otra':'CxP — Proveedores','CxP-Prestamo':'CxP — Préstamos Bancarios','CxP-Interes':'CxP — Intereses','CxP-Tarjeta':'CxP — Tarjetas de Crédito',
+  'CxP-TCCorporativo1':'CxP — TC Corporativa 1','CxP-TCCorporativo2':'CxP — TC Corporativa 2','CxP-Reserva':'CxP — Reservas de clientes','CxP-ReservaFlotante':'CxP — Reservas flotantes'};
+const TIPOS_CXC_REP=['CxC-Cliente','CxC-Banco','CxC-Empleado','CxC-Tercero','CxC-Inversor'];
+const TIPOS_CXP_REP=['CxP-Inversor','CxP-Otra','CxP-Prestamo','CxP-Interes','CxP-Tarjeta','CxP-TCCorporativo1','CxP-TCCorporativo2','CxP-Reserva','CxP-ReservaFlotante'];
+function cuentasParaReporte(tipos){
+  // Solo las que tienen saldo pendiente (las pagadas o en cero no se imprimen)
+  return(contData.cuentas||[]).filter(c=>tipos.includes(c.tipo)&&c.estado!=='Pagada'&&Number(c.saldo||0)>0.005)
+    .sort((a,b)=>tipos.indexOf(a.tipo)-tipos.indexOf(b.tipo)||(a.fecha||'').localeCompare(b.fecha||''));
+}
+async function exportarCuentas(tipos,titulo){
+  const lista=cuentasParaReporte(tipos);
+  if(!lista.length){alert('No hay cuentas con saldo pendiente para exportar.');return;}
+  const rows=[['Tipo','Fecha','Días','Persona / Entidad','Banco','Monto','Saldo','Vence','Estado','Descripción']];
+  lista.forEach(c=>rows.push([NOMBRE_TIPO_CUENTA[c.tipo]||c.tipo,c.fecha||'',diasDesde(c.fecha)??'',c.persona||'',c.tipo==='CxC-Banco'?(bancoDeCxC(c)||''):'',Number(c.monto||0),Number(c.saldo||0),c.vence||'',c.estado||'',c.desc||'']));
+  rows.push(['','','','','','TOTAL',lista.reduce((s,c)=>s+Number(c.saldo||0),0),'','','']);
+  await exportarExcelConFormato(rows,titulo.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'_nicauto',titulo.slice(0,30),titulo);
+}
+function imprimirCuentas(tipos,titulo){
+  const lista=cuentasParaReporte(tipos);
+  if(!lista.length){alert('No hay cuentas con saldo pendiente para imprimir.');return;}
+  const grupos=tipos.map(t=>({t,filas:lista.filter(c=>c.tipo===t)})).filter(g=>g.filas.length);
+  const total=lista.reduce((s,c)=>s+Number(c.saldo||0),0);
+  const ahora=new Date();
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo} — NICAUTO</title><style>
+    body{font-family:Arial,sans-serif;margin:0;padding:1rem;color:#212529;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    table{border-collapse:collapse;width:100%;margin-bottom:12px}th{background:#1971C2;color:#fff;padding:4px 6px;font-size:11px;text-align:left}
+    td{padding:4px 6px;border-bottom:1px solid #DEE2E6;font-size:11px}td.n{text-align:right}h3{margin:14px 0 4px;font-size:13px;color:#1971C2}
+    tr.sub td{font-weight:800;background:#F1F3F5}.tot{text-align:right;font-size:14px;font-weight:800;background:#FFF3BF;padding:8px}
+    @media print{@page{size:landscape;margin:8mm}}</style></head><body>
+    ${encabezadoNicautoHTML(titulo,'Saldos pendientes al '+ahora.toLocaleDateString('es-NI'))}
+    ${grupos.map(g=>`<h3>${NOMBRE_TIPO_CUENTA[g.t]||g.t}</h3><table><thead><tr><th>Fecha</th><th>Días</th><th>Persona / Entidad</th>${g.t==='CxC-Banco'?'<th>Banco</th>':''}<th style="text-align:right">Monto</th><th style="text-align:right">Saldo</th><th>Vence</th><th>Estado</th><th>Descripción</th></tr></thead>
+      <tbody>${g.filas.map(c=>`<tr><td>${c.fecha||''}</td><td>${diasDesde(c.fecha)??''}</td><td>${c.persona||''}</td>${g.t==='CxC-Banco'?`<td>${bancoDeCxC(c)||'—'}</td>`:''}<td class="n">${fmtD(c.monto)}</td><td class="n"><b>${fmtD(c.saldo)}</b></td><td>${c.vence||''}</td><td>${c.estado||''}</td><td>${c.desc||''}</td></tr>`).join('')}
+      <tr class="sub"><td colspan="${g.t==='CxC-Banco'?5:4}" style="text-align:right">Subtotal</td><td class="n">${fmtD(g.filas.reduce((s,c)=>s+Number(c.saldo||0),0))}</td><td colspan="3"></td></tr></tbody></table>`).join('')}
+    <div class="tot">TOTAL ${titulo.toUpperCase()}: ${fmtD(total)}</div>
+    <div style="margin-top:8px;text-align:right;font-size:10px;color:#868E96">Impreso el ${ahora.toLocaleDateString('es-NI')} ${ahora.toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'})} por ${getNombreUsuario()}</div>
+  </body></html>`;
+  const w=window.open('','_blank');if(!w){alert('Permitir ventanas emergentes para poder imprimir.');return;}
+  w.document.open();w.document.write(html);w.document.close();w.onload=()=>{w.focus();w.print();};
+}
+function botonesReporteCuentas(tipos,titulo){
+  const t=JSON.stringify(tipos).replace(/"/g,"'");
+  return`<button class="btn btn-sm" onclick="imprimirCuentas(${t},'${titulo}')" title="Imprimir (solo saldos pendientes)"><i class="ti ti-printer"></i></button><button class="btn btn-sm" onclick="exportarCuentas(${t},'${titulo}')" title="Exportar a Excel (solo saldos pendientes)"><i class="ti ti-download"></i></button>`;
 }
 function renderCuentas(){
   const cuentas=contData.cuentas||[];
@@ -11695,7 +11802,7 @@ function renderCuentas(){
     <td>${c.vence||'—'}</td>
     <td><span class="badge badge-${estColor[c.estado]||'gray'}">${c.estado==='Pendiente Validación'?'🕒 Pend. Validación':c.estado}</span></td>
     <td style="font-size:12px">${origenCuenta(c)}</td>
-    <td style="font-size:12px;color:var(--text2)">${c.desc||'—'}</td>
+    <td style="font-size:12px;color:var(--text2)">${c.desc||'—'}${c.reciboCancelacion?`<div style="font-size:10px;color:var(--green);font-weight:700"><i class="ti ti-receipt"></i> Recibo ${c.reciboCancelacion}</div>`:''}</td>
     <td onclick="event.stopPropagation()"><div class="tbl-actions">
       ${c.estado==='Pendiente Validación'&&(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm btn-success" onclick="validarCxCRendicion('${c.id}')" title="Validar"><i class="ti ti-check"></i></button>`:''}
       ${c.estado!=='Pagada'&&(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm btn-success" onclick="registrarPagoCuenta('${c.id}')" title="Registrar pago"><i class="ti ti-cash"></i></button>`:''}
@@ -11709,7 +11816,7 @@ function renderCuentas(){
     const tot=filas.filter(c=>c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0);
     return`<div class="card" style="margin-bottom:1rem">
       <div class="card-head"><h3>${icono} ${titulo} <span style="font-weight:400;font-size:12px;color:var(--text2)">— ${fmtD(tot)} pendiente</span></h3>
-        <button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'${tipo}')"><i class="ti ti-plus"></i>Nueva</button>
+        <div style="display:flex;gap:4px">${botonesReporteCuentas([tipo],(NOMBRE_TIPO_CUENTA[tipo]||tipo).replace('—','-'))}<button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'${tipo}')"><i class="ti ti-plus"></i>Nueva</button></div>
       </div>
       <table class="tbl"><thead><tr><th>Fecha</th><th>Persona/Entidad</th><th>Monto</th><th>Saldo</th><th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
       <tbody>${filas.length?filas.map(tblRows).join(''):'<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:1rem">Sin registros todavía</td></tr>'}</tbody></table>
@@ -11722,14 +11829,16 @@ function renderCuentas(){
     <div class="stat-card"><div class="stat-label"><i class="ti ti-arrow-up-circle"></i>Total CxC (pendiente)</div><div class="stat-value stat-green">${fmtD(totalCxC)}</div></div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-arrow-down-circle"></i>Total CxP (pendiente)</div><div class="stat-value stat-red">${fmtD(totalCxP)}</div></div>
   </div>
-  <div class="section-header" style="margin-top:.5rem"><h3 style="font-size:15px;font-weight:700;color:var(--green)"><i class="ti ti-arrow-up-circle"></i> Cuentas por Cobrar</h3></div>
+  <div class="section-header" style="margin-top:.5rem"><h3 style="font-size:15px;font-weight:700;color:var(--green)"><i class="ti ti-arrow-up-circle"></i> Cuentas por Cobrar</h3>
+    <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="imprimirCuentas(TIPOS_CXC_REP,'Cuentas por Cobrar')"><i class="ti ti-printer"></i>Imprimir todas</button><button class="btn btn-sm" onclick="exportarCuentas(TIPOS_CXC_REP,'Cuentas por Cobrar')"><i class="ti ti-download"></i>Excel todas</button></div></div>
   ${tablaTipo('CxC-Cliente','CxC — Clientes','<i class="ti ti-user"></i>')}
   ${tablaCxCBancos(tblRows)}
   ${tablaTipo('CxC-Empleado','CxC — Empleados','<i class="ti ti-id-badge-2"></i>').replace('<i class="ti ti-plus"></i>Nueva</button>','<i class="ti ti-plus"></i>Nueva</button><button class="btn btn-sm" onclick="agregarTodosEmpleadosCxC()" title="Crea una cuenta en $0 para cada empleado del sistema que todavía no tenga una"><i class="ti ti-users-plus"></i>Agregar todos</button>')}
   ${tablaTipo('CxC-Tercero','CxC — Terceros / Ajenos','<i class="ti ti-users"></i>')}
   ${cxcInversorFilas.length?tablaTipo('CxC-Inversor','CxC — Inversores','<i class="ti ti-briefcase"></i>',cxcInversorFilas):''}
 
-  <div class="section-header" style="margin-top:1.5rem"><h3 style="font-size:15px;font-weight:700;color:var(--red)"><i class="ti ti-arrow-down-circle"></i> Cuentas por Pagar</h3></div>
+  <div class="section-header" style="margin-top:1.5rem"><h3 style="font-size:15px;font-weight:700;color:var(--red)"><i class="ti ti-arrow-down-circle"></i> Cuentas por Pagar</h3>
+    <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="imprimirCuentas(TIPOS_CXP_REP,'Cuentas por Pagar')"><i class="ti ti-printer"></i>Imprimir todas</button><button class="btn btn-sm" onclick="exportarCuentas(TIPOS_CXP_REP,'Cuentas por Pagar')"><i class="ti ti-download"></i>Excel todas</button></div></div>
   ${tablaTipo('CxP-Inversor','CxP — Inversores <span style="font-size:10px;font-weight:400">(orden fijo: RMI, JMI, HG)</span>','<i class="ti ti-briefcase"></i>',cxpInversorFilas)}
   ${tablaTipo('CxP-Otra','CxP — Proveedores','<i class="ti ti-truck-delivery"></i>')}
   ${tablaTipo('CxP-Prestamo','CxP — Préstamos Bancarios','<i class="ti ti-building-bank"></i>')}
@@ -13062,6 +13171,7 @@ function lpVehiculosFiltrados(){
   if(fd)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=fd);
   if(fh)veh=veh.filter(v=>v.fechacompra&&v.fechacompra<=fh);
   if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
+  {const fdias=document.getElementById('lp-fdias')?.value||'';if(fdias)veh=veh.filter(v=>enRangoDias(v,fdias));}
   return ordenarListaPrecios(veh,val('lp-orden')||'tipo');
 }
 function lpValorCol(v,k,i,paraExcel){
@@ -13206,6 +13316,7 @@ async function exportExcelListaPrecios(){
   if(ffechadesde)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=ffechadesde);
   if(ffechahasta)veh=veh.filter(v=>v.fechacompra&&v.fechacompra<=ffechahasta);
   if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
+  {const fdias=document.getElementById('lp-fdias')?.value||'';if(fdias)veh=veh.filter(v=>enRangoDias(v,fdias));}
   const ordenX=document.getElementById('lp-orden')?.value||'tipo';
   const rows=[['Tipo','Vehículo','Placa','Km','Trans.','Color','Motor','Días en lote','Lista A (USD)','Lista B (USD)','Comisión','Estado']];
   ordenarListaPrecios(veh,ordenX).forEach(v=>{
@@ -13608,6 +13719,7 @@ function exportExcelInventario(){
     &&(fmontomax==null||Number(v.precio||0)<=fmontomax)
     &&(!ffechadesde||(v.fechacompra&&v.fechacompra>=ffechadesde))
     &&(!ffechahasta||(v.fechacompra&&v.fechacompra<=ffechahasta))
+    &&v.estado!=='Vendido'&&enRangoDias(v,document.getElementById('inv-fdias')?.value||'')
   );
   const rows=[['Marca','Modelo','Año','Placa','Km','Color','Tipo','Trans.','P.Compra','Reparaciones','Comisión Estimada','Costo Total','Lista A','Margen A% (real)','Lista B','Margen B% (real)','Estado','F.Compra','Agente de Compra','Comprado a']];
   lista.forEach(v=>{
@@ -16631,7 +16743,8 @@ function cdHojaHTML(h,enPantalla){
   const amarillo='background:#FFF3BF;font-weight:700';
   const acciones=l=>enPantalla&&!h.cerrado?`<td style="white-space:nowrap">
       <button class="btn btn-sm" onclick="cdEditarLinea('${l.key}',${l.manual?'true':'false'})" title="Editar"><i class="ti ti-edit"></i></button>
-      <button class="btn btn-sm btn-danger" onclick="cdQuitarLinea('${l.key}',${l.manual?'true':'false'})" title="Quitar de esta hoja"><i class="ti ti-x"></i></button></td>`:(enPantalla?'<td></td>':'');
+      <button class="btn btn-sm btn-danger" onclick="cdQuitarLinea('${l.key}',${l.manual?'true':'false'})" title="Quitar de esta hoja"><i class="ti ti-x"></i></button></td>`
+    :(enPantalla?`<td style="white-space:nowrap"><button class="btn btn-sm" onclick="cdNotaDiaCerrado('${h.fecha}','${l.key||l.id}')" title="Agregar o cambiar la nota (el día está cerrado: los montos no se pueden tocar)"><i class="ti ti-note"></i></button></td>`:'');
   return`
   <table class="cd-tbl" style="width:100%;border-collapse:collapse;font-size:11px">
     <thead>
@@ -16866,6 +16979,24 @@ function cdEditarSaldoInicial(){
     <div class="form-group"><label>Cash Julio M (USD $)</label><input id="cd-ini-cj" type="number" step="0.01" value="${ini.cashjulio||''}"></div></div>`,
   async()=>{
     contData.cajaDiariaSaldoInicial=[{id:'inicial',cajafuerte:parseFloat(cdVal('cd-ini-cf'))||0,cashjulio:parseFloat(cdVal('cd-ini-cj'))||0,por:getNombreUsuario()}];
+    await cdGuardarTodo();
+  });
+}
+// En un día CERRADO no se pueden cambiar montos, pero sí agregar o corregir la nota/aclaración
+// de una línea — se guarda en el cierre (para que salga al reimprimir) y en el movimiento original.
+function cdNotaDiaCerrado(fecha,key){
+  const c=(contData.cajaDiariaCierres||[]).find(x=>x.id==='CIERRE_'+fecha&&!x.anulado);
+  if(!c)return;
+  const linea=[...(c.ingresos||[]),...(c.egresos||[])].find(l=>(l.key||l.id)===key);
+  if(!linea)return;
+  cdModal('Nota / aclaración',`<p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">${linea.desc||linea.vehiculo||''} · ${fmtD(linea.monto)}<br><i>El día ${fecha} está cerrado: solo se puede cambiar la nota, no los montos.</i></p>
+    <textarea id="cd-nota" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px">${linea.nota||''}</textarea>`,
+  async()=>{
+    const nota=cdVal('cd-nota');
+    linea.nota=nota;
+    const mov=(contData.cajaDiariaMovs||[]).find(m=>m.id===key);
+    if(mov)mov.nota=nota;
+    else{contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];const a=cdAjuste(key);if(a)a.nota=nota;else contData.cajaDiariaAjustes.push({id:key,nota});}
     await cdGuardarTodo();
   });
 }
