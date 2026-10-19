@@ -4506,7 +4506,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-19-1530';
+const APP_VERSION='2026-10-19-1640';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -11633,6 +11633,14 @@ function costoInventarioVeh(v,hasta){
   const reps=Array.isArray(v.reparaciones)?v.reparaciones:[];
   return Number(v.costo||0)+reps.filter(r=>!hasta||!r.fecha||r.fecha<=hasta).reduce((s,r)=>s+(Number(r.costo)||0),0);
 }
+// Caja Fuerte #1: "SALDO FINAL CAJA" (columna Caja fuerte) del reporte Cash in Hand al día de corte.
+function cajaFuerte1Saldo(hasta){
+  try{const h=cdCalcular(hasta||hoyLocal());return Number((h.saldoFinal&&h.saldoFinal.cajafuerte)||0);}catch(e){console.warn('cajaFuerte1Saldo',e);return 0;}
+}
+// Caja Fuerte #2: saldo de la hoja Fondos JM (ingresos − egresos) hasta la fecha de corte.
+function cajaFuerte2Saldo(hasta){
+  return(contData.fondosJM||[]).filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
+}
 function bancosTotal(hasta){return BANCOS_CTAS.reduce((s,b)=>s+bancoSaldo(b.k,hasta),0);}
 function renderBancos(){
   const el=document.getElementById('cont-bancos');if(!el)return;
@@ -12197,9 +12205,16 @@ function renderBalance(){
   const totGastosNoOp=(contData.gastos||[]).filter(g=>!gastosAdmin.includes(g.cat)&&!esCuentaDeBalanceOPatrimonio(g.cat)&&hastaCorte(g.fecha)).reduce((s,g)=>s+g.monto,0);
   const recIng=(contData.recibos||[]).filter(r=>r.tipo==='Ingreso'&&hastaCorte(r.fecha));
   const recEgr=(contData.recibos||[]).filter(r=>r.tipo==='Egreso'&&hastaCorte(r.fecha));
-  const saldoCaja=recIng.filter(r=>r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0)-recEgr.filter(r=>r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0);
+  let saldoCaja=recIng.filter(r=>r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0)-recEgr.filter(r=>r.medio==='Caja (efectivo)').reduce((s,r)=>s+r.monto,0);
   // Bancos: gran total de la hoja Bancos (BAC JM, BAC GO, La Fise, Ficohsa) a la fecha de corte.
   const saldoBanco=bancosTotal(fechaCorte||undefined);
+  // CAJA GENERAL = Caja Fuerte #1 (saldo final de Caja fuerte del reporte Cash in Hand, a la
+  // fecha de corte) + Caja Fuerte #2 (saldo de Fondos JM). Reemplaza el saldo de Caja que salía
+  // de recibos.
+  const cajaFuerte1=cajaFuerte1Saldo(fechaCorte||undefined);
+  const cajaFuerte2=cajaFuerte2Saldo(fechaCorte||undefined);
+  const saldoCajaRecibos=saldoCaja;
+  saldoCaja=cajaFuerte1+cajaFuerte2;
   const valorInv=vehiculos.filter(v=>v.estado!=='Vendido'&&hastaCorte(v.fechacompra)).reduce((s,v)=>s+costoInventarioVeh(v,fechaCorte||undefined),0);
   const invGerTall=inventarioGerTaller(f=>hastaCorte(f));
   const valorInvGer=invGerTall.valor;
@@ -12231,8 +12246,11 @@ function renderBalance(){
   const clasifBalance=contData.clasificacionCuentasBalance||{};
   const activosPersonalizados=(contData.cuentasPersonalizadas||[]).filter(c=>c.tipo==='activo');
   const pasivosPersonalizados=(contData.cuentasPersonalizadas||[]).filter(c=>c.tipo==='pasivo');
-  const activosPersCorrientes=activosPersonalizados.filter(c=>(clasifBalance[c.nombre]||'corriente')==='corriente');
-  const activosPersNoCorrientes=activosPersonalizados.filter(c=>clasifBalance[c.nombre]==='no-corriente');
+  // Corriente / No corriente: lo que se haya arrastrado manda; si no, se usa el Mayor de la
+  // cuenta en el Catálogo (1200 = No corriente). Antes todo caía en Corriente por defecto.
+  const seccionPers=c=>clasifBalance[c.nombre]||(String(c.mayor||'').startsWith('12')?'no-corriente':'corriente');
+  const activosPersCorrientes=activosPersonalizados.filter(c=>seccionPers(c)==='corriente');
+  const activosPersNoCorrientes=activosPersonalizados.filter(c=>seccionPers(c)==='no-corriente');
   const totActivosPersCorr=activosPersCorrientes.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c,fechaCorte||undefined),0);
   const totActivosPersNoCorr=activosPersNoCorrientes.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c,fechaCorte||undefined),0);
   const totPasivosPersonalizados=pasivosPersonalizados.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c),0);
@@ -12242,6 +12260,62 @@ function renderBalance(){
   const r=(l,v,cls='')=>`<div class="contable-row ${cls}"><span>${l}</span><span>${v}</span></div>`;
   const rc=(l,v,cuenta)=>`<div class="contable-row" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirAuxiliarCuenta('${cuenta}','','${fechaCorte}')" title="Ver auxiliar de ${l}"><span>${l} <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i></span><span>${v}</span></div>`;
   const rcPers=c=>`<div class="contable-row" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirAuxiliarCuenta('${c.nombre.replace(/'/g,"\\'")}','','${fechaCorte}')" title="Ver detalle de ${c.nombre}"><span>↕️ ${c.nombre} <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i></span><span>${fmtD(saldoRealCuentaPersonalizada(c,fechaCorte||undefined))}</span></div>`;
+  // ---- Vista de Mayor (por defecto) o con Subcuentas (botón) ----
+  let bgDet=false;try{bgDet=localStorage.getItem('bgConSubcuentas')==='1';}catch(e){}
+  const sp=c=>saldoRealCuentaPersonalizada(c,fechaCorte||undefined);
+  const esCxCEmpPers=c=>esCxCEmpleadosCat(c.nombre);
+  // Subcuentas personalizadas que cuelgan de una cuenta fija del sistema se suman a esa cuenta.
+  const hijasDe=codes=>activosPersonalizados.filter(c=>codes.includes(c.cuentaPadre));
+  const esCF1Pers=c=>_normCuenta(c.nombre).replace(/\s/g,'')==='cajafuerte#1';
+  const cf1Pers=activosPersonalizados.filter(esCF1Pers);
+  const cajaHijas=hijasDe(['1101']).filter(c=>!esCF1Pers(c)), bancoHijas=hijasDe(['1102']), cxcHijas=hijasDe(['1103','1104','1105']);
+  const yaAgrupada=c=>esCF1Pers(c)||cajaHijas.includes(c)||bancoHijas.includes(c)||cxcHijas.includes(c)||esCxCEmpPers(c);
+  const corrSueltas=activosPersCorrientes.filter(c=>!yaAgrupada(c));
+  const noCorrSueltas=activosPersNoCorrientes.filter(c=>!yaAgrupada(c));
+  const vigenteCx=c=>c.estado!=='Pagada'&&hastaCorte(c.fecha);
+  const sumTipo=t=>(contData.cuentas||[]).filter(c=>c.tipo===t&&vigenteCx(c)).reduce((s,c)=>s+Number(c.saldo||0),0);
+  const cxcEmpPersTot=activosPersonalizados.filter(esCxCEmpPers).reduce((s,c)=>s+sp(c),0);
+  const cxcEmpTot=cxcEmpleados+cxcEmpPersTot;
+  const cf1Total=cajaFuerte1+cf1Pers.reduce((s,c)=>s+sp(c),0);
+  const totCaja=cf1Total+cajaFuerte2+cajaHijas.reduce((s,c)=>s+sp(c),0);
+  const totBanco=saldoBanco+bancoHijas.reduce((s,c)=>s+sp(c),0);
+  const subCxC=[['Clientes',sumTipo('CxC-Cliente'),'CxC-Cliente'],['Bancos',sumTipo('CxC-Banco'),'CxC-Banco'],['Terceros',sumTipo('CxC-Tercero'),'CxC-Tercero'],['Inversores',sumTipo('CxC-Inversor'),'CxC-Inversor'],['Empleados',cxcEmpTot,'CxC-Empleado']];
+  const totCxC=subCxC.reduce((s,x)=>s+x[1],0)+cxcHijas.reduce((s,c)=>s+sp(c),0);
+  const fM=(label,val,onclick)=>`<div class="contable-row" style="${onclick?'cursor:pointer;':''}font-weight:${bgDet?700:400}" ${onclick?`onclick="${onclick}" title="Ver detalle"`:''}><span>${label}${onclick?' <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i>':''}</span><span>${fmtD(val)}</span></div>`;
+  const fS=(label,val,onclick,nivel)=>bgDet?`<div class="contable-row" style="font-size:12px;color:var(--text2);padding-left:${(nivel||1)*20}px;${onclick?'cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px':''}" ${onclick?`onclick="${onclick}"`:''}><span>↳ ${label}</span><span>${fmtD(val)}</span></div>`:'';
+  const aux=(k)=>`abrirAuxiliarCuenta('${String(k).replace(/'/g,"\\'")}','','${fechaCorte}')`;
+  const filaPers=c=>bgDet?`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá para cambiar de sección">${rcPers(c)}</div>`:fM(c.nombre,sp(c),aux(c.nombre));
+  const bancosPorCxC=(()=>{const pb={};(contData.cuentas||[]).filter(c=>cxcBancoPendiente(c)&&hastaCorte(c.fecha)).forEach(c=>{const b=bancoDeCxC(c)||'Sin asignar';pb[b]=(pb[b]||0)+Number(c.saldo||0);});return pb;})();
+  const htmlActCorr=
+    fM('Caja General',totCaja)
+    +fS('Caja Fuerte # 1 (Cash in Hand)',cf1Total,"showContTab('auxiliares')")
+    +fS('Caja Fuerte # 2 (Fondos JM)',cajaFuerte2,"showContTab('fondosjm')")
+    +cajaHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
+    +fM('Bancos',totBanco,"showContTab('bancos')")
+    +BANCOS_CTAS.map(b=>fS(b.t,bancoSaldo(b.k,fechaCorte||undefined))).join('')
+    +bancoHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
+    +fM('Cuentas por cobrar',totCxC,bgDet?'':`localStorage.setItem('bgConSubcuentas','1');renderBalance()`)
+    +subCxC.map(([l,v,k])=>fS(l,v,aux(k))+(k==='CxC-Banco'?Object.entries(bancosPorCxC).map(([b,t])=>fS(b,t,'',2)).join(''):'')).join('')
+    +cxcHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
+    +corrSueltas.map(filaPers).join('');
+  const totActCorr=totCaja+totBanco+totCxC+corrSueltas.reduce((s,c)=>s+sp(c),0);
+  const totInvVeh=valorInv+valorInvGer;
+  const htmlActNoCorr=
+    fM('Inventario de vehículos — a costo',totInvVeh,bgDet?'':aux('inventario'))
+    +fS('Inventario vehículos ('+vehiculos.filter(v=>v.estado!=='Vendido'&&hastaCorte(v.fechacompra)).length+' und.)',valorInv,aux('inventario'))
+    +fS('Inventario Gerencia / Taller ('+invGerTall.n+' und.)',valorInvGer)
+    +noCorrSueltas.map(filaPers).join('');
+  const totActNoCorr=totInvVeh+noCorrSueltas.reduce((s,c)=>s+sp(c),0);
+  const htmlPas=
+    fM('Reservas de clientes',cxpReservas+cxpFlotantes,bgDet?'':aux('CxP-Reserva'))
+    +fS('Reservas (CxP)',cxpReservas,aux('CxP-Reserva'))+fS('Reservas flotantes (por reembolsar)',cxpFlotantes,aux('CxP-ReservaFlotante'))
+    +fM('Cuentas por pagar',cxpInversores+cxpOtras,bgDet?'':aux('CxP-Otra'))
+    +fS('Inversores',cxpInversores,aux('CxP-Inversor'))+fS('Otras cuentas por pagar',cxpOtras,aux('CxP-Otra'))
+    +fM('Préstamos bancarios',cxpPrestamo,aux('CxP-Prestamo'))
+    +fM('Tarjetas de crédito',cxpTarjeta+cxpTCCorp1+cxpTCCorp2,bgDet?'':aux('CxP-Tarjeta'))
+    +fS('Tarjetas de crédito',cxpTarjeta,aux('CxP-Tarjeta'))+fS('TC Corporativa 1',cxpTCCorp1,aux('CxP-TCCorporativo1'))+fS('TC Corporativa 2',cxpTCCorp2,aux('CxP-TCCorporativo2'))
+    +fM('Comisiones por pagar',comisiones,aux('comisiones'))
+    +pasivosPersonalizados.map(c=>bgDet?`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab">${r('↕️ '+c.nombre,fmtD(sp(c)))}</div>`:fM(c.nombre,sp(c))).join('');
   const pendRend=pendientesValidarRendicion();
   document.getElementById('cont-balance').innerHTML=`
   ${encabezadoNicautoHTML('Balance General',fechaCorte?'Al '+fechaCorte:'Acumulado global (sin fecha de corte)')}
@@ -12252,6 +12326,7 @@ function renderBalance(){
   <div style="background:var(--blue-light);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
     <div style="font-size:13px"><i class="ti ti-calendar-stats"></i> <b>${fechaCorte?'Balance General emitido al: '+fechaCorte:'Balance General — Acumulado Global (sin fecha de corte)'}</b></div>
     <div style="display:flex;align-items:center;gap:6px">
+      <button class="btn btn-sm ${bgDet?'btn-primary':''}" onclick="try{localStorage.setItem('bgConSubcuentas','${bgDet?'0':'1'}')}catch(e){};renderBalance()" title="${bgDet?'Ver solo cuentas de Mayor':'Ver el Balance con todas las subcuentas'}"><i class="ti ti-list-tree"></i> ${bgDet?'Ver solo Mayor':'Ver con subcuentas'}</button>
       <input type="date" id="balance-fecha-corte" value="${fechaCorte}" onchange="renderBalance()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px">
       ${fechaCorte?`<button class="btn btn-sm" onclick="document.getElementById('balance-fecha-corte').value='';renderBalance();" title="Quitar fecha de corte y ver el acumulado global"><i class="ti ti-x"></i></button>`:''}
     </div>
@@ -12261,44 +12336,21 @@ function renderBalance(){
     <div class="contable-section">
       <h4>Activos corrientes</h4>
       <div id="bal-drop-corriente" ondragover="event.preventDefault();this.style.background='var(--green-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaPersonalizadaBalance(event,'activo','corriente')" style="border-radius:6px;min-height:20px;transition:background .15s">
-      ${rc('Caja (efectivo)',fmtD(saldoCaja),'caja')}
-      <div class="contable-row" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="showContTab('bancos')" title="Ver la hoja Bancos"><span>Bancos <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i></span><span>${fmtD(saldoBanco)}</span></div>
-      ${BANCOS_CTAS.map(b=>`<div class="contable-row" style="font-size:11px;color:var(--text2);padding-left:24px"><span>↳ ${b.t}</span><span>${fmtD(bancoSaldo(b.k,fechaCorte||undefined))}</span></div>`).join('')}
-      ${rc('Cuentas por cobrar — Clientes',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Cliente'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Cliente')}
-      ${rc('Cuentas por cobrar — Bancos',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco'&&c.estado!=='Pagada'&&hastaCorte(c.fecha)).reduce((s,c)=>s+c.saldo,0)),'CxC-Banco')}
-      ${(()=>{const pb={};(contData.cuentas||[]).filter(c=>cxcBancoPendiente(c)&&hastaCorte(c.fecha)).forEach(c=>{const b=bancoDeCxC(c)||'Sin asignar';pb[b]=(pb[b]||0)+Number(c.saldo||0);});
-        return Object.entries(pb).map(([b,t])=>`<div class="contable-row" style="font-size:11px;color:var(--text2);padding-left:24px"><span>↳ ${b}</span><span>${fmtD(t)}</span></div>`).join('');})()}
-      ${rc('Cuentas por cobrar — Terceros',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Tercero'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Tercero')}
-      ${rc('Cuentas por cobrar — Inversores',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Inversor'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Inversor')}
-      ${(hayCuentaPersCxCEmp&&cxcEmpleados===0)?'':rc('Cuentas por cobrar — Empleados',fmtD(cxcEmpleados),'CxC-Empleado')}
-      ${activosPersCorrientes.map(c=>`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá para mover a No Corriente">${rcPers(c)}</div>`).join('')}
+      ${htmlActCorr}
       </div>
-      <div class="contable-row subtotal"><span>Total activos corrientes</span><span>${fmtD(saldoCaja+saldoBanco+cxcPend+totActivosPersCorr)}</span></div>
+      <div class="contable-row subtotal"><span>Total activos corrientes</span><span>${fmtD(totActCorr)}</span></div>
       <h4 style="margin-top:1rem">Activos no corrientes</h4>
       <div id="bal-drop-nocorriente" ondragover="event.preventDefault();this.style.background='var(--blue-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaPersonalizadaBalance(event,'activo','no-corriente')" style="border-radius:6px;min-height:20px;transition:background .15s">
-      ${rc('Inventario vehículos ('+vehiculos.filter(v=>v.estado!=='Vendido'&&hastaCorte(v.fechacompra)).length+' und.) — a costo',fmtD(valorInv),'inventario')}
-      ${r('Inventario Gerencia / Taller ('+invGerTall.n+' und.)',fmtD(valorInvGer))}
-      ${activosPersNoCorrientes.map(c=>`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá para mover a Corriente">${rcPers(c)}</div>`).join('')}
-      ${!activosPersNoCorrientes.length?`<p style="font-size:10px;color:var(--text3);padding:2px 0">Soltá acá una cuenta personalizada para clasificarla como No Corriente.</p>`:''}
+      ${htmlActNoCorr}
       </div>
-      <div class="contable-row subtotal"><span>Total activos no corrientes</span><span>${fmtD(valorInv+valorInvGer+totActivosPersNoCorr)}</span></div>
-      <div class="contable-row total"><span>TOTAL ACTIVOS</span><span>${fmtD(totalActivosConPers)}</span></div>
+      <div class="contable-row subtotal"><span>Total activos no corrientes</span><span>${fmtD(totActNoCorr)}</span></div>
+      <div class="contable-row total"><span>TOTAL ACTIVOS</span><span>${fmtD(totActCorr+totActNoCorr)}</span></div>
     </div></div>
     <div class="card"><div class="card-head"><h3 style="color:var(--red)"><i class="ti ti-trending-down"></i> PASIVOS Y PATRIMONIO</h3></div>
     <div class="contable-section">
       <h4>Pasivos corrientes</h4>
-      ${rc('Reservas de clientes (CxP)',fmtD(cxpReservas),'CxP-Reserva')}
-      ${rc('Reservas flotantes (por reembolsar)',fmtD(cxpFlotantes),'CxP-ReservaFlotante')}
-      ${rc('Cuentas por pagar — Inversores',fmtD(cxpInversores),'CxP-Inversor')}
-      ${rc('Otras cuentas por pagar',fmtD(cxpOtras),'CxP-Otra')}
-      ${rc('Préstamos bancarios',fmtD(cxpPrestamo),'CxP-Prestamo')}
-      ${rc('Tarjetas de crédito',fmtD(cxpTarjeta),'CxP-Tarjeta')}
-      ${rc('TC Corporativa 1',fmtD(cxpTCCorp1),'CxP-TCCorporativo1')}
-      ${rc('TC Corporativa 2',fmtD(cxpTCCorp2),'CxP-TCCorporativo2')}
-      <!-- Costos de ventas ya pagados al comprar - no es pasivo en base efectivo -->
-      ${rc('Comisiones por pagar',fmtD(comisiones),'comisiones')}
       <div id="bal-drop-pasivo" ondragover="event.preventDefault();this.style.background='var(--red-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaPersonalizadaBalance(event,'pasivo','corriente')" style="border-radius:6px;min-height:20px;transition:background .15s">
-      ${pasivosPersonalizados.map(c=>`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Cuenta personalizada de Pasivo">${r('↕️ '+c.nombre,fmtD(saldoRealCuentaPersonalizada(c)))}</div>`).join('')}
+      ${htmlPas}
       </div>
       <div class="contable-row subtotal"><span>Total pasivos</span><span>${fmtD(totalPasivosConPers)}</span></div>
       <h4 style="margin-top:1rem">Patrimonio</h4>
