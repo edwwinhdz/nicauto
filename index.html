@@ -1851,13 +1851,29 @@ body.no-delete .confirmDelete{display:none!important}
       </div>
       <div class="form-row" style="margin-bottom:0;margin-top:.625rem">
         <div class="form-group" style="margin:0"><label>¿De dónde sale el dinero? (Reporte de Caja)</label>
-          <select id="mv-pagacaja">
+          <select id="mv-pagacaja" onchange="mvMostrarBancos()">
             <option value="">No sale de caja (banco, tarjeta o cheque)</option>
             <option value="cajafuerte">Caja fuerte</option>
             <option value="cashjulio">Cash Julio M (Gerencia)</option>
           </select>
           <p style="font-size:10px;color:var(--text3);margin-top:3px">Si sale de Caja fuerte o Cash Julio M, la compra aparece sola como salida en Egresos de la caja del día de compra.</p>
         </div>
+      </div>
+      <div id="mv-bancos-box" style="display:none;margin-top:.625rem;background:#fff;border:1px dashed #74C0FC;border-radius:8px;padding:.6rem">
+        <label style="font-size:11px;font-weight:700;color:var(--blue)"><i class="ti ti-building-bank"></i> ¿De qué banco(s) salió la transferencia? (cuentas de Don Julio M)</label>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
+          <select id="mv-banco-0" style="flex:1"><option value="">— Elegir banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <input id="mv-banco-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el costo)" style="width:170px">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
+          <select id="mv-banco-1" style="flex:1"><option value="">— otro banco (opcional) —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <input id="mv-banco-monto-1" type="number" step="0.01" placeholder="Monto" style="width:170px">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
+          <select id="mv-banco-2" style="flex:1"><option value="">— otro banco (opcional) —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <input id="mv-banco-monto-2" type="number" step="0.01" placeholder="Monto" style="width:170px">
+        </div>
+        <p style="font-size:10px;color:var(--text3);margin-top:4px">La compra sale sola como <b>Salida</b> en la hoja <b>Bancos</b> de la cuenta elegida, con la fecha de compra. Si se pagó desde dos bancos, poné el monto de cada uno.</p>
       </div>
       <div class="form-row" style="margin-bottom:0">
         <div class="form-group" style="margin:0"><label>Agente de compra</label><select id="mv-agentecompra"><option value="">-- Seleccionar --</option></select></div>
@@ -4506,7 +4522,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-19-1655';
+const APP_VERSION='2026-10-19-1740';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -8593,6 +8609,7 @@ function abrirModalVehiculo(id){
     if(el)el.value=v?v[f]||'':'';
   });
   if(!v){document.getElementById('mv-estado').value='Disponible';document.getElementById('mv-tipo').value='Sedán';document.getElementById('mv-trans').value='Mecánico';}
+  mvCargarBancos(v);
   // Numeración automática de recibo de compra (req #9)
   const mvReciboEl=document.getElementById('mv-recibo');
   if(mvReciboEl){
@@ -8714,12 +8731,50 @@ function mvSugerirPagaCaja(){
   if(!sel)return;
   if(medio==='Caja (efectivo)'){if(!sel.value)sel.value='cajafuerte';}
   else sel.value='';
+  mvMostrarBancos();
+}
+// Compra por transferencia: se elige de qué banco(s) salió el dinero (hoja Bancos).
+function mvMostrarBancos(){
+  const box=document.getElementById('mv-bancos-box');if(!box)return;
+  const medio=document.getElementById('mv-mediopago')?.value||'';
+  const caja=document.getElementById('mv-pagacaja')?.value||'';
+  box.style.display=(medio==='Banco (transferencia)'&&!caja)?'block':'none';
+}
+function mvCargarBancos(v){
+  const lista=(v&&Array.isArray(v.pagoBancos))?v.pagoBancos:[];
+  [0,1,2].forEach(i=>{
+    const s=document.getElementById('mv-banco-'+i),m=document.getElementById('mv-banco-monto-'+i);
+    if(s)s.value=lista[i]?lista[i].banco:'';
+    if(m)m.value=lista[i]&&lista[i].monto!=null&&lista[i].monto!==''?lista[i].monto:'';
+  });
+  mvMostrarBancos();
+}
+function mvLeerBancos(costo){
+  const res=[];
+  [0,1,2].forEach(i=>{
+    const b=document.getElementById('mv-banco-'+i)?.value||'';
+    const mRaw=document.getElementById('mv-banco-monto-'+i)?.value;
+    if(!b)return;
+    res.push({banco:b,monto:mRaw===''||mRaw==null?null:Number(mRaw)});
+  });
+  // Un solo banco sin monto = todo el costo de compra
+  if(res.length===1&&res[0].monto==null)res[0].monto=Number(costo||0);
+  return res;
 }
 function guardarVehiculo(){
   const f=['marca','modelo','anio','color','placa','tipo','precio','precioB','costo','km','motor','nomotor','chasis','trans','estado','obs','procedencia','fechacompra','nombrecomprador','cedulacomprador','direccioncomprador','nacimientocomprador','tel1','tel2','prendado','bancogravamen','agentecompra','mediopago','pagacaja','recibo','vendedorreserva','clientereserva','prestadoa','comisionEstimada'];
   const vals={};f.forEach(k=>{const el=document.getElementById('mv-'+k);if(el)vals[k]=el.value;});
   if(!vals.marca||!vals.modelo){alert('Marca y modelo son obligatorios');return;}
   vals.compraConfirmada=!!document.getElementById('mv-confirmarcompra')?.checked;
+  // Transferencia bancaria: banco(s) de donde salió el dinero → salida automática en hoja Bancos
+  if(vals.mediopago==='Banco (transferencia)'&&!vals.pagacaja){
+    const pb=mvLeerBancos(vals.costo);
+    if(pb.some(x=>x.monto==null||!(x.monto>0))){alert('Poné el monto de cada banco (o dejá un solo banco sin monto para que tome todo el costo).');return;}
+    const suma=pb.reduce((s,x)=>s+x.monto,0);
+    if(pb.length&&Math.abs(suma-Number(vals.costo||0))>0.009&&!confirm(`Los montos de los bancos suman ${fmtD(suma)} y el costo del vehículo es ${fmtD(Number(vals.costo||0))}.\n\n¿Guardar así de todos modos?`))return;
+    if(!pb.length&&!document.getElementById('mv-id').value){alert('Elegí de qué banco salió la transferencia para esta compra.');return;}
+    vals.pagoBancos=pb;
+  } else vals.pagoBancos=[];
   // Salida de caja por la compra: va en el día de la fecha de compra (o hoy, si no tiene).
   if(vals.pagacaja){
     const vPrev=vehiculos.find(v=>v.id===document.getElementById('mv-id').value);
@@ -11619,9 +11674,23 @@ function bancosMovsDesdeCaja(){
   });
   return res;
 }
+// Salidas automáticas por compras de vehículos pagadas por transferencia (banco elegido en la compra)
+function bancosMovsDesdeCompras(){
+  const res=[];
+  (vehiculos||[]).forEach(v=>{
+    if(!Array.isArray(v.pagoBancos)||!v.pagoBancos.length)return;
+    if(v.mediopago&&v.mediopago!=='Banco (transferencia)')return;
+    const desc=`Compra de ${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.placa?' — '+v.placa:''}${v.nombrecomprador?' (a '+v.nombrecomprador+')':''}`;
+    v.pagoBancos.forEach((p,i)=>{
+      if(!p||!p.banco||!(Number(p.monto)>0))return;
+      res.push({id:'VC_'+v.id+'_'+i,cuenta:p.banco,fecha:v.fechacompra||'',tipo:'egreso',monto:Number(p.monto),auto:true,autoCompra:true,vehId:v.id,desc,ref:v.recibo||''});
+    });
+  });
+  return res;
+}
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
-  return[...bancosMovsDesdeCaja().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  return[...bancosMovsDesdeCaja().filter(m=>m.cuenta===k),...bancosMovsDesdeCompras().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
 }
 function bancoSaldo(k,hasta){
   const ini=bancoSaldoInicial(k);
@@ -11670,12 +11739,12 @@ function renderBancos(){
         <thead><tr><th>Fecha</th><th>Descripción</th><th>Ref. / Recibo</th><th style="text-align:right">Ingreso</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th><th></th></tr></thead>
         <tbody>${filas.length?filas.map(m=>`<tr>
           <td style="white-space:nowrap">${m.fecha||'—'}</td>
-          <td>${m.desc||''}${m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
+          <td>${m.desc||''}${m.autoCompra?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
           <td>${m.ref||'—'}</td>
           <td style="text-align:right;color:var(--green)">${m.tipo==='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;color:var(--red)">${m.tipo!=='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;font-weight:700">${fmtD(m.saldo)}</td>
-          <td>${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
+          <td>${m.autoCompra&&puede?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Corregir banco o monto en la compra del vehículo"><i class="ti ti-car"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
         </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Sin movimientos</td></tr>'}</tbody>
       </table></div>`:''}
     </div>`;
