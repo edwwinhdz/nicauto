@@ -4506,7 +4506,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-19-1230';
+const APP_VERSION='2026-10-19-1300';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -17866,32 +17866,42 @@ function renderMarketing(){
   if(!tbody)return;
   const q=(document.getElementById('mkt-q')?.value||'').toLowerCase();
   const ocultarPub=document.getElementById('mkt-ocultar-publicados')?.checked;
-  // Propios + Consignación, ambos cuentan para Marketing por igual.
-  const propios=vehiculos.filter(v=>v.estado==='Disponible').map(v=>({...v,_origen:'propio'}));
-  const consig=(contData.consignacion||[]).filter(c=>c.estado==='Disponible').map(c=>({...c,_origen:'consignacion'}));
-  const data=[...propios,...consig]
-    .filter(v=>(!q||(v.marca+v.modelo+v.placa).toLowerCase().includes(q))&&(!ocultarPub||!v.marketingPublicado))
-    .sort((a,b)=>(a.marketingFecha||a.fechacompra||'9999-99-99').localeCompare(b.marketingFecha||b.fechacompra||'9999-99-99'));
+  // Orden: 1) propios Disponibles, 2) Consignación (con su Precio A), 3) propios que son de
+  // venta pero todavía no están listos (Taller, Pintura, Alistamiento, etc.) — para que
+  // Marketing sepa que sí se venden aunque no estén para publicar todavía.
+  const ESTADOS_NO_VENTA=['Disponible','Vendido','Gerencia'];
+  const ordFecha=(a,b)=>(a.marketingFecha||a.fechacompra||'9999-99-99').localeCompare(b.marketingFecha||b.fechacompra||'9999-99-99');
+  const propios=vehiculos.filter(v=>v.estado==='Disponible').map(v=>({...v,_origen:'propio',_grupo:1,_precioA:Number(v.precio||0)}));
+  const consig=(contData.consignacion||[]).filter(c=>c.estado==='Disponible').map(c=>({...c,_origen:'consignacion',_grupo:2,_precioA:Number(c.precioA||c.precio||0)}));
+  const noListos=vehiculos.filter(v=>v.estado&&!ESTADOS_NO_VENTA.includes(v.estado)).map(v=>({...v,_origen:'propio',_grupo:3,_precioA:Number(v.precio||0)}));
+  const filtro=v=>(!q||((v.marca||'')+(v.modelo||'')+(v.placa||'')).toLowerCase().includes(q))&&(!ocultarPub||!v.marketingPublicado);
+  const g1=propios.filter(filtro).sort(ordFecha),g2=consig.filter(filtro).sort(ordFecha),g3=noListos.filter(filtro).sort(ordFecha);
+  const data=[...g1,...g2,...g3];
   const totalPublicados=[...propios,...consig].filter(v=>v.marketingPublicado).length;
   const totalPendientes=[...propios,...consig].length-totalPublicados;
+  const sumaA=l=>l.reduce((s,v)=>s+v._precioA,0);
   const boxResumen=document.getElementById('mkt-resumen');
   if(boxResumen)boxResumen.innerHTML=`
     <div class="stats-grid" style="margin-bottom:1rem">
       <div class="stat-card"><div class="stat-label">Total disponibles</div><div class="stat-value stat-blue">${propios.length+consig.length}</div></div>
       <div class="stat-card"><div class="stat-label">Publicados</div><div class="stat-value stat-green">${totalPublicados}</div></div>
       <div class="stat-card"><div class="stat-label">Pendientes de publicar</div><div class="stat-value stat-amber">${totalPendientes}</div></div>
+      <div class="stat-card"><div class="stat-label">En preparación (no listos)</div><div class="stat-value" style="color:var(--text2)">${noListos.length}</div></div>
     </div>`;
+  const filaGrupo=(txt,color,n)=>`<tr><td colspan="12" style="background:var(--surface2);font-weight:800;font-size:12px;color:${color};padding:6px 10px;letter-spacing:.03em">${txt} <span style="font-weight:400;color:var(--text2)">(${n})</span></td></tr>`;
+  const filaTotal=(txt,l)=>`<tr style="background:var(--surface2);font-weight:700"><td colspan="6" style="text-align:right;padding:8px">${txt} — ${l.length} und.</td><td style="color:var(--green);font-weight:800;white-space:nowrap">${fmtD(sumaA(l))}</td><td colspan="5"></td></tr>`;
   tbody.innerHTML=data.length?data.map((v,idx)=>{
     const dias=diasDesde(v.marketingFecha||v.fechacompra);
     const idKey=`${v._origen}_${v.id}`;
-    return`<tr>
+    const enc=(idx===0||data[idx-1]._grupo!==v._grupo)?(v._grupo===1?filaGrupo('✅ DISPONIBLES NICAUTO','var(--green)',g1.length):v._grupo===2?filaGrupo('🤝 CONSIGNACIÓN','var(--amber)',g2.length):filaGrupo('🔧 DE VENTA — TODAVÍA NO LISTOS (Taller, Pintura, Alistamiento…)','var(--text2)',g3.length)):'';
+    return enc+`<tr${v._grupo===3?' style="opacity:.75"':''}>
       <td style="font-weight:700;color:var(--text2);text-align:center">${idx+1}</td>
-      <td><b>${v.marca||'—'} ${v.modelo||'—'}</b>${v._origen==='consignacion'?' <span class="badge badge-amber" style="font-size:9px">Consig.</span>':''}</td>
+      <td><b>${v.marca||'—'} ${v.modelo||'—'}</b>${v._origen==='consignacion'?' <span class="badge badge-amber" style="font-size:9px">Consig.</span>':''}${v._grupo===3?` <span class="badge badge-red" style="font-size:9px">${v.estado}</span>`:''}</td>
       <td style="font-family:monospace;font-size:12px">${v.placa||'—'}</td>
       <td>${v.anio||'—'}</td>
       <td>${v.km?Number(v.km).toLocaleString():'—'} km</td>
       <td>${dias!==null?dias+' día'+(dias===1?'':'s'):'—'}</td>
-      <td style="color:var(--green);font-weight:700">${v.precio?fmtD(v.precio):'—'}</td>
+      <td style="color:var(--green);font-weight:700">${v._precioA?fmtD(v._precioA):'—'}</td>
       <td style="min-width:160px">
         <input type="text" value="${(v.marketingNota||'').replace(/"/g,'&quot;')}" placeholder="Ej: alfombra sucia…" onchange="guardarNotaMarketing('${v._origen}','${v.id}',this.value)" style="color:var(--blue);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;width:100%">
       </td>
@@ -17908,7 +17918,10 @@ function renderMarketing(){
         <div style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:${v.marketingNoEsta?'var(--red)':'var(--surface2)'};border:2px solid ${v.marketingNoEsta?'var(--red)':'var(--border)'}" onclick="toggleMarketingNoEsta('${v._origen}','${v.id}')" title="${v.marketingNoEsta?`Marcado como NO está por ${v.marketingNoEstaPor||''} el ${v.marketingNoEstaFecha||''}`:'Clic si este carro no se encuentra físicamente'}">${v.marketingNoEsta?'❌':'⬜'}</div>
       </td>
     </tr>`;
-  }).join(''):'<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:1.5rem">No hay vehículos disponibles para publicar todavía</td></tr>';
+  }).join('')+`<tr><td colspan="12" style="padding:4px"></td></tr>`
+    +filaTotal('TOTAL NICAUTO (disponibles + no listos)',[...g1,...g3])
+    +filaTotal('TOTAL CONSIGNACIÓN',g2)
+    :'<tr><td colspan="12" style="text-align:center;color:var(--text3);padding:1.5rem">No hay vehículos disponibles para publicar todavía</td></tr>';
 }
 async function guardarNotaMarketing(origen,id,nota){
   const v=origen==='consignacion'?(contData.consignacion||[]).find(x=>x.id===id):vehiculos.find(x=>x.id===id);
