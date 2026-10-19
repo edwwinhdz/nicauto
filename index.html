@@ -4506,7 +4506,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-19-1300';
+const APP_VERSION='2026-10-19-1310';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -14846,17 +14846,60 @@ const SEMILLA_INV_BODEGA=[
   {id:'invbod07',fecha:'2026-03-14',proveedor:'',detalle:'Batería para diésel bodega',montoC:1800,monto:49.32},
   {id:'invbod08',fecha:'2026-04-17',proveedor:'',detalle:'Pago de 4 llantas para Hilux para bodega',montoC:0,monto:235.62}
 ];
+// Detalle histórico de Mobiliario y Equipos (compras para las oficinas) — total $15,313.35.
+const SEMILLA_MOBILIARIO=[
+  {id:'mobeq01',fecha:"2024-02-08",proveedor:"Ref. 11",detalle:"Compra de escalera de aluminio",montoC:6675.0,monto:182.26},
+  {id:'mobeq02',fecha:"2024-03-19",proveedor:"",detalle:"Reinstalación de cámaras para nueva oficina — Vigilancia",montoC:8748.0,monto:238.86},
+  {id:'mobeq03',fecha:"2024-04-24",proveedor:"",detalle:"Compra de mobiliario de oficina: sillas y escritorios",montoC:60879.34,monto:1662.27},
+  {id:'mobeq04',fecha:"2024-06-05",proveedor:"",detalle:"Compra de refrigerador",montoC:8969.94,monto:244.92},
+  {id:'mobeq05',fecha:"2024-06-05",proveedor:"",detalle:"Compra de mueble de oficina",montoC:11500.0,monto:314.0},
+  {id:'mobeq06',fecha:"2024-06-10",proveedor:"",detalle:"Compra de 4 abanicos",montoC:8000.0,monto:218.43},
+  {id:'mobeq07',fecha:"2024-06-10",proveedor:"",detalle:"Instalación de ventanas y puertas oficina",montoC:68125.96,monto:1860.13},
+  {id:'mobeq08',fecha:"2024-06-10",proveedor:"",detalle:"Compra de 3 aires acondicionados",montoC:61612.0,monto:1682.27},
+  {id:'mobeq09',fecha:"2024-06-11",proveedor:"Sinsa — Ref. 35265",detalle:"Compra de lavamanos, gabinete aéreo, puerta plegable p/ oficina Finanzas",montoC:8297.0,monto:226.54},
+  {id:'mobeq10',fecha:"2024-07-23",proveedor:"Ref. 1471",detalle:"Juego de asientos 12 cojines",montoC:6400.0,monto:174.75},
+  {id:'mobeq11',fecha:"2025-04-30",proveedor:"",detalle:"Impresora Canon",montoC:0,monto:634.5},
+  {id:'mobeq12',fecha:"2025-08-25",proveedor:"",detalle:"Elevador automotriz — anticipo de compra (valor total $2,200)",montoC:36500.0,monto:1000.0},
+  {id:'mobeq13',fecha:"2025-08-04",proveedor:"Cash J.M",detalle:"Archivero de 2 gavetas para Abogado",montoC:3600.0,monto:98.63},
+  {id:'mobeq14',fecha:"2025-08-05",proveedor:"Transfer D.G",detalle:"Compra de gavetero para Operaciones (Jordan)",montoC:2300.0,monto:63.01},
+  {id:'mobeq15',fecha:"2025-09-03",proveedor:"",detalle:"Compra de desbrozadora eléctrica (herramienta)",montoC:2250.0,monto:61.64},
+  {id:'mobeq16',fecha:"2025-09-25",proveedor:"",detalle:"Registro de 2do pago de compra de elevador automotriz",montoC:0,monto:600.0},
+  {id:'mobeq17',fecha:"2025-09-30",proveedor:"SEVASA Fact #117832",detalle:"Compra de monitor para Finanzas",montoC:0,monto:103.85},
+  {id:'mobeq18',fecha:"2025-09-30",proveedor:"Fact #2489",detalle:"Compra de 2 archivos metálicos para compradores",montoC:0,monto:200.0},
+  {id:'mobeq19',fecha:"2025-10-28",proveedor:"",detalle:"Registro de 3er pago para compra de elevador automotriz",montoC:0,monto:600.0},
+  {id:'mobeq20',fecha:"2025-11-05",proveedor:"Sevasa Fact 0452133",detalle:"Compra de 2 monitores de 24\"",montoC:0,monto:207.0},
+  {id:'mobeq21',fecha:"2025-11-06",proveedor:"Fact 0452228",detalle:"Compra de adaptador para monitores de Finanzas Nicauto",montoC:0,monto:140.93},
+  {id:'mobeq22',fecha:"2025-12-02",proveedor:"Selogra — Fact. 0308",detalle:"Compra de laptop para el Abogado Gerald",montoC:0,monto:260.0},
+  {id:'mobeq23',fecha:"2026-01-12",proveedor:"Global Pro",detalle:"Compra de computadora para Operaciones",montoC:0,monto:295.89},
+  {id:'mobeq24',fecha:"2026-01-15",proveedor:"",detalle:"Compra de escalera de aluminio de 24 pies para construcción",montoC:0,monto:286.3},
+  {id:'mobeq25',fecha:"2026-01-05",proveedor:"República Móvil — Fac #9700 (15/01)",detalle:"Compra de Samsung S25 Ultra para Publicidad, asignado a Obed",montoC:0,monto:900.0},
+  {id:'mobeq26',fecha:"2026-01-20",proveedor:"",detalle:"Compra de 2 taladros para taller en eBay",montoC:0,monto:800.0},
+  {id:'mobeq27',fecha:"2026-01-20",proveedor:"",detalle:"Venta de un taladro en $400 al cirujano (rebaja)",montoC:0,monto:-400.0},
+  {id:'mobeq28',fecha:"2026-04-30",proveedor:"",detalle:"Compra de archivero para Publicidad y Mercadeo (Obed)",montoC:0,monto:126.03},
+  {id:'mobeq29',fecha:"2026-05-07",proveedor:"",detalle:"Compra de juego de taladro Milwaukee de 1/2 — 2 taladros en su caja",montoC:0,monto:491.48},
+  {id:'mobeq30',fecha:"2026-05-15",proveedor:"",detalle:"Compra de laptop para Danny, Coordinador Administrativo",montoC:0,monto:240.0},
+  {id:'mobeq31',fecha:"2026-08-05",proveedor:"",detalle:"Compra de laptop para Samir, Coordinador Comercial",montoC:0,monto:415.0},
+  {id:'mobeq32',fecha:"2026-08-31",proveedor:"",detalle:"Compra de aire acondicionado de 24 BTU para oficina central",montoC:0,monto:1384.66}
+];
+// Cada carga inicial se aplica una sola vez a su cuenta (bandera propia) — IDs fijos.
+const SEMILLAS_CUENTAS_PERS=[
+  {cuenta:'inventario llantas y herramientas',flag:'semillaInvBodega',movs:SEMILLA_INV_BODEGA,origen:'Carga inicial (inventario de bodega)'},
+  {cuenta:'activos mobiliarios y equipos',flag:'semillaMobiliario',movs:SEMILLA_MOBILIARIO,origen:'Carga inicial (detalle de mobiliario y equipos)'}
+];
 function sembrarInventarioBodega(){
   try{
-    const c=(contData.cuentasPersonalizadas||[]).find(x=>x.tipo==='activo'&&_normCuenta(x.nombre)==='inventario llantas y herramientas');
-    if(!c||c.semillaInvBodega)return;
-    c.movimientos=Array.isArray(c.movimientos)?c.movimientos:[];
-    const ids=new Set(c.movimientos.map(m=>m.id));
-    SEMILLA_INV_BODEGA.forEach(m=>{if(!ids.has(m.id))c.movimientos.push({...m,registradoPor:'Carga inicial (inventario de bodega)'});});
-    c.semillaInvBodega=true;
-    if((MODO==='admin'||MODO==='coordinador')&&!window._semillaBodegaGuardada){
-      window._semillaBodegaGuardada=true;
-      setTimeout(()=>saveOne('contable',{id:'main',...contData}),1500);
+    let cambio=false;
+    SEMILLAS_CUENTAS_PERS.forEach(sm=>{
+      const c=(contData.cuentasPersonalizadas||[]).find(x=>x.tipo==='activo'&&_normCuenta(x.nombre)===sm.cuenta);
+      if(!c||c[sm.flag])return;
+      c.movimientos=Array.isArray(c.movimientos)?c.movimientos:[];
+      const ids=new Set(c.movimientos.map(m=>m.id));
+      sm.movs.forEach(m=>{if(!ids.has(m.id))c.movimientos.push({...m,registradoPor:sm.origen});});
+      c[sm.flag]=true;cambio=true;
+    });
+    if(cambio&&(MODO==='admin'||MODO==='coordinador')){
+      clearTimeout(window._semillaCuentasTimer);
+      window._semillaCuentasTimer=setTimeout(()=>saveOne('contable',{id:'main',...contData}),1500);
     }
   }catch(e){console.warn('sembrarInventarioBodega',e);}
 }
