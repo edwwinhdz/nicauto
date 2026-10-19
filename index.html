@@ -4506,7 +4506,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-19-0900';
+const APP_VERSION='2026-10-19-1230';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -12136,6 +12136,7 @@ function encabezadoNicautoHTML(titulo,detalle){
   </div>`;
 }
 function renderBalance(){
+  sembrarInventarioBodega();
   const gastosAdmin=getGastosAdminCatsCompleto();
   const fechaCorte=document.getElementById('balance-fecha-corte')?.value||''; // vacío = acumulado global (sin filtrar)
   const hastaCorte=fecha=>!fechaCorte||!fecha||fecha<=fechaCorte;
@@ -12183,14 +12184,15 @@ function renderBalance(){
   const pasivosPersonalizados=(contData.cuentasPersonalizadas||[]).filter(c=>c.tipo==='pasivo');
   const activosPersCorrientes=activosPersonalizados.filter(c=>(clasifBalance[c.nombre]||'corriente')==='corriente');
   const activosPersNoCorrientes=activosPersonalizados.filter(c=>clasifBalance[c.nombre]==='no-corriente');
-  const totActivosPersCorr=activosPersCorrientes.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c),0);
-  const totActivosPersNoCorr=activosPersNoCorrientes.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c),0);
+  const totActivosPersCorr=activosPersCorrientes.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c,fechaCorte||undefined),0);
+  const totActivosPersNoCorr=activosPersNoCorrientes.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c,fechaCorte||undefined),0);
   const totPasivosPersonalizados=pasivosPersonalizados.reduce((s,c)=>s+saldoRealCuentaPersonalizada(c),0);
   const totalActivosConPers=totalActivos+totActivosPersCorr+totActivosPersNoCorr;
   const totalPasivosConPers=totalPasivos+totPasivosPersonalizados;
   const totalPatrimonioConPers=totalActivosConPers-totalPasivosConPers;
   const r=(l,v,cls='')=>`<div class="contable-row ${cls}"><span>${l}</span><span>${v}</span></div>`;
   const rc=(l,v,cuenta)=>`<div class="contable-row" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirAuxiliarCuenta('${cuenta}','','${fechaCorte}')" title="Ver auxiliar de ${l}"><span>${l} <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i></span><span>${v}</span></div>`;
+  const rcPers=c=>`<div class="contable-row" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px" onclick="abrirAuxiliarCuenta('${c.nombre.replace(/'/g,"\\'")}','','${fechaCorte}')" title="Ver detalle de ${c.nombre}"><span>↕️ ${c.nombre} <i class="ti ti-chevron-right" style="font-size:10px;opacity:.5"></i></span><span>${fmtD(saldoRealCuentaPersonalizada(c,fechaCorte||undefined))}</span></div>`;
   const pendRend=pendientesValidarRendicion();
   document.getElementById('cont-balance').innerHTML=`
   ${encabezadoNicautoHTML('Balance General',fechaCorte?'Al '+fechaCorte:'Acumulado global (sin fecha de corte)')}
@@ -12220,14 +12222,14 @@ function renderBalance(){
       ${rc('Cuentas por cobrar — Terceros',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Tercero'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Tercero')}
       ${rc('Cuentas por cobrar — Inversores',fmtD((contData.cuentas||[]).filter(c=>c.tipo==='CxC-Inversor'&&c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0)),'CxC-Inversor')}
       ${(hayCuentaPersCxCEmp&&cxcEmpleados===0)?'':rc('Cuentas por cobrar — Empleados',fmtD(cxcEmpleados),'CxC-Empleado')}
-      ${activosPersCorrientes.map(c=>`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá para mover a No Corriente">${r('↕️ '+c.nombre,fmtD(saldoRealCuentaPersonalizada(c)))}</div>`).join('')}
+      ${activosPersCorrientes.map(c=>`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá para mover a No Corriente">${rcPers(c)}</div>`).join('')}
       </div>
       <div class="contable-row subtotal"><span>Total activos corrientes</span><span>${fmtD(saldoCaja+saldoBanco+cxcPend+totActivosPersCorr)}</span></div>
       <h4 style="margin-top:1rem">Activos no corrientes</h4>
       <div id="bal-drop-nocorriente" ondragover="event.preventDefault();this.style.background='var(--blue-light)'" ondragleave="this.style.background=''" ondrop="dropCuentaPersonalizadaBalance(event,'activo','no-corriente')" style="border-radius:6px;min-height:20px;transition:background .15s">
       ${rc('Inventario vehículos ('+vehiculos.filter(v=>v.estado!=='Vendido').length+' und.)',fmtD(valorInv),'inventario')}
       ${r('Inventario Gerencia / Taller ('+invGerTall.n+' und.)',fmtD(valorInvGer))}
-      ${activosPersNoCorrientes.map(c=>`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá para mover a Corriente">${r('↕️ '+c.nombre,fmtD(saldoRealCuentaPersonalizada(c)))}</div>`).join('')}
+      ${activosPersNoCorrientes.map(c=>`<div draggable="true" ondragstart="dragCuentaBalanceStart(event,'${c.nombre.replace(/'/g,"\\'")}')" style="cursor:grab" title="Arrastrá para mover a Corriente">${rcPers(c)}</div>`).join('')}
       ${!activosPersNoCorrientes.length?`<p style="font-size:10px;color:var(--text3);padding:2px 0">Soltá acá una cuenta personalizada para clasificarla como No Corriente.</p>`:''}
       </div>
       <div class="contable-row subtotal"><span>Total activos no corrientes</span><span>${fmtD(valorInv+valorInvGer+totActivosPersNoCorr)}</span></div>
@@ -14720,8 +14722,9 @@ async function guardarCuentaPersonalizada(){
   if(!codigo||!nombre){alert('El código y el nombre son obligatorios.');return;}
   contData.cuentasPersonalizadas=contData.cuentasPersonalizadas||[];
   if(!codigoOriginal&&contData.cuentasPersonalizadas.find(c=>c.codigo===codigo)){alert('Ya existe una cuenta con ese código.');return;}
-  const obj={codigo,nombre,tipo,esMayor,mayor,cuentaPadre,saldo,creadoPor:getNombreUsuario(),fecha:hoyLocal()};
   const idx=contData.cuentasPersonalizadas.findIndex(c=>c.codigo===(codigoOriginal||codigo));
+  const previa=idx>=0?contData.cuentasPersonalizadas[idx]:null;
+  const obj={...(previa||{}),codigo,nombre,tipo,esMayor,mayor,cuentaPadre,saldo,creadoPor:(previa&&previa.creadoPor)||getNombreUsuario(),fecha:(previa&&previa.fecha)||hoyLocal()};
   if(idx>=0)contData.cuentasPersonalizadas[idx]=obj;else contData.cuentasPersonalizadas.push(obj);
   await saveOne('contable',{id:'main',...contData});
   closeOv('ov-cuenta-personalizada');
@@ -14809,12 +14812,81 @@ function generarNotaIA(){
 // registrar gastos de agosto 2026 en adelante con una cuenta nueva, el número se actualiza
 // solo. Para Activos/Pasivos/Ingresos se mantiene el saldo manual (no hay todavía un flujo de
 // transacciones que los alimente automáticamente).
-function saldoRealCuentaPersonalizada(c){
+// Registros cargados directamente a una cuenta de Activo personalizada (ej. Inventario de
+// Llantas y Herramientas): cada uno tiene fecha, proveedor, detalle y monto en dólares.
+function movsCuentaPers(c){return Array.isArray(c&&c.movimientos)?c.movimientos.filter(m=>m&&!m.anulado):[];}
+function gastosDeCuentaActivoPers(c,hasta){
+  const n=_normCuenta(c.nombre);
+  return(contData.gastos||[]).filter(g=>_normCuenta(g.cat)===n&&(!hasta||!g.fecha||g.fecha<=hasta));
+}
+function saldoRealCuentaPersonalizada(c,hasta){
   if(c.tipo==='gasto')return(contData.gastos||[]).filter(g=>g.cat===c.nombre).reduce((s,g)=>s+Number(g.monto||0),0);
   // CxC Empleados (Activo): los gastos cargados a esta cuenta (ej. reparación cobrada a un empleado)
   // se suman al saldo manual, porque son una cuenta por cobrar y no un gasto del período.
   if(c.tipo==='activo'&&esCxCEmpleadosCat(c.nombre))return Number(c.saldo||0)+(contData.gastos||[]).filter(g=>esCxCEmpleadosCat(g.cat)).reduce((s,g)=>s+Number(g.monto||0),0);
+  // Activo personalizado: saldo inicial + registros propios + gastos/compras cargados a esta
+  // cuenta (antes esos gastos no salían ni en el ER ni en el Balance — se perdían).
+  if(c.tipo==='activo'){
+    const enCorte=f=>!hasta||!f||f<=hasta;
+    return Number(c.saldo||0)
+      +movsCuentaPers(c).filter(m=>enCorte(m.fecha)).reduce((s,m)=>s+Number(m.monto||0),0)
+      +gastosDeCuentaActivoPers(c,hasta).reduce((s,g)=>s+Number(g.monto||0),0);
+  }
   return Number(c.saldo||0);
+}
+// Registros históricos del Inventario de Bodega (Llantas y Herramientas) — se cargan una sola
+// vez en la cuenta personalizada. IDs fijos para que nunca se dupliquen.
+const SEMILLA_INV_BODEGA=[
+  {id:'invbod01',fecha:'2025-10-16',proveedor:'Noel',detalle:'Compra de 1 llanta nueva para bodega 265/60R18',montoC:3500,monto:95.89},
+  {id:'invbod02',fecha:'2025-10-16',proveedor:'Noel',detalle:'Rines y armado de llantas',montoC:0,monto:563.08},
+  {id:'invbod03',fecha:'2025-12-30',proveedor:'',detalle:'Compra de taladro de impacto inalámbrico',montoC:12650.17,monto:346.58},
+  {id:'invbod04',fecha:'2025-12-30',proveedor:'',detalle:'Compra de 2 taladros de impacto inalámbricos',montoC:0,monto:314.99},
+  {id:'invbod05',fecha:'2026-01-13',proveedor:'',detalle:'Compra de llanta para Mercedes azul de la jefa — transfer. Don Julio',montoC:2000,monto:54.79},
+  {id:'invbod06',fecha:'2026-02-28',proveedor:'',detalle:'Compra de llanta Pirelli bodega',montoC:5500,monto:150.68},
+  {id:'invbod07',fecha:'2026-03-14',proveedor:'',detalle:'Batería para diésel bodega',montoC:1800,monto:49.32},
+  {id:'invbod08',fecha:'2026-04-17',proveedor:'',detalle:'Pago de 4 llantas para Hilux para bodega',montoC:0,monto:235.62}
+];
+function sembrarInventarioBodega(){
+  try{
+    const c=(contData.cuentasPersonalizadas||[]).find(x=>x.tipo==='activo'&&_normCuenta(x.nombre)==='inventario llantas y herramientas');
+    if(!c||c.semillaInvBodega)return;
+    c.movimientos=Array.isArray(c.movimientos)?c.movimientos:[];
+    const ids=new Set(c.movimientos.map(m=>m.id));
+    SEMILLA_INV_BODEGA.forEach(m=>{if(!ids.has(m.id))c.movimientos.push({...m,registradoPor:'Carga inicial (inventario de bodega)'});});
+    c.semillaInvBodega=true;
+    if((MODO==='admin'||MODO==='coordinador')&&!window._semillaBodegaGuardada){
+      window._semillaBodegaGuardada=true;
+      setTimeout(()=>saveOne('contable',{id:'main',...contData}),1500);
+    }
+  }catch(e){console.warn('sembrarInventarioBodega',e);}
+}
+async function agregarMovCuentaPers(nombreCuenta,hasta){
+  if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador puede agregar registros a esta cuenta.');return;}
+  const c=(contData.cuentasPersonalizadas||[]).find(x=>x.nombre===nombreCuenta);
+  if(!c)return;
+  const fecha=document.getElementById('aux-mov-fecha').value;
+  const proveedor=document.getElementById('aux-mov-prov').value.trim();
+  const detalle=document.getElementById('aux-mov-det').value.trim();
+  const montoC=parseFloat(document.getElementById('aux-mov-cord').value)||0;
+  let monto=parseFloat(document.getElementById('aux-mov-usd').value)||0;
+  if(!monto&&montoC)monto=Math.round(montoC/TASA_CAJA_CHICA*100)/100;
+  if(!fecha||!detalle||!monto){alert('Poné la fecha, el detalle y el monto (en dólares, o en córdobas para convertirlo a C$'+TASA_CAJA_CHICA+').');return;}
+  c.movimientos=Array.isArray(c.movimientos)?c.movimientos:[];
+  c.movimientos.push({id:uid(),fecha,proveedor,detalle,montoC,monto,registradoPor:getNombreUsuario(),registradoFecha:hoyLocal()});
+  await saveOne('contable',{id:'main',...contData});
+  abrirAuxiliarCuenta(nombreCuenta,'',hasta||'');
+  if(document.getElementById('cont-balance'))try{renderBalance();}catch(e){}
+}
+async function eliminarMovCuentaPers(nombreCuenta,id,hasta){
+  if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador puede eliminar registros de esta cuenta.');return;}
+  const c=(contData.cuentasPersonalizadas||[]).find(x=>x.nombre===nombreCuenta);
+  const m=c&&movsCuentaPers(c).find(x=>x.id===id);
+  if(!m)return;
+  if(!confirm(`¿Eliminar este registro?\n\n${m.fecha} — ${m.detalle} — ${fmtD(m.monto)}`))return;
+  m.anulado=true;m.anuladoPor=getNombreUsuario();m.anuladoFecha=hoyLocal();
+  await saveOne('contable',{id:'main',...contData});
+  abrirAuxiliarCuenta(nombreCuenta,'',hasta||'');
+  if(document.getElementById('cont-balance'))try{renderBalance();}catch(e){}
 }
 // Muestra una cuenta personalizada distinguiendo visualmente si es de Mayor (negrita, sin
 // sangría) o Subcuenta (con sangría y flecha, indicando que pertenece a otra cuenta).
@@ -14914,7 +14986,8 @@ function renderCatalogo(){
   // Cuentas contables creadas manualmente por el Administrador (subcuentas nuevas) — se suman
   // a los totales de Activos/Pasivos/Ingresos/Gastos según el tipo que se les asignó.
   const cuentasPers=contData.cuentasPersonalizadas||[];
-  const totalActivosPers=cuentasPers.filter(c=>c.tipo==='activo').reduce((s,c)=>s+Number(c.saldo||0),0);
+  sembrarInventarioBodega();
+  const totalActivosPers=cuentasPers.filter(c=>c.tipo==='activo').reduce((s,c)=>s+saldoRealCuentaPersonalizada(c),0);
   const totalPasivosPers=cuentasPers.filter(c=>c.tipo==='pasivo').reduce((s,c)=>s+Number(c.saldo||0),0);
   const totalIngresosPers=cuentasPers.filter(c=>c.tipo==='ingreso').reduce((s,c)=>s+Number(c.saldo||0),0);
   const totalGastosPers=cuentasPers.filter(c=>c.tipo==='gasto').reduce((s,c)=>s+saldoRealCuentaPersonalizada(c),0);
@@ -24262,6 +24335,8 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
   // Si se pasan ambas (ej. desde Estado de Resultados), se ve solo lo que cae en ese rango.
   const enRango=fecha=>(!desde||!fecha||fecha>=desde)&&(!hasta||!fecha||fecha<=hasta);
   let titulo='',movimientos=[];
+  sembrarInventarioBodega();
+  const cpActivo=(contData.cuentasPersonalizadas||[]).find(c=>c.tipo==='activo'&&c.nombre===cuenta&&!esCxCEmpleadosCat(c.nombre));
   const rec=(contData.recibos||[]).filter(r=>enRango(r.fecha));
   const gastos=(contData.gastos||[]).filter(g=>enRango(g.fecha));
   const cuentas=(contData.cuentas||[]).filter(ct=>enRango(ct.fecha));
@@ -24299,13 +24374,21 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
   } else if(cuenta==='comisiones'){
     titulo='Auxiliar — Comisiones';
     movimientos=ventas.filter(v=>v.estado==='Completada'&&Number(v.comision)>0&&enRango(v.fecha)).map(v=>{const vnd=clientes.find(x=>x.id===v.vendedorId);return{id:v.id,fecha:v.fecha,desc:'Comisión '+(vnd?vnd.nombre:''),cat:'Comisión',monto:Number(v.comision),signo:'-',color:'var(--amber)'};});
+  } else if(cpActivo){
+    titulo='Auxiliar — '+cpActivo.codigo+' '+cpActivo.nombre;
+    if(Number(cpActivo.saldo||0))movimientos.push({id:'',fecha:'',desc:'Saldo inicial de la cuenta',cat:'Saldo inicial',monto:Number(cpActivo.saldo),signo:'+',color:'var(--green)'});
+    movsCuentaPers(cpActivo).filter(m=>enRango(m.fecha)).forEach(m=>movimientos.push({id:m.id,fecha:m.fecha,desc:(m.proveedor?m.proveedor+' — ':'')+m.detalle+(m.montoC?` (C$ ${Number(m.montoC).toLocaleString('en-US',{minimumFractionDigits:2})})`:''),cat:'Registro de la cuenta',monto:Number(m.monto||0),signo:'+',color:'var(--green)',esMovPers:true}));
+    gastos.filter(g=>_normCuenta(g.cat)===_normCuenta(cpActivo.nombre)).forEach(g=>movimientos.push({id:g.id,fecha:g.fecha,desc:(g.beneficiario?g.beneficiario+' — ':'')+(g.desc||''),cat:'Gasto/compra',monto:Number(g.monto||0),signo:'+',color:'var(--green)',esGastoActivo:true}));
+    movimientos.sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   } else {
     titulo='Auxiliar — '+cuenta;
     movimientos=gastos.filter(g=>g.cat===cuenta||(esCategoriaReclamo(cuenta)&&esGastoReclamo(g))).map(g=>({...g,signo:'-',color:'var(--red)'}));
   }
   // Los gastos (cualquier cuenta que no sea Caja/Banco/Inventario/CxC/CxP/Ventas/Costo/Comisión)
   // se pueden reclasificar directo desde acá, sin tener que ir a la tabla de Gastos completa.
-  const esAuxiliarDeGasto=!['caja','banco','inventario','ventas','ingresos','costoventas','comisiones'].includes(cuenta)&&!cuenta.startsWith('CxC')&&!cuenta.startsWith('CxP');
+  const esAuxiliarDeGasto=!cpActivo&&!['caja','banco','inventario','ventas','ingresos','costoventas','comisiones'].includes(cuenta)&&!cuenta.startsWith('CxC')&&!cuenta.startsWith('CxP');
+  const puedeMovPers=!!cpActivo&&(MODO==='admin'||MODO==='coordinador');
+  const cuentaJS=String(cuenta).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
   const total=movimientos.reduce((s,m)=>s+(m.signo==='+'?m.monto:-m.monto),0);
   window._auxiliarActual={titulo,movimientos,cuenta,desde,hasta,esAuxiliarDeGasto}; // para Imprimir/Excel
@@ -24313,7 +24396,7 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
   const puedeEditarVenta=(cuenta==='ventas'||cuenta==='ingresos'||cuenta==='costoventas')&&(MODO==='admin'||MODO==='coordinador');
   const puedeReclasificar=esAuxiliarDeGasto&&(MODO==='admin'||MODO==='coordinador');
   const puedeEditarGasto=esAuxiliarDeGasto&&(MODO==='admin'||MODO==='jefecomercial');
-  const hayAcciones=(cuenta.startsWith('Cx')&&MODO==='admin')||puedeEditarVenta||puedeEditarGasto;
+  const hayAcciones=(cuenta.startsWith('Cx')&&MODO==='admin')||puedeEditarVenta||puedeEditarGasto||puedeMovPers;
   document.getElementById('auxiliar-body').innerHTML=`
   <div style="padding:1rem">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
@@ -24324,6 +24407,14 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
         <span style="font-size:16px;font-weight:800;color:${total>=0?'var(--green)':'var(--red)'}">${fmtD(Math.abs(total))}</span>
       </div>
     </div>
+    ${puedeMovPers?`<div style="background:var(--surface2);border-radius:8px;padding:.6rem;margin-bottom:.75rem;display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;font-size:12px">
+      <div><label style="font-size:10px;display:block">Fecha</label><input type="date" id="aux-mov-fecha" value="${hoyLocal()}" style="padding:4px"></div>
+      <div><label style="font-size:10px;display:block">Proveedor</label><input type="text" id="aux-mov-prov" style="padding:4px;width:110px"></div>
+      <div style="flex:1;min-width:160px"><label style="font-size:10px;display:block">Detalle</label><input type="text" id="aux-mov-det" style="padding:4px;width:100%"></div>
+      <div><label style="font-size:10px;display:block">Monto C$ (opcional)</label><input type="number" step="0.01" id="aux-mov-cord" style="padding:4px;width:100px"></div>
+      <div><label style="font-size:10px;display:block">Monto US$</label><input type="number" step="0.01" id="aux-mov-usd" style="padding:4px;width:90px"></div>
+      <button class="btn btn-sm btn-primary" onclick="agregarMovCuentaPers('${cuentaJS}','${hasta}')"><i class="ti ti-plus"></i> Agregar registro</button>
+    </div>`:''}
     ${puedeReclasificar?`<p style="font-size:11px;color:var(--text3);margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Si algún gasto quedó en la cuenta equivocada, cambiala directo en el desplegable de esa fila.</p>`:''}
     <div style="max-height:420px;overflow-y:auto">
       <table class="tbl" style="font-size:12px">
@@ -24335,7 +24426,8 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
           ${esAuxiliarDeGasto?`<td style="font-size:11px;color:var(--text2)">${m.beneficiario||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.medio||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.vehiculoRef?'🚗 '+m.vehiculoRef:'—'}</td>`:''}
           <td style="text-align:right;font-weight:700;color:${m.color};white-space:nowrap">${m.signo}${fmtD(m.monto)}</td>
           ${cuenta.startsWith('Cx')?`<td><span class="badge badge-${m.estado==='Pagada'?'green':'amber'}" style="font-size:10px">${m.estado||'—'}</span></td>`:''}
-          ${(cuenta.startsWith('Cx')&&MODO==='admin')?`<td><button class="btn btn-sm" onclick="closeOv('ov-auxiliar');${m.esGastoCxC?'abrirModalGasto':'abrirModalCuenta'}('${m.id}')" title="Editar como contador"><i class="ti ti-edit"></i></button></td>`
+          ${puedeMovPers?`<td>${m.esMovPers?`<button class="btn btn-sm btn-danger" onclick="eliminarMovCuentaPers('${cuentaJS}','${m.id}','${hasta}')" title="Eliminar este registro"><i class="ti ti-trash"></i></button>`:m.esGastoActivo?`<button class="btn btn-sm" onclick="closeOv('ov-auxiliar');abrirModalGasto('${m.id}')" title="Ver/editar este gasto"><i class="ti ti-edit"></i></button>`:''}</td>`
+            :(cuenta.startsWith('Cx')&&MODO==='admin')?`<td><button class="btn btn-sm" onclick="closeOv('ov-auxiliar');${m.esGastoCxC?'abrirModalGasto':'abrirModalCuenta'}('${m.id}')" title="Editar como contador"><i class="ti ti-edit"></i></button></td>`
             :puedeEditarVenta?`<td><button class="btn btn-sm" onclick="closeOv('ov-auxiliar');verDetalleVentaEstado('${m.id}')" title="Ver/editar comprobante de venta"><i class="ti ti-edit"></i></button></td>`
             :puedeEditarGasto?`<td><div class="tbl-actions">
                 ${m.fotoComprobante?`<button class="btn btn-sm" onclick="verDocumentoGasto('${m.id}')" title="Ver documento adjunto" style="color:var(--blue);border-color:var(--blue)"><i class="ti ti-file-text"></i></button>`:''}
