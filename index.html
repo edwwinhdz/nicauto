@@ -4282,6 +4282,9 @@ async function obtenerFilaRemotaPorId(table,id,intentos=3){
 // (ej. dos vendedores reservando el mismo carro) — se protegen con la misma fusión.
 const TABLAS_CON_FUSION_POR_REGISTRO=['vehiculos','ventas','clientes','vehgerencia','ctrlclientes'];
 async function saveOne(table,obj){
+  if(table==='vehiculos'&&obj&&obj.estado!=='Vendido'&&(ventas||[]).some(v=>v&&v.estado==='Completada'&&v.vehiculoId===obj.id)){
+    obj.estado='Vendido';obj.reservas=[];delete obj.vendedorreserva;delete obj.clientereserva;
+  }
   // Una pestaña con una versión vieja del sistema NO puede guardar: su código desactualizado
   // podía pisar y borrar registros que otros acababan de guardar. Primero hay que actualizar.
   if(window._versionVieja){
@@ -4503,7 +4506,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-15-1800';
+const APP_VERSION='2026-10-19-0900';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -7407,7 +7410,22 @@ async function marcarCombustibleChequeo(vid,valor){
   await saveOne('vehiculos',v);
   renderChequeoFisico();
 }
+// Protección: si un vehículo tiene una venta Completada pero su estado quedó en otra cosa
+// (p.ej. otra pantalla vieja guardó encima una copia anterior del carro), se corrige a Vendido
+// para que no vuelva a aparecer como disponible en Lista de Precios ni en Inventario.
+function corregirVendidosSegunVentas(){
+  try{
+    const vendidos=new Set((ventas||[]).filter(v=>v&&v.estado==='Completada'&&v.vehiculoId).map(v=>v.vehiculoId));
+    (vehiculos||[]).forEach(vh=>{
+      if(vh&&vendidos.has(vh.id)&&vh.estado!=='Vendido'){
+        console.warn('Corrigiendo a Vendido (tiene venta Completada):',vh.id,vh.marca,vh.modelo,vh.placa);
+        vh.estado='Vendido';vh.reservas=[];delete vh.vendedorreserva;delete vh.clientereserva;
+      }
+    });
+  }catch(e){console.warn('corregirVendidosSegunVentas',e);}
+}
 function renderListaPrecios(){
+  corregirVendidosSegunVentas();
   renderMiMeta();
   renderCalendarioLP();
   renderReservadosBoxLP();
@@ -8328,6 +8346,7 @@ async function deshacerPlanGerencial(){
   alert('✅ Precios revertidos al punto inicial antes del Plan Gerencial.');
 }
 function renderInv(){
+  corregirVendidosSegunVentas();
   actualizarBotonCorregirRepCordobas();
   const btnPG=document.getElementById('btn-plan-gerencial');
   if(btnPG)btnPG.style.display=puedePlanGerencial()?'inline-flex':'none';
