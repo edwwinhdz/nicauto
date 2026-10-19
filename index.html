@@ -4506,7 +4506,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-19-1640';
+const APP_VERSION='2026-10-19-1655';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -12297,15 +12297,14 @@ function renderBalance(){
     +fM('Cuentas por cobrar',totCxC,bgDet?'':`localStorage.setItem('bgConSubcuentas','1');renderBalance()`)
     +subCxC.map(([l,v,k])=>fS(l,v,aux(k))+(k==='CxC-Banco'?Object.entries(bancosPorCxC).map(([b,t])=>fS(b,t,'',2)).join(''):'')).join('')
     +cxcHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
-    +corrSueltas.map(filaPers).join('');
-  const totActCorr=totCaja+totBanco+totCxC+corrSueltas.reduce((s,c)=>s+sp(c),0);
-  const totInvVeh=valorInv+valorInvGer;
-  const htmlActNoCorr=
-    fM('Inventario de vehículos — a costo',totInvVeh,bgDet?'':aux('inventario'))
+    +fM('Inventario de vehículos — a costo',valorInv+valorInvGer,bgDet?'':aux('inventario'))
     +fS('Inventario vehículos ('+vehiculos.filter(v=>v.estado!=='Vendido'&&hastaCorte(v.fechacompra)).length+' und.)',valorInv,aux('inventario'))
     +fS('Inventario Gerencia / Taller ('+invGerTall.n+' und.)',valorInvGer)
-    +noCorrSueltas.map(filaPers).join('');
-  const totActNoCorr=totInvVeh+noCorrSueltas.reduce((s,c)=>s+sp(c),0);
+    +corrSueltas.map(filaPers).join('');
+  const totInvVeh=valorInv+valorInvGer;
+  const totActCorr=totCaja+totBanco+totCxC+totInvVeh+corrSueltas.reduce((s,c)=>s+sp(c),0);
+  const htmlActNoCorr=noCorrSueltas.map(filaPers).join('')||'<p style="font-size:11px;color:var(--text3);padding:2px 0">Sin cuentas no corrientes.</p>';
+  const totActNoCorr=noCorrSueltas.reduce((s,c)=>s+sp(c),0);
   const htmlPas=
     fM('Reservas de clientes',cxpReservas+cxpFlotantes,bgDet?'':aux('CxP-Reserva'))
     +fS('Reservas (CxP)',cxpReservas,aux('CxP-Reserva'))+fS('Reservas flotantes (por reembolsar)',cxpFlotantes,aux('CxP-ReservaFlotante'))
@@ -14998,6 +14997,13 @@ function sembrarInventarioBodega(){
       sm.movs.forEach(m=>{if(!ids.has(m.id))c.movimientos.push({...m,registradoPor:sm.origen});});
       c[sm.flag]=true;cambio=true;
     });
+    // Inventario de Llantas y Herramientas va en Activos NO corrientes (pedido de Edwin, 19/10).
+    const ll=(contData.cuentasPersonalizadas||[]).find(x=>x.tipo==='activo'&&_normCuenta(x.nombre)==='inventario llantas y herramientas');
+    if(ll&&!ll.movidoNoCorriente){
+      ll.mayor='1200';ll.movidoNoCorriente=true;
+      if(contData.clasificacionCuentasBalance&&contData.clasificacionCuentasBalance[ll.nombre])delete contData.clasificacionCuentasBalance[ll.nombre];
+      cambio=true;
+    }
     if(cambio&&(MODO==='admin'||MODO==='coordinador')){
       clearTimeout(window._semillaCuentasTimer);
       window._semillaCuentasTimer=setTimeout(()=>saveOne('contable',{id:'main',...contData}),1500);
@@ -15166,10 +15172,10 @@ function renderCatalogo(){
       ${cat('1104','CxC — Bancos',cxc_ban,'activo')}
       ${cat('1105','CxC — Terceros',cxc_ter,'activo')}
       ${activosPersCorrientes.filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--green)')).join('')}
-      <div class="cat-item" style="background:var(--green-light);font-weight:700"><span>Total Activos Corrientes</span><span style="color:var(--green)">${fmtD(saldoCaja+saldoBanco+cxc_cli+cxc_ban+cxc_ter+totalActivosPersCorr)}</span></div>
-      <div class="cat-group-title" style="padding-left:28px;font-size:10px">1200 — Activos No Corrientes</div>
       ${cat('1201','Inventario de vehículos',valorInv,'activo')}
       ${(()=>{const codigoGer=(contData.codigosCuentasCatalogo&&contData.codigosCuentasCatalogo.gerTaller)||codigoLibre1200('1202');const nombreGer=(contData.nombresCuentasCatalogo&&contData.nombresCuentasCatalogo.gerTaller)||'Inventario Gerencia / Taller';return`<div class="cat-item"><div><span class="cat-code"${MODO==='admin'?` style="cursor:pointer" onclick="event.stopPropagation();editarCodigoCuentaCatalogo('gerTaller','${codigoGer}')" title="Editar el número de esta cuenta"`:''}>${codigoGer}</span>${nombreGer}${MODO==='admin'?` <i class="ti ti-pencil" style="font-size:10px;color:var(--text3);cursor:pointer" onclick="event.stopPropagation();renombrarCuentaCatalogo('gerTaller','${nombreGer.replace(/'/g,"\\'")}')" title="Renombrar esta cuenta"></i>`:''}</div><span class="cat-saldo" style="color:var(--green)">${fmtD(valorInvGer)}</span></div>`;})()}
+      <div class="cat-item" style="background:var(--green-light);font-weight:700"><span>Total Activos Corrientes</span><span style="color:var(--green)">${fmtD(saldoCaja+saldoBanco+cxc_cli+cxc_ban+cxc_ter+valorInv+valorInvGer+totalActivosPersCorr)}</span></div>
+      <div class="cat-group-title" style="padding-left:28px;font-size:10px">1200 — Activos No Corrientes</div>
       ${activosPersNoCorrientes.filter(sueltas).map(c=>filaCuentaPersonalizada(c,'var(--green)')).join('')}
       <div class="cat-item" style="background:var(--green-light);font-weight:700"><span>TOTAL ACTIVOS</span><span style="color:var(--green)">${fmtD(totalActivos+totalActivosPers)}</span></div>
 
