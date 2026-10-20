@@ -126,6 +126,8 @@ textarea{resize:vertical;min-height:60px}
 .tab{flex:1;text-align:center;padding:7px 10px;border:none;background:transparent;cursor:pointer;border-radius:var(--radius);font-size:12px;font-weight:500;color:var(--text2);transition:all .15s;font-family:inherit}
 .tab.active{background:var(--blue);color:#fff;box-shadow:0 1px 4px rgba(25,113,194,.3)}
 
+.tbl-grid th,.tbl-grid td{border:1px solid var(--border)!important}
+.tbl-grid{border-collapse:collapse}
 @keyframes pulseAlerta{0%{box-shadow:0 0 0 0 rgba(201,42,42,.6)}70%{box-shadow:0 0 0 8px rgba(201,42,42,0)}100%{box-shadow:0 0 0 0 rgba(201,42,42,0)}}
 
 /* EMPTY STATE */
@@ -811,6 +813,7 @@ body.no-delete .confirmDelete{display:none!important}
       </div>
     </div>
     <div id="ctrcli-alertas"></div>
+    <div id="ctrcli-conteo" style="margin-bottom:1rem"></div>
     <div id="ctrcli-bitacora" style="margin-bottom:1rem"></div>
     <div class="toolbar">
       <div class="search-wrap"><i class="ti ti-search"></i><input type="text" id="ctrcli-q2" placeholder="Nombre, celular, email…" oninput="renderCtrlClientesLP()"></div>
@@ -4553,7 +4556,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-1220';
+const APP_VERSION='2026-10-20-1255';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5650,7 +5653,7 @@ function renderCtrlClientesLP(){
   if(sel)sel.style.display=esGerenciaCtrl()?'':'none';
   const data=ctrlClientes.filter(ctrlVisible).filter(x=>(!q||(x.nombre+x.cel+x.email).toLowerCase().includes(q))&&(!fv||x.vendId===fv)&&(!fe||x.estado===fe));
   const comoMap={'redes_pagina':'📱 Redes página','redes_vendedor':'📲 Redes vendedor','llego_solo':'🚶 Llegó solo','referido':'👥 Referido'};
-  try{renderAlertasVendedores();renderControlPiso();renderCarrosBuscados();}catch(e){console.warn('Control de piso:',e);}
+  try{renderAlertasVendedores();renderConteoContactados();renderControlPiso();renderCarrosBuscados();}catch(e){console.warn('Control de piso:',e);}
   const tbody=document.getElementById('tbl-ctrcli2');
   if(!tbody)return;
   // Agrupado por mes: el mes actual siempre visible; los meses anteriores quedan plegados en una
@@ -5700,33 +5703,62 @@ function renderBitacoraCtrCliLP(){
   if(!el)return;
   const abierto=window._ctrcliBitAbierta!==false;
   const ccVis=ctrlClientes.filter(ctrlVisible); // cada vendedor ve solo lo suyo; Gerencia ve todo
-  const nombreVend=id=>{const c=clientes.find(x=>x.id===id);return c?c.nombre:'Sin vendedor';};
   const mesesSet=new Set();
   ccVis.forEach(x=>{if(x.fecha)mesesSet.add(x.fecha.slice(0,7));if(x.cita)mesesSet.add(String(x.cita).slice(0,7));});
-  mesesSet.add(hoyLocal().slice(0,7));
+  const mesActual=hoyLocal().slice(0,7);
+  mesesSet.add(mesActual);
   const meses=[...mesesSet].filter(m=>/^\d{4}-\d{2}$/.test(m)).sort();
-  const vendIds=[...new Set(ccVis.map(x=>x.vendId||''))];
+  // Filtro de meses (se recuerda en este navegador): los meses ocultos no salen ni suman.
+  if(!window._bitMesesOcultos){let g=[];try{g=JSON.parse(localStorage.getItem('bitMesesOcultos')||'[]');}catch(e){}window._bitMesesOcultos=new Set(g);}
+  const ocultos=window._bitMesesOcultos;
+  const mesesVis=meses.filter(m=>!ocultos.has(m));
+  const fVend=window._bitFiltroVend||'';
+  // Agrupado por NOMBRE del vendedor (no por id): así no salen filas repetidas cuando hay varias
+  // personas con el mismo nombre en Personas (ej. 4 "Gerencia"), ni "Sin vendedor" cuando el
+  // contacto no tiene vendedor elegido pero sí quién lo registró.
+  const keyV=x=>(vendedorDeRegistro(x)||'Sin vendedor').trim().replace(/\s+/g,' ');
+  const vendTodos=[...new Map(ccVis.map(x=>[keyV(x).toLowerCase(),keyV(x)])).values()].sort((a,b)=>a.localeCompare(b,'es'));
+  const vendIds=vendTodos.filter(v=>!fVend||v===fVend);
   const filas=vendIds.map(id=>{
-    const delV=ccVis.filter(x=>(x.vendId||'')===id);
+    const delV=ccVis.filter(x=>keyV(x).toLowerCase()===id.toLowerCase());
     const porMes={};meses.forEach(m=>porMes[m]={r:0,c:0});
     delV.forEach(x=>{const mr=(x.fecha||'').slice(0,7);if(porMes[mr])porMes[mr].r++;const mc=String(x.cita||'').slice(0,7);if(x.cita&&porMes[mc])porMes[mc].c++;});
-    return{nombre:nombreVend(id),porMes,totR:delV.length,totC:delV.filter(x=>x.cita).length};
+    return{nombre:id,porMes,totR:mesesVis.reduce((s,m)=>s+porMes[m].r,0),totC:mesesVis.reduce((s,m)=>s+porMes[m].c,0)};
   }).sort((a,b)=>b.totR-a.totR);
   const nm=m=>new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'short',year:'2-digit'});
-  const celda=(r,c)=>`<td style="text-align:center;white-space:nowrap"><b>${r||'·'}</b> <span style="color:var(--purple)">/ ${c||'·'}</span></td>`;
+  const celda=(r,c,extra)=>`<td style="text-align:center;white-space:nowrap;${extra||''}"><b>${r||'·'}</b> <span style="color:var(--purple)">/ ${c||'·'}</span></td>`;
   const totMes=m=>({r:filas.reduce((s,f)=>s+f.porMes[m].r,0),c:filas.reduce((s,f)=>s+f.porMes[m].c,0)});
+  const chip=m=>{const on=!ocultos.has(m);return`<button class="btn btn-sm" onclick="toggleMesBitacora('${m}')" style="text-transform:capitalize;padding:3px 10px;${on?'background:var(--blue);color:#fff;border-color:var(--blue)':'opacity:.6;text-decoration:line-through'}">${nm(m)}</button>`;};
   el.innerHTML=`<div class="card">
     <div class="card-head" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="window._ctrcliBitAbierta=${!abierto};renderBitacoraCtrCliLP()">
       <h3><i class="ti ti-notebook"></i> Bitácora por vendedor — registrados / citados</h3><i class="ti ti-chevron-${abierto?'up':'down'}"></i></div>
-    ${abierto?`<div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
-      <thead><tr><th>Vendedor</th>${meses.map(m=>`<th style="text-align:center;text-transform:capitalize">${nm(m)}</th>`).join('')}<th style="text-align:center;background:var(--blue-light)">Acumulado</th></tr></thead>
-      <tbody>${filas.map(f=>`<tr><td style="font-weight:700;white-space:nowrap">${f.nombre}</td>${meses.map(m=>celda(f.porMes[m].r,f.porMes[m].c)).join('')}
-        <td style="text-align:center;background:var(--blue-light);font-weight:800;white-space:nowrap">${f.totR} <span style="color:var(--purple)">/ ${f.totC}</span></td></tr>`).join('')}</tbody>
-      <tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL DEL MES</td>${meses.map(m=>{const t=totMes(m);return celda(t.r,t.c);}).join('')}
-        <td style="text-align:center;background:var(--blue-light);white-space:nowrap">${ccVis.length} <span style="color:var(--purple)">/ ${ccVis.filter(x=>x.cita).length}</span></td></tr></tfoot>
+    ${abierto?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:.6rem 1rem;border-bottom:1px solid var(--border);font-size:12px">
+      <b><i class="ti ti-filter"></i> Meses:</b> ${meses.map(chip).join('')}
+      <button class="btn btn-sm" onclick="filtroMesesBitacora('actual')" style="padding:3px 10px">Solo mes actual</button>
+      <button class="btn btn-sm" onclick="filtroMesesBitacora('todos')" style="padding:3px 10px">Todos</button>
+      ${esGerenciaCtrl()&&vendTodos.length>1?`<span style="margin-left:auto"><b>Vendedor:</b> <select onchange="window._bitFiltroVend=this.value;renderBitacoraCtrCliLP()" style="padding:4px"><option value="">Todos</option>${vendTodos.map(v=>`<option ${v===fVend?'selected':''}>${v}</option>`).join('')}</select></span>`:''}
+    </div>
+    <div style="overflow-x:auto"><table class="tbl tbl-grid" style="font-size:12px">
+      <thead><tr><th>Vendedor</th>${mesesVis.map(m=>`<th style="text-align:center;text-transform:capitalize;${m===mesActual?'background:var(--blue-light)':''}">${nm(m)}</th>`).join('')}<th style="text-align:center;background:var(--blue-light)">Total${ocultos.size?' (meses mostrados)':' acumulado'}</th></tr></thead>
+      <tbody>${filas.length?filas.map(f=>`<tr><td style="font-weight:700;white-space:nowrap">${f.nombre}</td>${mesesVis.map(m=>celda(f.porMes[m].r,f.porMes[m].c)).join('')}
+        <td style="text-align:center;background:var(--blue-light);font-weight:800;white-space:nowrap">${f.totR} <span style="color:var(--purple)">/ ${f.totC}</span></td></tr>`).join(''):`<tr><td colspan="${mesesVis.length+2}" style="text-align:center;color:var(--text3);padding:1rem">Sin registros</td></tr>`}</tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL DEL MES</td>${mesesVis.map(m=>{const t=totMes(m);return celda(t.r,t.c);}).join('')}
+        <td style="text-align:center;background:var(--blue-light);white-space:nowrap">${filas.reduce((s,f)=>s+f.totR,0)} <span style="color:var(--purple)">/ ${filas.reduce((s,f)=>s+f.totC,0)}</span></td></tr></tfoot>
     </table></div>
-    <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem"><b>Registrados</b> (negro) se cuentan por la fecha en que se registró el cliente; <span style="color:var(--purple)"><b>citados</b></span> por la fecha de la cita.</p>`:''}
+    <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem"><b>Registrados</b> (negro) se cuentan por la fecha en que se registró el cliente; <span style="color:var(--purple)"><b>citados</b></span> por la fecha de la cita. Tocá un mes arriba para ocultarlo o mostrarlo.</p>`:''}
   </div>`;
+}
+function _guardarMesesOcultosBit(){try{localStorage.setItem('bitMesesOcultos',JSON.stringify([...window._bitMesesOcultos]));}catch(e){}}
+function toggleMesBitacora(m){
+  const o=window._bitMesesOcultos||new Set();
+  if(o.has(m))o.delete(m);else o.add(m);
+  window._bitMesesOcultos=o;_guardarMesesOcultosBit();renderBitacoraCtrCliLP();
+}
+function filtroMesesBitacora(modo){
+  const ccVis=ctrlClientes.filter(ctrlVisible);const act=hoyLocal().slice(0,7);
+  const meses=new Set([act]);ccVis.forEach(x=>{if(x.fecha)meses.add(x.fecha.slice(0,7));if(x.cita)meses.add(String(x.cita).slice(0,7));});
+  window._bitMesesOcultos=modo==='actual'?new Set([...meses].filter(m=>m!==act)):new Set();
+  _guardarMesesOcultosBit();renderBitacoraCtrCliLP();
 }
 // ======================== CONTROL DE CLIENTES POR VENDEDOR + CONTROL DE PISO ========================
 // Cada vendedor ve SOLO sus propios clientes (prospectos y control de piso). Gerencia (Edwin,
@@ -5782,6 +5814,44 @@ function renderAlertasVendedores(){
       <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${porLlamar.map(x=>`<div>📞 <b>${x.nombre}</b> — <a href="https://wa.me/${(x.cel||'').replace(/[^0-9]/g,'')}" target="_blank" style="color:var(--green)">${x.cel||''}</a> — busca <i>${x.carroBusca||'—'}</i>${ger?' — '+(vendedorDeRegistro(x)||''):''} — <b>${pisoDiasSinLlamar(x)} días</b> <button class="btn btn-sm" style="padding:1px 8px;font-size:11px" onclick="marcarLlamadaPiso('${x.id}')">✔ Ya llamé</button></div>`).join('')}</div></div>`;
   }
   el.innerHTML=html;
+}
+// Conteo de clientes contactados por vendedor (Control de Clientes + Control de Piso).
+// Gerencia ve a todos; cada vendedor ve solo su fila.
+function renderConteoContactados(){
+  const el=document.getElementById('ctrcli-conteo');if(!el)return;
+  const hoy=hoyLocal();
+  const d=new Date(hoy+'T12:00:00');const dow=d.getDay();const lunes=new Date(d);lunes.setDate(d.getDate()-(dow===0?6:dow-1));
+  const lunesStr=`${lunes.getFullYear()}-${String(lunes.getMonth()+1).padStart(2,'0')}-${String(lunes.getDate()).padStart(2,'0')}`;
+  const mes=hoy.slice(0,7);
+  const pm=new Date(d.getFullYear(),d.getMonth()-1,15);const mesAnt=`${pm.getFullYear()}-${String(pm.getMonth()+1).padStart(2,'0')}`;
+  const todos=[...ctrlClientes.filter(ctrlVisible).map(x=>({...x,_t:'p'})),...controlPiso.filter(ctrlVisible).map(x=>({...x,_t:'f'}))];
+  const nombres=new Map();
+  (esGerenciaCtrl()?vendedoresCtrl():[getNombreUsuario()]).forEach(n=>nombres.set(n.toLowerCase(),n));
+  todos.forEach(x=>{const n=(vendedorDeRegistro(x)||'Sin vendedor').trim();if(!nombres.has(n.toLowerCase()))nombres.set(n.toLowerCase(),n);});
+  const filas=[...nombres.values()].map(n=>{
+    const l=todos.filter(x=>_nomEq(vendedorDeRegistro(x)||'Sin vendedor',n));
+    const f=x=>x.fecha||'';
+    const lm=l.filter(x=>f(x).slice(0,7)===mes);
+    return{n,hoy:l.filter(x=>f(x)===hoy).length,sem:l.filter(x=>f(x)>=lunesStr&&f(x)<=hoy).length,mes:lm.length,
+      prosp:lm.filter(x=>x._t==='p').length,piso:lm.filter(x=>x._t==='f').length,
+      clientes:lm.filter(x=>x._t==='p'&&x.estado==='Cliente').length,neg:l.filter(x=>x._t==='f'&&x.negociacion).length,
+      ant:l.filter(x=>f(x).slice(0,7)===mesAnt).length,total:l.length};
+  }).filter(r=>esGerenciaCtrl()?(r.total>0||vendedoresCtrl().some(v=>_nomEq(v,r.n))):true).sort((a,b)=>b.mes-a.mes||b.total-a.total||a.n.localeCompare(b.n,'es'));
+  const sum=k=>filas.reduce((s,r)=>s+r[k],0);
+  const nmMes=m=>new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long'});
+  const c=(v,extra)=>`<td style="text-align:center;${extra||''}">${v||'<span style="color:var(--text3)">0</span>'}</td>`;
+  const colHoy=v=>c(v,v>=META_CLIENTES_DIA?'color:var(--green);font-weight:800':'color:var(--red);font-weight:700');
+  el.innerHTML=`<div class="card">
+    <div class="card-head"><h3><i class="ti ti-users-group"></i> Clientes contactados por vendedor</h3></div>
+    <div style="overflow-x:auto"><table class="tbl tbl-grid" style="font-size:12px">
+      <thead><tr><th>Vendedor</th><th style="text-align:center">Hoy<br><span style="font-weight:400;font-size:10px">(meta ${META_CLIENTES_DIA})</span></th><th style="text-align:center">Esta semana</th>
+        <th style="text-align:center;background:var(--blue-light);text-transform:capitalize">${nmMes(mes)}</th><th style="text-align:center">Prospectos</th><th style="text-align:center">Piso</th><th style="text-align:center">Ya son clientes</th><th style="text-align:center">En negociación</th>
+        <th style="text-align:center;text-transform:capitalize">${nmMes(mesAnt)}</th><th style="text-align:center">Total acumulado</th></tr></thead>
+      <tbody>${filas.map(r=>`<tr><td style="font-weight:700;white-space:nowrap">${r.n}</td>${colHoy(r.hoy)}${c(r.sem)}${c(r.mes,'background:var(--blue-light);font-weight:800')}${c(r.prosp)}${c(r.piso)}${c(r.clientes)}${c(r.neg)}${c(r.ant)}${c(r.total,'font-weight:700')}</tr>`).join('')}</tbody>
+      ${filas.length>1?`<tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL</td>${['hoy','sem','mes','prosp','piso','clientes','neg','ant','total'].map(k=>`<td style="text-align:center">${sum(k)}</td>`).join('')}</tr></tfoot>`:''}
+    </table></div>
+    <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem">Cuenta los contactos de <b>Control de Clientes</b> (prospectos) más los clientes atendidos en <b>Control de Piso</b>, por la fecha de registro. "Ya son clientes" = prospectos del mes con estado Cliente. La semana va desde el lunes.</p>
+  </div>`;
 }
 // ---- Control de piso: clientes atendidos físicamente ----
 function renderControlPiso(){
