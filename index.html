@@ -4577,7 +4577,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-1820';
+const APP_VERSION='2026-10-20-1845';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -10567,6 +10567,11 @@ async function guardarVenta(){
   const depositos=mvtLeerDepositos();
   if(depositos.some(d=>!d.banco||!(d.monto>0))){alert('⚠️ En cada depósito elegí el banco y poné el monto (o dejá la fila vacía).');return;}
   const totDep=depositos.reduce((s,d)=>s+d.monto,0);
+  // Evita contar doble: si el cliente pagó con depósitos, el "Monto Bancario" por transferencia
+  // es el mismo dinero (pasó con la venta de la RAV4 del 20/10: $14,500 salía dos veces en Bancos).
+  if(totDep>0&&bancario>0&&bancarioTipo==='transferencia'){
+    if(!confirm(`⚠️ Tenés ${fmtD(bancario)} en "Monto Bancario" (transferencia) y además ${fmtD(totDep)} en Depósitos.\n\nSi es el mismo dinero, se va a contar DOBLE en Caja y Bancos. Lo correcto es dejar el Monto Bancario en 0 y usar solo los Depósitos.\n\n¿Guardar así de todos modos?`))return;
+  }
   if(bancario>0&&bancarioTipo!=='transferencia'&&!banco){alert('⚠️ Hay un monto financiado por banco: elegí el banco ("Banco del depósito") para que la Cuenta por Cobrar quede a nombre de ese banco.');return;}
 
   // Handle consignacion vehicles
@@ -17587,6 +17592,78 @@ function cdCalcular(fecha){
 function cdColsVisibles(h){return CD_COLS.filter(c=>!c.opcional||(h.tot&&h.tot[c.k]));}
 
 // Tabla de la hoja (se usa en pantalla y al imprimir)
+// ---- Columnas y filas ajustables tipo Excel en el reporte de Cash in Hand ----
+// Se arrastra el borde derecho del encabezado de una columna, o el borde de abajo de una fila.
+// Los tamaños se recuerdan en esta computadora y también se usan al imprimir.
+function _cdLS(k){try{return JSON.parse(localStorage.getItem(k)||'{}')||{};}catch(e){return{};}}
+function _cdLSset(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+function cdRestablecerTamanos(){try{localStorage.removeItem('cdAnchos');localStorage.removeItem('cdAltos');}catch(e){}renderAuxiliares();}
+function cdAjustable(root,interactivo){
+  const doc=root.ownerDocument||root;
+  root.querySelectorAll('.cd-hoja').forEach(hoja=>{
+    const anchos=_cdLS('cdAnchos'),altos=_cdLS('cdAltos');
+    [...hoja.querySelectorAll('table')].forEach((t,ti)=>{
+      const head=t.tHead?[...t.tHead.rows]:[];
+      const ref=head.length?head[head.length-1]:t.rows[0];
+      if(!ref)return;
+      const celdas=[...ref.cells];
+      const nCols=celdas.reduce((s,c)=>s+(c.colSpan||1),0);
+      t.querySelectorAll('td,th').forEach(c=>{c.style.whiteSpace='normal';c.style.overflowWrap='anywhere';});
+      let cg=t.querySelector('colgroup.cd-cg');
+      if(!cg){cg=doc.createElement('colgroup');cg.className='cd-cg';for(let i=0;i<nCols;i++)cg.appendChild(doc.createElement('col'));t.insertBefore(cg,t.firstChild);}
+      const cols=[...cg.children];
+      const aplicar=ws=>{ws.slice(0,nCols).forEach((w,i)=>{if(cols[i])cols[i].style.width=w+'px';});t.style.tableLayout='fixed';t.style.width=ws.slice(0,nCols).reduce((s,w)=>s+w,0)+'px';};
+      const guard=anchos[ti];
+      if(Array.isArray(guard)&&guard.length>=nCols)aplicar(guard);
+      const altT=altos[ti]||{};
+      [...t.rows].forEach((r,ri)=>{if(altT[ri])r.style.height=altT[ri]+'px';});
+      if(!interactivo)return;
+      // Columnas
+      let colIdx=0;
+      celdas.forEach(cel=>{
+        const idx=colIdx+(cel.colSpan||1)-1;colIdx+=(cel.colSpan||1);
+        cel.style.position='relative';
+        const h=doc.createElement('div');
+        h.title='Arrastrá para cambiar el ancho (doble clic: restablecer esta tabla)';
+        h.style.cssText='position:absolute;top:0;right:-3px;width:7px;height:100%;cursor:col-resize;z-index:2';
+        h.addEventListener('mouseenter',()=>h.style.background='rgba(25,113,194,.35)');
+        h.addEventListener('mouseleave',()=>h.style.background='');
+        h.addEventListener('dblclick',()=>{const a=_cdLS('cdAnchos');delete a[ti];_cdLSset('cdAnchos',a);const b=_cdLS('cdAltos');delete b[ti];_cdLSset('cdAltos',b);renderAuxiliares();});
+        h.addEventListener('mousedown',e=>{
+          e.preventDefault();e.stopPropagation();
+          let ws=(_cdLS('cdAnchos')[ti]);
+          if(!Array.isArray(ws)||ws.length<nCols){
+            ws=[];celdas.forEach(c=>{const n=c.colSpan||1;const w=c.getBoundingClientRect().width/n;for(let k=0;k<n;k++)ws.push(Math.round(w));});
+            aplicar(ws);
+          }
+          const x0=e.clientX,w0=ws[idx];
+          const mm=ev=>{ws[idx]=Math.max(28,Math.round(w0+ev.clientX-x0));aplicar(ws);};
+          const mu=()=>{doc.removeEventListener('mousemove',mm);doc.removeEventListener('mouseup',mu);const a=_cdLS('cdAnchos');a[ti]=ws;_cdLSset('cdAnchos',a);};
+          doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu);
+        });
+        cel.appendChild(h);
+      });
+      // Filas
+      [...t.rows].forEach((r,ri)=>{
+        const c0=r.cells[0];if(!c0)return;
+        c0.style.position='relative';
+        const h=doc.createElement('div');
+        h.title='Arrastrá para cambiar el alto de la fila';
+        h.style.cssText='position:absolute;left:0;bottom:-3px;width:100%;height:7px;cursor:row-resize;z-index:2';
+        h.addEventListener('mouseenter',()=>h.style.background='rgba(25,113,194,.25)');
+        h.addEventListener('mouseleave',()=>h.style.background='');
+        h.addEventListener('mousedown',e=>{
+          e.preventDefault();e.stopPropagation();
+          const y0=e.clientY,h0=r.getBoundingClientRect().height;
+          const mm=ev=>{r.style.height=Math.max(16,Math.round(h0+ev.clientY-y0))+'px';};
+          const mu=()=>{doc.removeEventListener('mousemove',mm);doc.removeEventListener('mouseup',mu);const b=_cdLS('cdAltos');b[ti]=b[ti]||{};b[ti][ri]=parseInt(r.style.height);_cdLSset('cdAltos',b);};
+          doc.addEventListener('mousemove',mm);doc.addEventListener('mouseup',mu);
+        });
+        c0.appendChild(h);
+      });
+    });
+  });
+}
 function cdHojaHTML(h,enPantalla){
   const cols=cdColsVisibles(h);
   const nCash=cols.filter(c=>c.g==='cash').length,nBanco=cols.filter(c=>c.g==='banco').length,nCxc=cols.filter(c=>c.g==='cxc').length;
@@ -17690,6 +17767,7 @@ function renderAuxiliares(){
     <div style="flex:1"></div>
     ${!h.cerrado?`<button class="btn btn-sm btn-primary" onclick="cdAbrirMov('ingreso')"><i class="ti ti-plus"></i>Ingreso manual</button>
       <button class="btn btn-sm btn-danger" onclick="cdAbrirMov('egreso')"><i class="ti ti-minus"></i>Salida</button>`:''}
+    <button class="btn btn-sm" onclick="cdRestablecerTamanos()" title="Las columnas y filas del reporte se ajustan arrastrando el borde (como en Excel). Esto vuelve todo al tamaño original."><i class="ti ti-arrows-diagonal-minimize-2"></i>Restablecer tamaño</button>
     <button class="btn btn-sm" onclick="cdImprimir('${cdFecha}')"><i class="ti ti-printer"></i>Imprimir</button>
     ${!h.cerrado?`<button class="btn btn-sm" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="cdCerrarDia()"><i class="ti ti-lock"></i>Cerrar día</button>`
       :(MODO==='admin'?`<button class="btn btn-sm" onclick="cdReabrirDia()"><i class="ti ti-lock-open"></i>Reabrir</button>`:'')}
@@ -17703,7 +17781,7 @@ function renderAuxiliares(){
       <span style="font-size:11px;color:var(--text2)">(${sa.desde||''})</span>
       ${sa.editable&&!h.cerrado&&MODO==='admin'?`<button class="btn btn-sm" onclick="cdEditarSaldoInicial()"><i class="ti ti-edit"></i>Saldo inicial</button>`:''}
     </div>
-    ${cdHojaHTML(h,true)}
+    <div class="cd-hoja">${cdHojaHTML(h,true)}</div>
     <p style="font-size:11px;color:var(--text2);margin-top:1rem"><i class="ti ti-info-circle"></i> Las ventas y reservas del día entran solas. Con <i class="ti ti-edit"></i> podés cambiar en qué columna cayó el dinero o quién lo recibió. Al cerrar el día, el saldo final pasa a ser el saldo anterior del día siguiente.</p>
   </div>
   <div class="card" style="margin-top:1.5rem">
@@ -17718,6 +17796,7 @@ function renderAuxiliares(){
       </tr>`).join('')}</tbody></table>`
       :`<div class="empty" style="padding:1.5rem"><i class="ti ti-history"></i><p>Todavía no hay días cerrados</p></div>`}
   </div>`;
+  try{cdAjustable(el,true);}catch(e){console.warn('cdAjustable',e);}
 }
 
 // ---- Modal genérico de Caja Diaria ----
@@ -17935,7 +18014,7 @@ function cdImprimir(fecha){
     <div style="font-size:12px;margin-bottom:10px"><b>Saldo anterior:</b>
       <span style="background:#FFF3BF;padding:3px 8px;font-weight:700;margin-left:8px">Caja fuerte: ${fmtD(sa.cajafuerte)}</span>
       <span style="background:#FFF3BF;padding:3px 8px;font-weight:700;margin-left:8px">Cash Julio M: ${fmtD(sa.cashjulio)}</span></div>
-    ${cdHojaHTML(h,false)}
+    <div class="cd-hoja">${cdHojaHTML(h,false)}</div>
     <div style="display:flex;justify-content:space-around;margin-top:50px;font-size:11px">
       <div style="text-align:center;border-top:1px solid #000;width:200px;padding-top:4px">Elaborado por</div>
       <div style="text-align:center;border-top:1px solid #000;width:200px;padding-top:4px">Revisado por</div></div>
@@ -17944,6 +18023,7 @@ function cdImprimir(fecha){
   const win=window.open('','_blank');
   if(!win){alert('Permitir ventanas emergentes para poder imprimir.');return;}
   win.document.open();win.document.write(html);win.document.close();
+  try{cdAjustable(win.document,false);}catch(e){}
   win.onload=()=>{win.focus();win.print();};
 }
 
