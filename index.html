@@ -4577,7 +4577,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-1950';
+const APP_VERSION='2026-10-20-2005';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -12168,9 +12168,15 @@ function bancosMovsDesdeCompras(){
   });
   return res;
 }
+// Movimientos automáticos (de Caja o de Compras) que se quitaron a mano de la hoja Bancos
+function bancosOcultosSet(){return new Set((contData.bancosOcultos||[]).filter(x=>x&&!x.restaurado).map(x=>x.id));}
+function bancosMovsAutoVisibles(){
+  const oc=bancosOcultosSet();
+  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos()].filter(m=>!oc.has(m.id));
+}
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
-  return[...bancosMovsDesdeCaja().filter(m=>m.cuenta===k),...bancosMovsDesdeCompras().filter(m=>m.cuenta===k),...bancosMovsDesdeCajaEgresos().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  return[...bancosMovsAutoVisibles().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
 }
 function bancoSaldo(k,hasta){
   const ini=bancoSaldoInicial(k);
@@ -12266,13 +12272,15 @@ function renderBancos(){
           <td style="text-align:right;color:var(--green)">${m.tipo==='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;color:var(--red)">${m.tipo!=='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;font-weight:700">${fmtD(m.saldo)}</td>
-          <td>${m.autoCompra&&puede?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Corregir banco o monto en la compra del vehículo"><i class="ti ti-car"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
+          <td style="white-space:nowrap">${m.auto&&puede?`${m.autoCompra?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Modificar: corregir banco o monto en la compra del vehículo"><i class="ti ti-edit"></i></button>`:`<button class="btn btn-sm" onclick="cdFecha='${m.fecha}';showContTab('auxiliares')" title="Modificar: abrir el Cash in Hand del ${m.fecha}, de donde viene este movimiento"><i class="ti ti-edit"></i></button>`} <button class="btn btn-sm btn-danger" onclick="bancoOcultarAuto('${m.id}')" title="Quitar este movimiento de la hoja Bancos"><i class="ti ti-trash"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
         </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Sin movimientos</td></tr>'}</tbody>
       </table></div>`:''}
     </div>`;
   }).join('');
   const total=bancosTotal();
+  const nQuit=(contData.bancosOcultos||[]).filter(x=>!x.restaurado).length;
   el.innerHTML=`${encabezadoNicautoHTML('Bancos','Auxiliares por cuenta bancaria')}
+    ${nQuit&&puede?`<div style="text-align:right;margin-bottom:.5rem"><button class="btn btn-sm" onclick="bancoVerQuitados()"><i class="ti ti-trash"></i> Quitados (${nQuit})</button></div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1rem">
       ${BANCOS_CTAS.map(b=>`<div class="stat-card"><div class="stat-label">${b.t}</div><div class="stat-value" style="font-size:18px;color:${bancoSaldo(b.k)>=0?'var(--green)':'var(--red)'}">${fmtD(bancoSaldo(b.k))}</div></div>`).join('')}
       <div class="stat-card" style="border:2px solid var(--blue)"><div class="stat-label">GRAN TOTAL BANCOS</div><div class="stat-value stat-blue" style="font-size:20px">${fmtD(total)}</div></div>
@@ -12312,6 +12320,29 @@ function bancoMovModal(k,tipo,editId){
     if(i>=0)contData.bancosMovs[i]=obj;else contData.bancosMovs.push(obj);
     await saveOne('contable',{id:'main',...contData});closeOv('ov-bancos');renderBancos();
   });
+}
+async function bancoOcultarAuto(id){
+  if(!puedeMoverBancos())return;
+  const m=bancosMovsAutoVisibles().find(x=>x.id===id);if(!m)return;
+  if(!confirm(`¿Quitar de Bancos este movimiento de ${fmtD(m.monto)}?\n\n${m.fecha} — ${m.desc||''}\n\nViene ${m.autoCompra?'de la compra del vehículo':'del Cash in Hand'}: allá NO se borra, solo deja de contar en Bancos. Se puede restaurar con "Quitados".`))return;
+  contData.bancosOcultos=contData.bancosOcultos||[];
+  contData.bancosOcultos.push({id,monto:m.monto,cuenta:m.cuenta,fecha:m.fecha,desc:m.desc||'',por:getNombreUsuario(),fechaQuitado:hoyLocal()});
+  await saveOne('contable',{id:'main',...contData});renderBancos();
+}
+async function bancoRestaurarAuto(id){
+  if(!puedeMoverBancos())return;
+  (contData.bancosOcultos||[]).forEach(x=>{if(x.id===id&&!x.restaurado){x.restaurado=true;x.restauradoPor=getNombreUsuario();}});
+  await saveOne('contable',{id:'main',...contData});renderBancos();
+}
+function bancoVerQuitados(){
+  const l=(contData.bancosOcultos||[]).filter(x=>!x.restaurado);
+  if(!l.length){alert('No hay movimientos quitados de Bancos.');return;}
+  let ov=document.getElementById('ov-bq');if(!ov){ov=document.createElement('div');ov.className='overlay';ov.id='ov-bq';document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="modal" style="max-width:700px"><div class="modal-head"><h3><i class="ti ti-trash"></i> Movimientos quitados de Bancos</h3><button class="btn-ghost btn" onclick="closeOv('ov-bq')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><table class="tbl" style="font-size:12px"><thead><tr><th>Fecha</th><th>Banco</th><th>Descripción</th><th style="text-align:right">Monto</th><th>Quitó</th><th></th></tr></thead><tbody>
+    ${l.map(x=>`<tr><td>${x.fecha||''}</td><td>${(BANCOS_CTAS.find(b=>b.k===x.cuenta)||{}).t||x.cuenta}</td><td>${x.desc||''}</td><td style="text-align:right">${fmtD(x.monto)}</td><td style="font-size:11px">${x.por||''} ${x.fechaQuitado||''}</td><td><button class="btn btn-sm" onclick="bancoRestaurarAuto('${x.id}');closeOv('ov-bq')"><i class="ti ti-arrow-back-up"></i> Restaurar</button></td></tr>`).join('')}
+    </tbody></table></div><div class="modal-foot"><button class="btn" onclick="closeOv('ov-bq')">Cerrar</button></div></div>`;
+  openOv('ov-bq');
 }
 async function bancoAnularMov(id){
   if(!puedeMoverBancos())return;
@@ -17753,7 +17784,7 @@ function cdHojaHTML(h,enPantalla){
 function cdSalidasBancariasHTML(fecha){
   let movs=[];
   try{
-    movs=[...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
+    movs=[...bancosMovsAutoVisibles().filter(m=>m.autoCompra||String(m.id).startsWith('CJE_')),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
       .filter(m=>m.fecha===fecha&&m.tipo!=='ingreso'&&Number(m.monto||0)>0);
   }catch(e){return'';}
   if(!movs.length)return'';
