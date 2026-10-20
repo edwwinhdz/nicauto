@@ -810,6 +810,7 @@ body.no-delete .confirmDelete{display:none!important}
         <button class="btn btn-primary" onclick="abrirModalCtrlCliente()"><i class="ti ti-plus"></i>Nuevo contacto</button>
       </div>
     </div>
+    <div id="ctrcli-alertas"></div>
     <div id="ctrcli-bitacora" style="margin-bottom:1rem"></div>
     <div class="toolbar">
       <div class="search-wrap"><i class="ti ti-search"></i><input type="text" id="ctrcli-q2" placeholder="Nombre, celular, email…" oninput="renderCtrlClientesLP()"></div>
@@ -825,6 +826,8 @@ body.no-delete .confirmDelete{display:none!important}
         <tbody id="tbl-ctrcli2"></tbody>
       </table>
     </div>
+    <div id="ctrpiso-box" style="margin-top:1.25rem"></div>
+    <div id="carros-buscados-box" style="margin-top:1.25rem"></div>
   </div>
   <div id="lp-tab-pormarca" style="display:none"></div>
   <div id="lp-tab-consignacion" style="display:none">
@@ -2911,6 +2914,34 @@ body.no-delete .confirmDelete{display:none!important}
 </div>
 
 <!-- Modal Control Cliente -->
+<div class="overlay" id="ov-piso">
+<div class="modal">
+  <div class="modal-head"><h3 id="mpiso-title">Cliente atendido en piso</h3><button class="btn-ghost btn" onclick="closeOv('ov-piso')"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="mpiso-id">
+    <div class="form-row">
+      <div class="form-group"><label>Nombre del cliente <span style="color:var(--red)">*</span></label><input id="mpiso-nombre" placeholder="Juan Pérez"></div>
+      <div class="form-group"><label>Celular <span style="color:var(--red)">*</span></label><input id="mpiso-cel" placeholder="8888-0000"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>¿Qué carro busca? <span style="color:var(--red)">*</span></label><input id="mpiso-carro" placeholder="Ej: Toyota Hilux 2018, SUV automática…" list="mpiso-carros-sug"><datalist id="mpiso-carros-sug"></datalist></div>
+      <div class="form-group"><label>¿Cómo llegó?</label><select id="mpiso-origen">
+        <option value="redes_empresa">📱 Redes de la empresa</option>
+        <option value="redes_personales">📲 Redes personales del vendedor</option>
+        <option value="llego_solo">🚶 Llegó solo / pasaba</option>
+        <option value="referido">👥 Referido</option>
+      </select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Fecha de atención</label><input type="date" id="mpiso-fecha"></div>
+      <div class="form-group" id="mpiso-vend-wrap"><label>Vendedor que lo atendió</label><select id="mpiso-vend"></select></div>
+    </div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="mpiso-neg" style="width:auto"> En negociación (dar seguimiento — alerta para llamar cada 3 días)</label></div>
+    <div class="form-group"><label>Notas</label><textarea id="mpiso-notas" rows="2" placeholder="Presupuesto, forma de pago, etc."></textarea></div>
+  </div>
+  <div class="modal-foot"><button class="btn" onclick="closeOv('ov-piso')">Cancelar</button><button class="btn btn-primary" onclick="guardarPiso()"><i class="ti ti-check"></i> Guardar</button></div>
+</div>
+</div>
 <div class="overlay" id="ov-ctrcli">
 <div class="modal">
   <div class="modal-head"><h3 id="mctrcli-title">Nuevo contacto</h3><button class="btn-ghost btn" onclick="closeOv('ov-ctrcli')"><i class="ti ti-x"></i></button></div>
@@ -3702,7 +3733,7 @@ const sbDel=async(table,id)=>{
 // automáticamente cualquier pestaña vieja olvidada, sin depender de que un administrador
 // se acuerde de hacerlo a mano.
 const BUILD_ID='2026-08-08-consig-permisos-imprimir-v1';
-let vehiculos=[], clientes=[], ventas=[], bitacora=[], contData={cuentas:[],gastos:[],recibos:[],pizarraAjustes:{ventas:{},compras:{},reservas:{}}}, vehGerencia=[], ctrlClientes=[], mensajes=[];
+let vehiculos=[], clientes=[], ventas=[], bitacora=[], contData={cuentas:[],gastos:[],recibos:[],pizarraAjustes:{ventas:{},compras:{},reservas:{}}}, vehGerencia=[], ctrlClientes=[], mensajes=[], controlPiso=[];
 let cliTabActivo='todos';
 let saving=false;
 
@@ -3786,7 +3817,7 @@ async function load(){
       sbGet('mensajes').catch(()=>[])
     ]);
     vehiculos=v||[];clientes=c||[];ventas=vt||[];bitacora=b||[];
-    vehGerencia=vg||[];ctrlClientes=cc||[];mensajes=msg||[];
+    vehGerencia=vg||[];ctrlClientes=(cc||[]).filter(x=>x&&x.tipoReg!=='piso');controlPiso=(cc||[]).filter(x=>x&&x.tipoReg==='piso');mensajes=msg||[];
     if(!co){
       alert('⚠️ No se pudo cargar la información contable (Cuentas, Gastos, Recibos, Rendiciones, etc.) — posible problema de conexión.\n\nPor seguridad, esa parte del sistema va a quedar vacía en tu pantalla hasta que recargues.\n\nRecomendado: presiona Ctrl+Shift+R e intenta de nuevo antes de guardar cualquier cambio.');
     }
@@ -4212,7 +4243,7 @@ async function restaurarRespaldoContable(idRespaldo){
     {tabla:'ventas',arrLocal:ventas},
     {tabla:'bitacora',arrLocal:bitacora},
     {tabla:'vehgerencia',arrLocal:vehGerencia},
-    {tabla:'ctrlclientes',arrLocal:ctrlClientes},
+    {tabla:'ctrlclientes',arrLocal:[...ctrlClientes,...controlPiso]},
     {tabla:'mensajes',arrLocal:mensajes},
   ];
   for(const{tabla,arrLocal}of tablasPorRegistro){
@@ -4522,7 +4553,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-19-1810';
+const APP_VERSION='2026-10-20-1200';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5616,8 +5647,10 @@ function renderCtrlClientesLP(){
   const fe=document.getElementById('ctrcli-fest2')?.value||'';
   const sel=document.getElementById('ctrcli-fvend2');
   if(sel){const cur=sel.value;sel.innerHTML='<option value="">Todos los vendedores</option>'+clientes.filter(c=>c.rol==='vendedor').map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');sel.value=cur;}
-  const data=ctrlClientes.filter(x=>(!q||(x.nombre+x.cel+x.email).toLowerCase().includes(q))&&(!fv||x.vendId===fv)&&(!fe||x.estado===fe));
+  if(sel)sel.style.display=esGerenciaCtrl()?'':'none';
+  const data=ctrlClientes.filter(ctrlVisible).filter(x=>(!q||(x.nombre+x.cel+x.email).toLowerCase().includes(q))&&(!fv||x.vendId===fv)&&(!fe||x.estado===fe));
   const comoMap={'redes_pagina':'📱 Redes página','redes_vendedor':'📲 Redes vendedor','llego_solo':'🚶 Llegó solo','referido':'👥 Referido'};
+  try{renderAlertasVendedores();renderControlPiso();renderCarrosBuscados();}catch(e){console.warn('Control de piso:',e);}
   const tbody=document.getElementById('tbl-ctrcli2');
   if(!tbody)return;
   // Agrupado por mes: el mes actual siempre visible; los meses anteriores quedan plegados en una
@@ -5666,14 +5699,15 @@ function renderBitacoraCtrCliLP(){
   const el=document.getElementById('ctrcli-bitacora');
   if(!el)return;
   const abierto=window._ctrcliBitAbierta!==false;
+  const ccVis=ctrlClientes.filter(ctrlVisible); // cada vendedor ve solo lo suyo; Gerencia ve todo
   const nombreVend=id=>{const c=clientes.find(x=>x.id===id);return c?c.nombre:'Sin vendedor';};
   const mesesSet=new Set();
-  ctrlClientes.forEach(x=>{if(x.fecha)mesesSet.add(x.fecha.slice(0,7));if(x.cita)mesesSet.add(String(x.cita).slice(0,7));});
+  ccVis.forEach(x=>{if(x.fecha)mesesSet.add(x.fecha.slice(0,7));if(x.cita)mesesSet.add(String(x.cita).slice(0,7));});
   mesesSet.add(hoyLocal().slice(0,7));
   const meses=[...mesesSet].filter(m=>/^\d{4}-\d{2}$/.test(m)).sort();
-  const vendIds=[...new Set(ctrlClientes.map(x=>x.vendId||''))];
+  const vendIds=[...new Set(ccVis.map(x=>x.vendId||''))];
   const filas=vendIds.map(id=>{
-    const delV=ctrlClientes.filter(x=>(x.vendId||'')===id);
+    const delV=ccVis.filter(x=>(x.vendId||'')===id);
     const porMes={};meses.forEach(m=>porMes[m]={r:0,c:0});
     delV.forEach(x=>{const mr=(x.fecha||'').slice(0,7);if(porMes[mr])porMes[mr].r++;const mc=String(x.cita||'').slice(0,7);if(x.cita&&porMes[mc])porMes[mc].c++;});
     return{nombre:nombreVend(id),porMes,totR:delV.length,totC:delV.filter(x=>x.cita).length};
@@ -5689,9 +5723,226 @@ function renderBitacoraCtrCliLP(){
       <tbody>${filas.map(f=>`<tr><td style="font-weight:700;white-space:nowrap">${f.nombre}</td>${meses.map(m=>celda(f.porMes[m].r,f.porMes[m].c)).join('')}
         <td style="text-align:center;background:var(--blue-light);font-weight:800;white-space:nowrap">${f.totR} <span style="color:var(--purple)">/ ${f.totC}</span></td></tr>`).join('')}</tbody>
       <tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL DEL MES</td>${meses.map(m=>{const t=totMes(m);return celda(t.r,t.c);}).join('')}
-        <td style="text-align:center;background:var(--blue-light);white-space:nowrap">${ctrlClientes.length} <span style="color:var(--purple)">/ ${ctrlClientes.filter(x=>x.cita).length}</span></td></tr></tfoot>
+        <td style="text-align:center;background:var(--blue-light);white-space:nowrap">${ccVis.length} <span style="color:var(--purple)">/ ${ccVis.filter(x=>x.cita).length}</span></td></tr></tfoot>
     </table></div>
     <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem"><b>Registrados</b> (negro) se cuentan por la fecha en que se registró el cliente; <span style="color:var(--purple)"><b>citados</b></span> por la fecha de la cita.</p>`:''}
+  </div>`;
+}
+// ======================== CONTROL DE CLIENTES POR VENDEDOR + CONTROL DE PISO ========================
+// Cada vendedor ve SOLO sus propios clientes (prospectos y control de piso). Gerencia (Edwin,
+// Samir, Don Julio y Gisselle) ve los registros de todos los vendedores.
+const ROLES_GERENCIA_CTRL=['admin','jefecomercial','gerente1','gerente2'];
+const META_CLIENTES_DIA=5;
+function esGerenciaCtrl(){return ROLES_GERENCIA_CTRL.includes(MODO);}
+function _nomEq(a,b){return String(a||'').trim().toLowerCase().replace(/\s+/g,' ')===String(b||'').trim().toLowerCase().replace(/\s+/g,' ')&&String(a||'').trim()!=='';}
+function miVendIdCtrl(){const n=getNombreUsuario();const c=clientes.find(x=>x.rol==='vendedor'&&_nomEq(x.nombre,n));return c?c.id:'';}
+function vendedorDeRegistro(x){
+  if(!x)return'';
+  if(x.tipoReg==='piso')return x.vendedor||x.registradoPor||'';
+  const c=x.vendId?clientes.find(k=>k.id===x.vendId):null;
+  return(c&&c.nombre)||x.vendNombre||x.registradoPor||'';
+}
+function esMioCtrl(x){
+  if(!x)return false;
+  const n=getNombreUsuario();
+  if(_nomEq(x.registradoPor,n)||_nomEq(x.vendedor,n))return true;
+  if(x.tipoReg!=='piso'&&_nomEq(x.vendNombre,n))return true;
+  const vid=miVendIdCtrl();return !!vid&&x.vendId===vid;
+}
+function ctrlVisible(x){return esGerenciaCtrl()||esMioCtrl(x);}
+function vendedoresCtrl(){
+  const set=new Map();
+  TODOS_USUARIOS.filter(u=>u.rol==='Vendedor').forEach(u=>set.set(u.nombre.toLowerCase(),u.nombre));
+  clientes.filter(c=>c.rol==='vendedor'&&c.nombre).forEach(c=>{if(!set.has(c.nombre.trim().toLowerCase()))set.set(c.nombre.trim().toLowerCase(),c.nombre.trim());});
+  return[...set.values()].sort((a,b)=>a.localeCompare(b,'es'));
+}
+const ORIGEN_PISO={redes_empresa:'📱 Redes empresa',redes_personales:'📲 Redes personales',llego_solo:'🚶 Llegó solo',referido:'👥 Referido'};
+function pisoDiasSinLlamar(x){return diasDesde(x.ultimaLlamada||x.negociacionDesde||x.fecha);}
+function pisoRequiereLlamada(x){if(!x.negociacion)return false;const d=pisoDiasSinLlamar(x);return d!==null&&d>=3;}
+// ---- Alertas: meta diaria de 5 clientes por vendedor + clientes en negociación por llamar ----
+function renderAlertasVendedores(){
+  const el=document.getElementById('ctrcli-alertas');if(!el)return;
+  const hoy=hoyLocal();
+  const ger=esGerenciaCtrl();
+  const yo=getNombreUsuario();
+  const vendedores=ger?vendedoresCtrl():(MODO==='vendedor'?[yo]:[]);
+  const cuentaHoy=n=>ctrlClientes.filter(x=>x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length+controlPiso.filter(x=>x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length;
+  const faltan=vendedores.map(n=>({n,c:cuentaHoy(n)})).filter(o=>o.c<META_CLIENTES_DIA);
+  const porLlamar=controlPiso.filter(ctrlVisible).filter(pisoRequiereLlamada);
+  let html='';
+  if(faltan.length){
+    html+=`<div style="background:var(--amber-light);border:1px solid #FFDEAB;border-radius:var(--radius);padding:.6rem 1rem;margin-bottom:.75rem;font-size:13px">
+      <b><i class="ti ti-alert-triangle" style="color:var(--amber)"></i> ${ger?'Vendedores que todavía no reportan sus '+META_CLIENTES_DIA+' clientes de hoy':'Todavía no reportás tus '+META_CLIENTES_DIA+' clientes de hoy'}</b>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${faltan.map(o=>`<span class="badge badge-${o.c===0?'red':'amber'}" style="font-size:11px">${ger?o.n.split(' ')[0]+': ':''}${o.c} / ${META_CLIENTES_DIA}</span>`).join('')}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">Cuenta los clientes registrados hoy en Control de Clientes + Control de Piso.</div></div>`;
+  }
+  if(porLlamar.length){
+    html+=`<div style="background:var(--red-light);border:1px solid #FFC9C9;border-radius:var(--radius);padding:.6rem 1rem;margin-bottom:.75rem;font-size:13px">
+      <b style="color:var(--red)"><i class="ti ti-phone-call"></i> Llamar a cliente — ${porLlamar.length} en negociación con 3 días o más sin llamada</b>
+      <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${porLlamar.map(x=>`<div>📞 <b>${x.nombre}</b> — <a href="https://wa.me/${(x.cel||'').replace(/[^0-9]/g,'')}" target="_blank" style="color:var(--green)">${x.cel||''}</a> — busca <i>${x.carroBusca||'—'}</i>${ger?' — '+(vendedorDeRegistro(x)||''):''} — <b>${pisoDiasSinLlamar(x)} días</b> <button class="btn btn-sm" style="padding:1px 8px;font-size:11px" onclick="marcarLlamadaPiso('${x.id}')">✔ Ya llamé</button></div>`).join('')}</div></div>`;
+  }
+  el.innerHTML=html;
+}
+// ---- Control de piso: clientes atendidos físicamente ----
+function renderControlPiso(){
+  const el=document.getElementById('ctrpiso-box');if(!el)return;
+  const ger=esGerenciaCtrl();
+  const fv=document.getElementById('ctrpiso-fvend')?.value||'';
+  const soloNeg=!!document.getElementById('ctrpiso-soloneg')?.checked;
+  const mesSel=document.getElementById('ctrpiso-mes')?.value||hoyLocal().slice(0,7);
+  const vis=controlPiso.filter(ctrlVisible);
+  const meses=[...new Set([hoyLocal().slice(0,7),...vis.map(x=>(x.fecha||'').slice(0,7)).filter(Boolean)])].sort().reverse();
+  const nm=m=>new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'});
+  const data=vis.filter(x=>(mesSel==='todos'||(x.fecha||'').slice(0,7)===mesSel||x.negociacion)&&(!fv||_nomEq(vendedorDeRegistro(x),fv))&&(!soloNeg||x.negociacion))
+    .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const puedeEd=x=>ger||esMioCtrl(x);
+  const negCel=x=>{
+    if(x.negociacion){const d=pisoDiasSinLlamar(x);const alerta=pisoRequiereLlamada(x);
+      return`<span class="badge badge-${alerta?'red':'blue'}" style="font-size:10px;${alerta?'animation:pulseAlerta 1.2s infinite':''}">${alerta?'📞 LLAMAR':'🤝 En negociación'} · ${d===null?'—':d+' d'}</span>
+        ${puedeEd(x)?`<div style="display:flex;gap:4px;margin-top:4px"><button class="btn btn-sm" style="padding:1px 6px;font-size:10px" onclick="marcarLlamadaPiso('${x.id}')" title="Registrar que ya se llamó (reinicia los 3 días)">✔ Llamé</button><button class="btn btn-sm btn-danger" style="padding:1px 6px;font-size:10px" onclick="finNegociacionPiso('${x.id}')">🏁 Fin negociación</button></div>`:''}`;}
+    if(x.finNegociacion)return`<span class="badge badge-gray" style="font-size:10px" title="Finalizada por ${x.finNegociacion.por||''}">🏁 ${x.finNegociacion.resultado||'Finalizada'} (${x.finNegociacion.fecha||''})</span>`;
+    return puedeEd(x)?`<button class="btn btn-sm" style="font-size:10px;padding:2px 8px" onclick="iniciarNegociacionPiso('${x.id}')">Iniciar negociación</button>`:'—';
+  };
+  // Resumen por vendedor (Gerencia)
+  const resumen=ger?vendedoresCtrl().map(n=>{const l=vis.filter(x=>_nomEq(vendedorDeRegistro(x),n));const lm=l.filter(x=>(x.fecha||'').slice(0,7)===mesSel);
+    return{n,mes:lm.length,neg:l.filter(x=>x.negociacion).length,llamar:l.filter(pisoRequiereLlamada).length,emp:lm.filter(x=>x.origen==='redes_empresa').length,per:lm.filter(x=>x.origen==='redes_personales').length,
+      prosp:ctrlClientes.filter(x=>_nomEq(vendedorDeRegistro(x),n)&&(x.fecha||'').slice(0,7)===mesSel).length};}):[];
+  el.innerHTML=`<div class="card">
+    <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h3><i class="ti ti-building-store"></i> Control de Piso — clientes atendidos físicamente${ger?'':' (los tuyos)'}</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <select id="ctrpiso-mes" onchange="renderControlPiso();renderCarrosBuscados()" style="padding:5px">${meses.map(m=>`<option value="${m}" ${m===mesSel?'selected':''} style="text-transform:capitalize">${nm(m)}</option>`).join('')}<option value="todos" ${mesSel==='todos'?'selected':''}>Todos los meses</option></select>
+        ${ger?`<select id="ctrpiso-fvend" onchange="renderControlPiso()" style="padding:5px"><option value="">Todos los vendedores</option>${vendedoresCtrl().map(n=>`<option ${_nomEq(n,fv)?'selected':''}>${n}</option>`).join('')}</select>`:''}
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="ctrpiso-soloneg" ${soloNeg?'checked':''} onchange="renderControlPiso()" style="width:auto"> Solo en negociación</label>
+        <button class="btn btn-sm" onclick="exportExcelPiso()"><i class="ti ti-download"></i> Excel</button>
+        <button class="btn btn-sm btn-primary" onclick="abrirModalPiso()"><i class="ti ti-plus"></i> Cliente atendido</button>
+      </div>
+    </div>
+    ${ger&&resumen.length?`<div style="overflow-x:auto;padding:.5rem 1rem"><table class="tbl" style="font-size:12px"><thead><tr><th>Vendedor</th><th style="text-align:center">Prospectos (mes)</th><th style="text-align:center">Atendidos en piso (mes)</th><th style="text-align:center">Redes empresa</th><th style="text-align:center">Redes personales</th><th style="text-align:center">En negociación</th><th style="text-align:center">Por llamar</th></tr></thead>
+      <tbody>${resumen.map(r=>`<tr style="cursor:pointer" onclick="const s=document.getElementById('ctrpiso-fvend');if(s){s.value='${r.n.replace(/'/g,"\\'")}';renderControlPiso();}"><td style="font-weight:700">${r.n}</td><td style="text-align:center">${r.prosp}</td><td style="text-align:center">${r.mes}</td><td style="text-align:center">${r.emp}</td><td style="text-align:center">${r.per}</td><td style="text-align:center">${r.neg}</td><td style="text-align:center;${r.llamar?'color:var(--red);font-weight:800':''}">${r.llamar}</td></tr>`).join('')}</tbody></table></div>`:''}
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Celular</th><th>Carro que busca</th><th>Llegó por</th>${ger?'<th>Vendedor</th>':''}<th>Negociación</th><th>Notas</th><th></th></tr></thead>
+      <tbody>${data.length?data.map((x,i)=>`<tr>
+        <td style="text-align:center;color:var(--text2)">${i+1}</td>
+        <td style="white-space:nowrap">${x.fecha||'—'}</td>
+        <td><b>${x.nombre||'—'}</b></td>
+        <td><a href="https://wa.me/${(x.cel||'').replace(/[^0-9]/g,'')}" target="_blank" style="color:var(--green);text-decoration:none"><i class="ti ti-brand-whatsapp"></i> ${x.cel||'—'}</a></td>
+        <td>${x.carroBusca||'—'}</td>
+        <td style="font-size:11px">${ORIGEN_PISO[x.origen]||'—'}</td>
+        ${ger?`<td style="font-size:12px">${(vendedorDeRegistro(x)||'—').split(' ')[0]}</td>`:''}
+        <td>${negCel(x)}</td>
+        <td style="font-size:11px;color:var(--text2);max-width:160px">${x.notas||''}</td>
+        <td style="white-space:nowrap">${puedeEd(x)?`<button class="btn btn-sm" onclick="abrirModalPiso('${x.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="delPiso('${x.id}')"><i class="ti ti-trash"></i></button>`:''}</td>
+      </tr>`).join(''):`<tr><td colspan="${ger?10:9}" style="text-align:center;color:var(--text3);padding:1rem">No hay clientes de piso registrados en este período</td></tr>`}</tbody>
+    </table></div>
+    <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem">Los clientes <b>en negociación</b> se muestran siempre (aunque sean de otro mes). Pasados 3 días sin llamada aparece la alerta <b style="color:var(--red)">📞 LLAMAR</b>; con "✔ Llamé" se reinicia el conteo.</p>
+  </div>`;
+}
+function abrirModalPiso(id){
+  const x=id?controlPiso.find(c=>c.id===id):null;
+  if(x&&!(esGerenciaCtrl()||esMioCtrl(x))){alert('⛔ Solo el vendedor que lo registró o Gerencia pueden modificarlo.');return;}
+  document.getElementById('mpiso-title').textContent=x?'Editar cliente de piso':'Cliente atendido en piso';
+  document.getElementById('mpiso-id').value=x?x.id:'';
+  document.getElementById('mpiso-nombre').value=x?x.nombre||'':'';
+  document.getElementById('mpiso-cel').value=x?x.cel||'':'';
+  document.getElementById('mpiso-carro').value=x?x.carroBusca||'':'';
+  document.getElementById('mpiso-origen').value=x?x.origen||'llego_solo':'redes_empresa';
+  document.getElementById('mpiso-fecha').value=x?x.fecha||hoyLocal():hoyLocal();
+  document.getElementById('mpiso-neg').checked=x?!!x.negociacion:false;
+  document.getElementById('mpiso-notas').value=x?x.notas||'':'';
+  const ger=esGerenciaCtrl();
+  const selV=document.getElementById('mpiso-vend');
+  const yo=getNombreUsuario();
+  selV.innerHTML=(ger?vendedoresCtrl():[yo]).map(n=>`<option>${n}</option>`).join('');
+  selV.value=x?(x.vendedor||x.registradoPor||yo):(ger?(vendedoresCtrl()[0]||yo):yo);
+  if(x&&![...selV.options].some(o=>o.value===selV.value)){selV.innerHTML+=`<option>${x.vendedor}</option>`;selV.value=x.vendedor;}
+  document.getElementById('mpiso-vend-wrap').style.display=ger?'':'none';
+  // Sugerencias de carros: modelos del inventario
+  const sug=[...new Set(vehiculos.filter(v=>v.estado!=='Vendido').map(v=>`${(v.marca||'').trim()} ${(v.modelo||'').trim()}`.trim()))].sort();
+  document.getElementById('mpiso-carros-sug').innerHTML=sug.map(t=>`<option value="${t.replace(/"/g,'&quot;')}">`).join('');
+  openOv('ov-piso');
+}
+function guardarPiso(){
+  const id=document.getElementById('mpiso-id').value||uid();
+  const existing=controlPiso.find(x=>x.id===id);
+  if(existing&&!(esGerenciaCtrl()||esMioCtrl(existing))){alert('⛔ Solo el vendedor que lo registró o Gerencia pueden modificarlo.');return;}
+  const nombre=document.getElementById('mpiso-nombre').value.trim();
+  const cel=document.getElementById('mpiso-cel').value.trim();
+  const carroBusca=document.getElementById('mpiso-carro').value.trim();
+  if(!nombre||!cel||!carroBusca){alert('Nombre, celular y el carro que busca son obligatorios.');return;}
+  const neg=document.getElementById('mpiso-neg').checked;
+  const obj={...(existing||{}),id,tipoReg:'piso',nombre,cel,carroBusca,
+    origen:document.getElementById('mpiso-origen').value,
+    fecha:document.getElementById('mpiso-fecha').value||hoyLocal(),
+    vendedor:document.getElementById('mpiso-vend').value||getNombreUsuario(),
+    registradoPor:existing?.registradoPor||getNombreUsuario(),
+    notas:document.getElementById('mpiso-notas').value.trim(),
+    negociacion:neg};
+  if(neg&&!existing?.negociacion){obj.negociacionDesde=hoyLocal();obj.ultimaLlamada=null;obj.finNegociacion=null;}
+  marcarEdicion(obj);
+  const i=controlPiso.findIndex(x=>x.id===id);
+  if(i>=0)controlPiso[i]=obj;else controlPiso.push(obj);
+  saveOne('ctrlclientes',obj);
+  closeOv('ov-piso');renderCtrlClientesLP();
+}
+function _guardarPisoObj(x){marcarEdicion(x);saveOne('ctrlclientes',x);renderCtrlClientesLP();}
+function iniciarNegociacionPiso(id){
+  const x=controlPiso.find(c=>c.id===id);if(!x)return;
+  x.negociacion=true;x.negociacionDesde=hoyLocal();x.ultimaLlamada=null;x.finNegociacion=null;_guardarPisoObj(x);
+}
+function marcarLlamadaPiso(id){
+  const x=controlPiso.find(c=>c.id===id);if(!x)return;
+  if(!(esGerenciaCtrl()||esMioCtrl(x))){alert('⛔ Solo el vendedor de este cliente o Gerencia.');return;}
+  const nota=prompt(`Llamada a ${x.nombre} — ¿algún comentario? (opcional)`,'');
+  if(nota===null)return;
+  x.ultimaLlamada=hoyLocal();
+  x.llamadas=x.llamadas||[];x.llamadas.push({fecha:hoyLocal(),por:getNombreUsuario(),nota});
+  _guardarPisoObj(x);
+}
+function finNegociacionPiso(id){
+  const x=controlPiso.find(c=>c.id===id);if(!x)return;
+  if(!(esGerenciaCtrl()||esMioCtrl(x))){alert('⛔ Solo el vendedor de este cliente o Gerencia.');return;}
+  const r=prompt(`Fin de negociación con ${x.nombre}.\n\n¿Resultado? (ej: Compró, No compró, Compró en otro lado, No contesta…)`,'Compró');
+  if(r===null)return;
+  x.negociacion=false;x.finNegociacion={fecha:hoyLocal(),resultado:r.trim()||'Finalizada',por:getNombreUsuario()};
+  _guardarPisoObj(x);
+}
+function delPiso(id){
+  const x=controlPiso.find(c=>c.id===id);if(!x)return;
+  if(!(esGerenciaCtrl()||esMioCtrl(x))){alert('⛔ Solo el vendedor que lo registró o Gerencia pueden eliminarlo.');return;}
+  if(!confirm(`¿Eliminar a ${x.nombre} del control de piso?`))return;
+  controlPiso=controlPiso.filter(c=>c.id!==id);deleteOne('ctrlclientes',id);renderCtrlClientesLP();
+}
+async function exportExcelPiso(){
+  const vis=controlPiso.filter(ctrlVisible).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const rows=[['Fecha','Cliente','Celular','Carro que busca','Llegó por','Vendedor','En negociación','Desde','Última llamada','Resultado','Notas']];
+  vis.forEach(x=>rows.push([x.fecha||'',x.nombre||'',x.cel||'',x.carroBusca||'',(ORIGEN_PISO[x.origen]||'').replace(/^\S+\s/,''),vendedorDeRegistro(x),x.negociacion?'Sí':'No',x.negociacionDesde||'',x.ultimaLlamada||'',x.finNegociacion?x.finNegociacion.resultado:'',x.notas||'']));
+  await exportarExcelConFormato(rows,'control_piso_nicauto','Control de Piso');
+}
+// ---- Carros Buscados: qué vinieron a buscar los clientes (piso + interés de prospectos) ----
+function renderCarrosBuscados(){
+  const el=document.getElementById('carros-buscados-box');if(!el)return;
+  if(!esGerenciaCtrl()){el.innerHTML='';return;}
+  const mesSel=document.getElementById('ctrpiso-mes')?.value||hoyLocal().slice(0,7);
+  const enMes=f=>mesSel==='todos'||(f||'').slice(0,7)===mesSel;
+  const norm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+  const items=[...controlPiso.filter(x=>enMes(x.fecha)).map(x=>({t:x.carroBusca,f:x.fecha,v:vendedorDeRegistro(x),o:'Piso'})),
+               ...ctrlClientes.filter(x=>enMes(x.fecha)&&x.interes).map(x=>({t:x.interes,f:x.fecha,v:vendedorDeRegistro(x),o:'Prospecto'}))].filter(i=>norm(i.t));
+  const grupos={};
+  items.forEach(i=>{const k=norm(i.t);if(!grupos[k])grupos[k]={texto:String(i.t).trim(),n:0,piso:0,prosp:0,ult:'',vend:new Set()};const g=grupos[k];g.n++;i.o==='Piso'?g.piso++:g.prosp++;if((i.f||'')>g.ult)g.ult=i.f||'';if(i.v)g.vend.add(i.v.split(' ')[0]);});
+  const inv=vehiculos.filter(v=>v.estado!=='Vendido');
+  const enInv=k=>inv.filter(v=>{const mo=norm(v.modelo);return mo&&(' '+k+' ').includes(' '+mo+' ');}).length;
+  const lista=Object.entries(grupos).map(([k,g])=>({...g,k,stock:enInv(k)})).sort((a,b)=>b.n-a.n);
+  const nm=mesSel==='todos'?'todos los meses':new Date(mesSel+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'});
+  el.innerHTML=`<div class="card">
+    <div class="card-head"><h3><i class="ti ti-search"></i> Carros Buscados — ${nm} <span style="font-weight:400;font-size:12px;color:var(--text2)">(${items.length} solicitudes)</span></h3></div>
+    <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
+      <thead><tr><th>#</th><th>Carro buscado</th><th style="text-align:center">Veces</th><th style="text-align:center">Piso</th><th style="text-align:center">Prospectos</th><th>Vendedores</th><th>Última vez</th><th style="text-align:center">¿Lo tenemos?</th></tr></thead>
+      <tbody>${lista.length?lista.map((g,i)=>`<tr><td style="text-align:center;color:var(--text2)">${i+1}</td><td><b>${g.texto}</b></td><td style="text-align:center;font-weight:800">${g.n}</td><td style="text-align:center">${g.piso}</td><td style="text-align:center">${g.prosp}</td><td style="font-size:11px">${[...g.vend].join(', ')}</td><td>${g.ult||'—'}</td>
+        <td style="text-align:center">${g.stock?`<span class="badge badge-green" style="font-size:10px">Sí (${g.stock})</span>`:'<span class="badge badge-red" style="font-size:10px">No</span>'}</td></tr>`).join('')
+      :'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:1rem">Todavía no hay carros buscados registrados en este período</td></tr>'}</tbody>
+    </table></div>
+    <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem">Sale de "Carro que busca" del Control de Piso y del campo "Interés" de los prospectos. "¿Lo tenemos?" revisa si hay un carro de ese modelo en inventario (no vendido).</p>
   </div>`;
 }
 function toggleMesCtrCliLP(m){
@@ -7299,13 +7550,14 @@ function marcaCF(cf,campo){cf=cf||{};return cf[campo]?'✅':(cfMotivoExento(cf)?
 function imprimirDetalleHistorialChequeo(){
   const h=window._historialChequeoDetalleActual;
   if(!h)return;
-  const resumen={verificado:0,llave:0,encendido:0,combustibleSi:0};
+  const resumen={verificado:0,llave:0,encendido:0,combustibleSi:0,prestados:0};
   h.vehiculos.forEach(v=>{
     const cf=v.chequeoFisico||{};
     if(cfCasillaOk(cf,'verificado'))resumen.verificado++;
     if(cfCasillaOk(cf,'llave'))resumen.llave++;
     if(cfCasillaOk(cf,'encendido'))resumen.encendido++;
     if(cf.combustible==='si')resumen.combustibleSi++;
+    if(cf.prestado||v.estado==='Prestado')resumen.prestados++;
   });
   const filas=h.vehiculos.map(v=>{
     const cf=v.chequeoFisico||{};
@@ -7329,6 +7581,7 @@ function imprimirDetalleHistorialChequeo(){
       <div>Con llave<b>${resumen.llave}</b></div>
       <div>Encienden<b>${resumen.encendido}</b></div>
       <div>Con combustible<b>${resumen.combustibleSi}</b></div>
+      <div>🤝 Prestados<b>${resumen.prestados}</b></div>
     </div>
     <table><thead><tr><th>Vehículo</th><th>Verificado</th><th>Llave</th><th>Encendido</th><th>Combustible</th><th>Gerencia</th><th>Taller Ext.</th><th>Justificación (no encontrado)</th></tr></thead>
     <tbody>${filas}</tbody></table>
@@ -11959,15 +12212,32 @@ function renderCuentas(){
   const tablaTipo=(tipo,titulo,icono,filasForzadas)=>{
     const filas=filasForzadas||cuentas.filter(c=>c.tipo===tipo);
     const tot=filas.filter(c=>c.estado!=='Pagada').reduce((s,c)=>s+c.saldo,0);
+    // Agrupado por persona: sus cuentas juntas + subtotal de esa persona; al final, total del Mayor.
+    const normP=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ')||'—';
+    const grupos=[];const idxG={};
+    filas.forEach(c=>{const k=normP(c.persona);if(idxG[k]===undefined){idxG[k]=grupos.length;grupos.push({nombre:(c.persona||'—').trim()||'—',filas:[]});}grupos[idxG[k]].filas.push(c);});
+    if(!filasForzadas)grupos.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+    const pendDe=l=>l.filter(c=>c.estado!=='Pagada').reduce((s,c)=>s+Number(c.saldo||0),0);
+    const montoDe=l=>l.reduce((s,c)=>s+Number(c.monto||0),0);
+    const filaSub=g=>`<tr style="background:var(--surface2);font-size:12px"><td></td><td style="font-weight:700">Subtotal ${g.nombre} <span style="font-weight:400;color:var(--text3)">(${g.filas.length})</span></td><td style="font-weight:700">${fmtD(montoDe(g.filas))}</td><td style="font-weight:800">${fmtD(pendDe(g.filas))}</td><td colspan="5"></td></tr>`;
+    const cuerpo=grupos.map(g=>g.filas.map(tblRows).join('')+filaSub(g)).join('')
+      +`<tr style="background:var(--blue-light);font-weight:800"><td></td><td>TOTAL ${String(titulo).replace(/<[^>]*>/g,'').trim()}</td><td>${fmtD(montoDe(filas))}</td><td>${fmtD(pendDe(filas))}</td><td colspan="5" style="font-size:11px;font-weight:400;color:var(--text2)">saldo pendiente (sin contar las pagadas)</td></tr>`;
     return`<div class="card" style="margin-bottom:1rem">
       <div class="card-head"><h3>${icono} ${titulo} <span style="font-weight:400;font-size:12px;color:var(--text2)">— ${fmtD(tot)} pendiente</span></h3>
         <div style="display:flex;gap:4px">${botonesReporteCuentas([tipo],(NOMBRE_TIPO_CUENTA[tipo]||tipo).replace('—','-'))}<button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'${tipo}')"><i class="ti ti-plus"></i>Nueva</button></div>
       </div>
       <table class="tbl"><thead><tr><th>Fecha</th><th>Persona/Entidad</th><th>Monto</th><th>Saldo</th><th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
-      <tbody>${filas.length?filas.map(tblRows).join(''):'<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:1rem">Sin registros todavía</td></tr>'}</tbody></table>
+      <tbody>${filas.length?cuerpo:'<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:1rem">Sin registros todavía</td></tr>'}</tbody></table>
     </div>`;
   };
   const cxcInversorFilas=cuentas.filter(c=>c.tipo==='CxC-Inversor');
+  const pendTipo=t=>cuentas.filter(c=>(Array.isArray(t)?t.includes(c.tipo):c.tipo===t)&&c.estado!=='Pagada').reduce((s,c)=>s+Number(c.saldo||0),0);
+  const resumenMayor=(lista,color)=>{const tot=lista.reduce((s,[,t])=>s+pendTipo(t),0);
+    return`<div class="card" style="margin-bottom:1rem"><table class="tbl" style="font-size:13px"><thead><tr><th>Cuenta de Mayor</th><th style="text-align:right">Saldo pendiente</th></tr></thead><tbody>
+      ${lista.map(([l,t])=>`<tr><td>${l}</td><td style="text-align:right;font-weight:700">${fmtD(pendTipo(t))}</td></tr>`).join('')}
+      <tr style="background:var(--surface2);font-weight:800"><td>TOTAL</td><td style="text-align:right;color:${color}">${fmtD(tot)}</td></tr></tbody></table></div>`;};
+  const MAYOR_CXC=[['CxC — Clientes','CxC-Cliente'],['CxC — Bancos','CxC-Banco'],['CxC — Empleados','CxC-Empleado'],['CxC — Terceros / Ajenos','CxC-Tercero'],['CxC — Inversores','CxC-Inversor']];
+  const MAYOR_CXP=[['CxP — Inversores','CxP-Inversor'],['CxP — Proveedores','CxP-Otra'],['CxP — Préstamos Bancarios','CxP-Prestamo'],['CxP — Intereses','CxP-Interes'],['CxP — Tarjetas de Crédito',['CxP-Tarjeta','CxP-TCCorporativo1','CxP-TCCorporativo2','CxP-TCCorporativo']],['CxP — Reservas de clientes','CxP-Reserva'],['CxP — Reservas flotantes','CxP-ReservaFlotante']];
   const cxpInversorFilas=cuentas.filter(c=>c.tipo==='CxP-Inversor').sort((a,b)=>ordenInversor(a)-ordenInversor(b));
   document.getElementById('cont-cuentas').innerHTML=`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem">
@@ -11976,6 +12246,7 @@ function renderCuentas(){
   </div>
   <div class="section-header" style="margin-top:.5rem"><h3 style="font-size:15px;font-weight:700;color:var(--green)"><i class="ti ti-arrow-up-circle"></i> Cuentas por Cobrar</h3>
     <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="imprimirCuentas(TIPOS_CXC_REP,'Cuentas por Cobrar')"><i class="ti ti-printer"></i>Imprimir todas</button><button class="btn btn-sm" onclick="exportarCuentas(TIPOS_CXC_REP,'Cuentas por Cobrar')"><i class="ti ti-download"></i>Excel todas</button></div></div>
+  ${resumenMayor(MAYOR_CXC,'var(--green)')}
   ${tablaTipo('CxC-Cliente','CxC — Clientes','<i class="ti ti-user"></i>')}
   ${tablaCxCBancos(tblRows)}
   ${tablaTipo('CxC-Empleado','CxC — Empleados','<i class="ti ti-id-badge-2"></i>').replace('<i class="ti ti-plus"></i>Nueva</button>','<i class="ti ti-plus"></i>Nueva</button><button class="btn btn-sm" onclick="agregarTodosEmpleadosCxC()" title="Crea una cuenta en $0 para cada empleado del sistema que todavía no tenga una"><i class="ti ti-users-plus"></i>Agregar todos</button>')}
@@ -11984,6 +12255,7 @@ function renderCuentas(){
 
   <div class="section-header" style="margin-top:1.5rem"><h3 style="font-size:15px;font-weight:700;color:var(--red)"><i class="ti ti-arrow-down-circle"></i> Cuentas por Pagar</h3>
     <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="imprimirCuentas(TIPOS_CXP_REP,'Cuentas por Pagar')"><i class="ti ti-printer"></i>Imprimir todas</button><button class="btn btn-sm" onclick="exportarCuentas(TIPOS_CXP_REP,'Cuentas por Pagar')"><i class="ti ti-download"></i>Excel todas</button></div></div>
+  ${resumenMayor(MAYOR_CXP,'var(--red)')}
   ${tablaTipo('CxP-Inversor','CxP — Inversores <span style="font-size:10px;font-weight:400">(orden fijo: RMI, JMI, HG)</span>','<i class="ti ti-briefcase"></i>',cxpInversorFilas)}
   ${tablaTipo('CxP-Otra','CxP — Proveedores','<i class="ti ti-truck-delivery"></i>')}
   ${tablaTipo('CxP-Prestamo','CxP — Préstamos Bancarios','<i class="ti ti-building-bank"></i>')}
@@ -13566,6 +13838,9 @@ function imprimirChequeoFisico(){
   const noVerificados=data.filter(v=>!cfCasillaOk(v.chequeoFisico,'verificado')).length;
   const sinLlave=data.filter(v=>!cfCasillaOk(v.chequeoFisico,'llave')).length;
   const noEncienden=data.filter(v=>!cfCasillaOk(v.chequeoFisico,'encendido')).length;
+  // Prestados: marcados como prestados en el chequeo o con estado "Prestado" en Inventario.
+  const esPrestado=v=>!!(v.chequeoFisico&&v.chequeoFisico.prestado)||v.estado==='Prestado';
+  const prestadosImp=[...data,...(contData.consignacion||[]).filter(c=>c.estado!=='Vendido')].filter(esPrestado);
   const ahora=new Date();
   const fechaStr=ahora.toLocaleDateString('es-NI');
   const horaStr=ahora.toLocaleTimeString('es-NI',{hour:'2-digit',minute:'2-digit'});
@@ -13598,7 +13873,10 @@ function imprimirChequeoFisico(){
       <div><div>🔑 Llaves no encontradas</div><div class="num" style="color:${sinLlave?'#C92A2A':'#2F9E44'}">${sinLlave}</div></div>
       <div><div>🚗 Carros no encontrados</div><div class="num" style="color:${noVerificados?'#C92A2A':'#2F9E44'}">${noVerificados}</div></div>
       <div><div>🔌 Carros que no encienden</div><div class="num" style="color:${noEncienden?'#C92A2A':'#2F9E44'}">${noEncienden}</div></div>
+      <div><div>🤝 Carros prestados</div><div class="num" style="color:${prestadosImp.length?'#E67700':'#2F9E44'}">${prestadosImp.length}</div></div>
     </div>
+    ${prestadosImp.length?`<h3>🤝 Carros prestados</h3><table><thead><tr><th>#</th><th>Vehículo</th><th>Placa</th><th>Color</th><th>Prestado a</th><th>Desde</th><th>Registrado por</th></tr></thead>
+    <tbody>${prestadosImp.map((v,i)=>{const cf=v.chequeoFisico||{};return`<tr><td>${i+1}</td><td><b>${v.marca||''} ${v.modelo||''}</b> ${v.anio||''}</td><td>${v.placa||'—'}</td><td>${v.color||'—'}</td><td><b>${cf.prestadoA||v.prestadoa||'—'}</b></td><td>${cf.prestadoFecha||'—'}</td><td>${cf.prestadoPor||'—'}</td></tr>`;}).join('')}</tbody></table>`:''}
     <table><thead><tr><th>#</th><th>Vehículo</th><th>Placa</th><th>Color</th><th>Km</th><th>Verif.</th><th>Llave</th><th>Enciende</th><th>Combustible</th><th>Justificación (no encontrado)</th></tr></thead>
     <tbody>${data.map(filaHtml).join('')}</tbody></table>
     ${dataConsig.length?`<h3>Consignación</h3><table><thead><tr><th>#</th><th>Vehículo</th><th>Placa</th><th>Color</th><th>Km</th><th>Verif.</th><th>Llave</th><th>Enciende</th><th>Combustible</th><th>Justificación (no encontrado)</th></tr></thead>
@@ -15752,7 +16030,7 @@ function renderCtrlClientes(){
   const sel=document.getElementById('ctrcli-fvend');const cur=sel.value;
   sel.innerHTML='<option value="">Todos los vendedores</option>'+clientes.filter(c=>c.rol==='vendedor').map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   sel.value=cur;
-  const data=ctrlClientes.filter(x=>
+  const data=ctrlClientes.filter(ctrlVisible).filter(x=>
     (!q||(x.nombre+x.cel+x.email).toLowerCase().includes(q))&&
     (!fv||x.vendId===fv)&&(!fe||x.estado===fe));
   const comoMap={'redes_pagina':'📱 Redes página','redes_vendedor':'📲 Redes vendedor','llego_solo':'🚶 Llegó solo','referido':'👥 Referido'};
@@ -15796,7 +16074,7 @@ function abrirModalCtrlCliente(id){
   ['nombre','cel','email','estado','como','interes','notas','fecha','cita'].forEach(f=>{
     const el=document.getElementById('mctrcli-'+f);if(el)el.value=x?x[f]||'':'';
   });
-  document.getElementById('mctrcli-vend').value=x?x.vendId||'':'';
+  document.getElementById('mctrcli-vend').value=x?x.vendId||'':(esGerenciaCtrl()?'':(miVendIdCtrl()||''));
   if(!x){document.getElementById('mctrcli-fecha').value=hoyLocal();document.getElementById('mctrcli-estado').value='Prospecto';}
   // Resultado (req #3)
   setResultadoUICtrlCliente(x?x.resultado||'':'');
@@ -15885,7 +16163,7 @@ function guardarCtrlCliente(){
       else{alert(`⚠️ Este cliente (cédula: ${cedula}) ya fue registrado hace ${dias} días (menos de 30). Solo se puede registrar de nuevo después de 30 días.`);return;}
     }
   }
-  const obj={id,nombre,cedula,visita:visitNum,
+  const obj={...(existing||{}),id,nombre,cedula,visita:visitNum,
     cel:document.getElementById('mctrcli-cel').value,
     email:document.getElementById('mctrcli-email').value,
     vendId:document.getElementById('mctrcli-vend').value||'',
@@ -15915,7 +16193,7 @@ function delCtrlCliente(id){
 }
 function exportExcelCtrlClientes(){
   const rows=[['#','Nombre','Celular','Email','Vendedor','Estado','Interés','Cómo llegó','Notas','Fecha']];
-  ctrlClientes.forEach((x,i)=>{const vnd=clientes.find(c=>c.id===x.vendId);rows.push([i+1,x.nombre,x.cel||'',x.email||'',vnd?vnd.nombre:'',x.estado||'',x.interes||'',x.como||'',x.notas||'',x.fecha||'']);});
+  ctrlClientes.filter(ctrlVisible).forEach((x,i)=>{const vnd=clientes.find(c=>c.id===x.vendId);rows.push([i+1,x.nombre,x.cel||'',x.email||'',vnd?vnd.nombre:'',x.estado||'',x.interes||'',x.como||'',x.notas||'',x.fecha||'']);});
   exportarExcelConFormato(rows,'control_clientes','Control de Clientes');
 }
 
@@ -26180,7 +26458,7 @@ function renderPizMarcas(){
 
   // Clientes citados por vendedor, en el mes seleccionado (req #12)
   const citasPorNombre={};
-  ctrlClientes.forEach(c=>{
+  ctrlClientes.filter(ctrlVisible).forEach(c=>{
     if(!c.cita||!c.cita.startsWith(mes))return;
     const vnd=clientes.find(x=>x.id===c.vendId);
     const nombre=c.vendNombre||vnd?.nombre;
@@ -26461,7 +26739,7 @@ function generarCalendarioCitas(mes){
   const hoy=new Date();hoy.setHours(0,0,0,0);
   // Mapa de citas por día del mes: día -> [{nombre, cel}]
   const citasPorDia={};
-  ctrlClientes.forEach(c=>{
+  ctrlClientes.filter(ctrlVisible).forEach(c=>{
     if(!c.cita||!c.cita.startsWith(mes))return;
     const dia=parseInt(c.cita.split('-')[2],10);
     if(!citasPorDia[dia])citasPorDia[dia]=[];
@@ -26490,7 +26768,7 @@ function generarCalendarioCitas(mes){
 }
 function mostrarCitasDelDia(dia,mes){
   const fecha=`${mes}-${String(dia).padStart(2,'0')}`;
-  const citas=ctrlClientes.filter(c=>c.cita===fecha);
+  const citas=ctrlClientes.filter(ctrlVisible).filter(c=>c.cita===fecha);
   if(!citas.length)return;
   alert('📅 Citas del '+fecha+':\n\n'+citas.map(c=>{
     const vnd=clientes.find(x=>x.id===c.vendId);
