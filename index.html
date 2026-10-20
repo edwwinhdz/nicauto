@@ -1856,31 +1856,28 @@ body.no-delete .confirmDelete{display:none!important}
         </div>
         <div class="form-group" style="margin:0"><label>No. Recibo / Ref.</label><input id="mv-recibo" placeholder="REC-001…"></div>
       </div>
-      <div class="form-row" style="margin-bottom:0;margin-top:.625rem">
-        <div class="form-group" style="margin:0"><label>¿De dónde sale el dinero? (Reporte de Caja)</label>
-          <select id="mv-pagacaja" onchange="mvMostrarBancos()">
-            <option value="">No sale de caja (banco, tarjeta o cheque)</option>
-            <option value="cajafuerte">Caja fuerte</option>
-            <option value="cashjulio">Cash Julio M (Gerencia)</option>
-          </select>
-          <p style="font-size:10px;color:var(--text3);margin-top:3px">Si sale de Caja fuerte o Cash Julio M, la compra aparece sola como salida en Egresos de la caja del día de compra.</p>
+      <select id="mv-pagacaja" style="display:none"><option value=""></option><option value="cajafuerte"></option><option value="cashjulio"></option></select>
+      <div id="mv-pagos-box" style="margin-top:.625rem;background:#fff;border:1px dashed #74C0FC;border-radius:8px;padding:.6rem">
+        <label style="font-size:11px;font-weight:700;color:var(--blue)"><i class="ti ti-wallet"></i> ¿De dónde sale el dinero? — hasta 3 formas de pago</label>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">1.</span>
+          <select id="mv-pf-fuente-0" onchange="mvPfCambio(0)" style="flex:1;min-width:150px"><option value="">— ¿De dónde sale? —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
+          <select id="mv-pf-banco-0" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <input id="mv-pf-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el costo)" style="width:170px">
         </div>
-      </div>
-      <div id="mv-bancos-box" style="display:none;margin-top:.625rem;background:#fff;border:1px dashed #74C0FC;border-radius:8px;padding:.6rem">
-        <label style="font-size:11px;font-weight:700;color:var(--blue)"><i class="ti ti-building-bank"></i> ¿De qué banco(s) salió la transferencia? (cuentas de Don Julio M)</label>
-        <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
-          <select id="mv-banco-0" style="flex:1"><option value="">— Elegir banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
-          <input id="mv-banco-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el costo)" style="width:170px">
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">2.</span>
+          <select id="mv-pf-fuente-1" onchange="mvPfCambio(1)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
+          <select id="mv-pf-banco-1" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <input id="mv-pf-monto-1" type="number" step="0.01" placeholder="Monto" style="width:170px">
         </div>
-        <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
-          <select id="mv-banco-1" style="flex:1"><option value="">— otro banco (opcional) —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
-          <input id="mv-banco-monto-1" type="number" step="0.01" placeholder="Monto" style="width:170px">
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">3.</span>
+          <select id="mv-pf-fuente-2" onchange="mvPfCambio(2)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
+          <select id="mv-pf-banco-2" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <input id="mv-pf-monto-2" type="number" step="0.01" placeholder="Monto" style="width:170px">
         </div>
-        <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
-          <select id="mv-banco-2" style="flex:1"><option value="">— otro banco (opcional) —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
-          <input id="mv-banco-monto-2" type="number" step="0.01" placeholder="Monto" style="width:170px">
-        </div>
-        <p style="font-size:10px;color:var(--text3);margin-top:4px">La compra sale sola como <b>Salida</b> en la hoja <b>Bancos</b> de la cuenta elegida, con la fecha de compra. Si se pagó desde dos bancos, poné el monto de cada uno.</p>
+        <p style="font-size:10px;color:var(--text3);margin-top:4px"><b>Caja fuerte</b> → sale en Egresos del Reporte de Caja · <b>Fondo JM</b> → sale como Egreso en Fondos JM · <b>Banco</b> → sale como Salida en la hoja Bancos (cuentas de Don Julio M). Todo con la fecha de compra. Si es una sola forma de pago, dejá el monto vacío y toma todo el costo.</p>
       </div>
       <div class="form-row" style="margin-bottom:0">
         <div class="form-group" style="margin:0"><label>Agente de compra</label><select id="mv-agentecompra"><option value="">-- Seleccionar --</option></select></div>
@@ -2079,6 +2076,28 @@ body.no-delete .confirmDelete{display:none!important}
           </select>
         </div>
       </div>
+      <div style="background:#fff;border:1px dashed #74C0FC;border-radius:8px;padding:.6rem;margin-bottom:.75rem">
+        <label style="font-size:11px;font-weight:700;color:var(--blue)"><i class="ti ti-building-bank"></i> Depósitos / transferencias del cliente — hasta 3, de diferentes bancos</label>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">1.</span>
+          <select id="mvt-dep-banco-0" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <input id="mvt-dep-monto-0" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
+          <input id="mvt-dep-ref-0" placeholder="No. recibo / ref." style="width:140px">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">2.</span>
+          <select id="mvt-dep-banco-1" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <input id="mvt-dep-monto-1" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
+          <input id="mvt-dep-ref-1" placeholder="No. recibo / ref." style="width:140px">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">3.</span>
+          <select id="mvt-dep-banco-2" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <input id="mvt-dep-monto-2" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
+          <input id="mvt-dep-ref-2" placeholder="No. recibo / ref." style="width:140px">
+        </div>
+        <p style="font-size:10px;color:var(--text3);margin-top:4px">Cada depósito cae en la columna de su banco en el Reporte de Caja y se resta del cash a recibir. (El "Monto Bancario" de arriba queda para financiamiento del banco.)</p>
+      </div>
       <div class="form-row">
         <div class="form-group"><label>Canje — vehículo recibido</label><input id="mvt-canje-desc" placeholder="Marca, modelo, año del vehículo en canje…"></div>
         <div class="form-group"><label>Valor del canje (USD $)</label><input class="calc-input" id="mvt-canje-valor" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()"></div>
@@ -2093,6 +2112,7 @@ body.no-delete .confirmDelete{display:none!important}
           <span style="color:var(--text2)">Precio de venta:</span><span id="liq-precio" style="font-weight:600;text-align:right"></span>
           <span style="color:var(--text2)">− Anticipo:</span><span id="liq-anticipo" style="color:var(--amber);text-align:right"></span>
           <span style="color:var(--text2)">− Bancario:</span><span id="liq-bancario" style="color:var(--blue);text-align:right"></span>
+          <span style="color:var(--text2)">− Depósitos:</span><span id="liq-depositos" style="color:var(--blue);text-align:right"></span>
           <span style="color:var(--text2)">− Canje:</span><span id="liq-canje" style="color:var(--purple);text-align:right"></span>
           <span style="color:var(--text2)">= Cash a recibir:</span><span id="liq-saldo" style="font-weight:700;font-size:14px;text-align:right"></span>
         </div>
@@ -4557,7 +4577,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-1320';
+const APP_VERSION='2026-10-20-1820';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -6836,6 +6856,55 @@ function verDetalleVentasBuenasMalas(tipo){
   div.onclick=e=>{if(e.target===div)div.remove();};
   document.body.appendChild(div);
 }
+// ======================== COMISIONES DIRECTAS (otros ingresos por ventas externas) ========================
+// Comisiones que gana Nicauto por ventas que NO son de su inventario. Se suman como ingreso en
+// el resumen de Ventas: Ganancia + Reembolso + Comisiones directas. Van por mes (fecha).
+function getComisionesDirectas(){return(contData.comisionesDirectas||[]).filter(c=>c&&!c.anulado);}
+function mesesVentasCerrados(){return new Set((contData.cierresVentasMensuales||[]).map(c=>c.mes));}
+function comisionesDirectasDeMeses(meses){return getComisionesDirectas().filter(c=>meses.has((c.fecha||'').slice(0,7)));}
+function comisionesDirectasAbiertas(){const cerr=mesesVentasCerrados();return getComisionesDirectas().filter(c=>!cerr.has((c.fecha||'').slice(0,7)));}
+function abrirComisionesDirectas(){
+  const puede=MODO==='admin'||MODO==='gerente1'||MODO==='gerente2'||MODO==='jefecomercial';
+  const lista=getComisionesDirectas().slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const cerr=mesesVentasCerrados();
+  let ov=document.getElementById('ov-comdir');
+  if(!ov){ov=document.createElement('div');ov.className='overlay';ov.id='ov-comdir';document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="modal" style="max-width:760px">
+    <div class="modal-head"><h3><i class="ti ti-coin"></i> Comisiones directas — ventas externas</h3><button class="btn-ghost btn" onclick="closeOv('ov-comdir')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      ${puede?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;background:var(--surface2);border-radius:8px;padding:.6rem;margin-bottom:.75rem;font-size:12px">
+        <div><label style="font-size:10px;display:block">Fecha</label><input type="date" id="cd-fecha" value="${hoyLocal()}" style="padding:4px"></div>
+        <div style="flex:1;min-width:180px"><label style="font-size:10px;display:block">Concepto (vehículo / cliente / quién vendió)</label><input id="cd-concepto" style="padding:4px;width:100%"></div>
+        <div><label style="font-size:10px;display:block">No. Recibo</label><input id="cd-recibo" style="padding:4px;width:100px"></div>
+        <div><label style="font-size:10px;display:block">Monto US$</label><input id="cd-monto" type="number" step="0.01" style="padding:4px;width:100px"></div>
+        <button class="btn btn-sm btn-primary" onclick="guardarComisionDirecta()"><i class="ti ti-plus"></i> Agregar</button>
+      </div>`:''}
+      <table class="tbl tbl-grid" style="font-size:12px"><thead><tr><th>Fecha</th><th>Concepto</th><th>Recibo</th><th style="text-align:right">Monto</th><th>Mes</th><th>Registró</th>${puede?'<th></th>':''}</tr></thead>
+      <tbody>${lista.length?lista.map(c=>{const m=(c.fecha||'').slice(0,7);return`<tr><td>${c.fecha||'—'}</td><td>${c.concepto||'—'}</td><td>${c.recibo||'—'}</td><td style="text-align:right;font-weight:700;color:var(--green)">${fmtD(c.monto)}</td><td style="font-size:11px">${labelMes(m)}${cerr.has(m)?' <span class="badge badge-gray" style="font-size:9px">cerrado</span>':''}</td><td style="font-size:11px">${c.registradoPor||''}</td>${puede?`<td>${cerr.has(m)?'':`<button class="btn btn-sm btn-danger" onclick="eliminarComisionDirecta('${c.id}')"><i class="ti ti-trash"></i></button>`}</td>`:''}</tr>`;}).join(''):`<tr><td colspan="${puede?7:6}" style="text-align:center;color:var(--text3);padding:1rem">Todavía no hay comisiones directas registradas</td></tr>`}</tbody></table>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeOv('ov-comdir')">Cerrar</button></div>
+  </div>`;
+  openOv('ov-comdir');
+}
+async function guardarComisionDirecta(){
+  const fecha=document.getElementById('cd-fecha').value||hoyLocal();
+  const concepto=document.getElementById('cd-concepto').value.trim();
+  const monto=parseFloat(document.getElementById('cd-monto').value)||0;
+  const recibo=document.getElementById('cd-recibo').value.trim();
+  if(!concepto||!(monto>0)){alert('Poné el concepto y el monto de la comisión.');return;}
+  if(mesesVentasCerrados().has(fecha.slice(0,7))){alert(`⚠️ El mes ${labelMes(fecha.slice(0,7))} de Ventas ya está cerrado. Reabrilo o usá otra fecha.`);return;}
+  contData.comisionesDirectas=contData.comisionesDirectas||[];
+  contData.comisionesDirectas.push({id:uid(),fecha,concepto,monto:Number(monto.toFixed(2)),recibo,registradoPor:getNombreUsuario(),registradoFecha:hoyLocal()});
+  await saveOne('contable',{id:'main',...contData});
+  abrirComisionesDirectas();renderVtas();
+}
+async function eliminarComisionDirecta(id){
+  const c=(contData.comisionesDirectas||[]).find(x=>x.id===id);if(!c)return;
+  if(!confirm(`¿Eliminar la comisión directa "${c.concepto}" de ${fmtD(c.monto)}?`))return;
+  c.anulado=true;c.anuladoPor=getNombreUsuario();c.anuladoFecha=hoyLocal();
+  await saveOne('contable',{id:'main',...contData});
+  abrirComisionesDirectas();renderVtas();
+}
 function renderVtasTotals(data){
   const tfoot=document.getElementById('tfoot-vtas');
   if(!tfoot)return;
@@ -6857,7 +6926,8 @@ function renderVtasTotals(data){
   const mesActualVtas=mesActualLocal();
   const totReclamosVtas=(contData.gastos||[]).filter(g=>esGastoReclamo(g)&&(g.fecha||'').slice(0,7)===mesActualVtas).reduce((s,g)=>s+Number(g.monto||0),0);
   const totCostosFijos=getTotalCostosFijos();
-  const totGanReembolso=totGan+totReembolso;
+  const totComDir=comisionesDirectasAbiertas().reduce((s,c)=>s+Number(c.monto||0),0);
+  const totGanReembolso=totGan+totReembolso+totComDir;
   const totResultado=totGanReembolso-totReclamosVtas-totCostosFijos;
   // % que representa cuánto FALTA por cubrir de los costos (Reclamos + Costos Fijos) con la
   // Ganancia + Reembolso disponible. Si la ganancia ya cubre todo, el % de faltante es 0.
@@ -6882,8 +6952,12 @@ function renderVtasTotals(data){
     <td colspan="11" style="padding:8px 14px;text-align:right;font-weight:700">Total Ventas + Reembolso:</td>
     <td colspan="6" style="padding:8px 14px;font-weight:800;color:var(--green)">${fmtD(totVentaConReembolso)}</td>
   </tr>
+  <tr style="border-top:1px solid var(--border)">
+    <td colspan="11" style="padding:8px 14px;text-align:right;font-weight:600;color:var(--text2)">Comisiones directas (ingresos por ventas externas) <button class="btn btn-sm" onclick="abrirComisionesDirectas()" style="margin-left:6px"><i class="ti ti-coin"></i> Ver / agregar</button></td>
+    <td colspan="6" style="padding:8px 14px;font-weight:700;color:var(--green)">${fmtD(totComDir)}</td>
+  </tr>
   <tr style="border-top:1px solid var(--border);background:var(--green-light)">
-    <td colspan="11" style="padding:8px 14px;text-align:right;font-weight:700">Total Ganancia + Reembolso:</td>
+    <td colspan="11" style="padding:8px 14px;text-align:right;font-weight:700">Total Ganancia + Reembolso + Comisiones directas:</td>
     <td colspan="6" style="padding:8px 14px;font-weight:800;color:var(--green)">${fmtD(totGanReembolso)}</td>
   </tr>
   <tr style="border-top:1px solid var(--border)">
@@ -6895,7 +6969,7 @@ function renderVtasTotals(data){
     <td colspan="6" style="padding:8px 14px;font-weight:700;color:var(--amber)">${fmtD(totCostosFijos)}</td>
   </tr>
   <tr style="border-top:2px solid var(--text);background:${totResultado>=0?'var(--green-light)':'var(--red-light)'}">
-    <td colspan="11" style="padding:10px 14px;text-align:right;font-weight:800;font-size:13px">TOTAL RESULTADO (Ganancia + Reembolso − Reclamos − Costos Fijos):</td>
+    <td colspan="11" style="padding:10px 14px;text-align:right;font-weight:800;font-size:13px">TOTAL RESULTADO (Ganancia + Reembolso + Comisiones directas − Reclamos − Costos Fijos):</td>
     <td colspan="6" style="padding:10px 14px;font-weight:900;font-size:15px;color:${totResultado>=0?'var(--green)':'var(--red)'}">${fmtD(totResultado)} <span style="font-size:12px;font-weight:700;color:${pctResultado>0?'var(--red)':'var(--green)'}">(${pctResultado>0?'falta cubrir '+pctResultado.toFixed(2)+'% de costos':'costos 100% cubiertos'})</span></td>
   </tr>`;
 }
@@ -6919,12 +6993,13 @@ function calcularTotalesVentas(data){
   const mesActualVtas=mesActualLocal();
   const totReclamosVtas=(contData.gastos||[]).filter(g=>esGastoReclamo(g)&&(g.fecha||'').slice(0,7)===mesActualVtas).reduce((s,g)=>s+Number(g.monto||0),0);
   const totCostosFijos=getTotalCostosFijos();
-  const totGanReembolso=totGan+totReembolso;
+  const totComDir=comisionesDirectasDeMeses(new Set(data.map(v=>(v.fecha||'').slice(0,7)))).reduce((s,c)=>s+Number(c.monto||0),0);
+  const totGanReembolso=totGan+totReembolso+totComDir;
   const totResultado=totGanReembolso-totReclamosVtas-totCostosFijos;
   const totCostosACubrir=totReclamosVtas+totCostosFijos;
   const faltanteCobertura=Math.max(0,totCostosACubrir-totGanReembolso);
   const pctResultado=totCostosACubrir>0?(faltanteCobertura/totCostosACubrir*100):0;
-  return{cantidad:data.length,totPCompra,totInv,totCom,totVenta,totGan,totReembolso,ventasPropias:ventasPropias.length,
+  return{cantidad:data.length,totPCompra,totInv,totCom,totVenta,totGan,totReembolso,totComDir,ventasPropias:ventasPropias.length,
     totVentaConReembolso,totGanReembolso,totReclamosVtas,totCostosFijos,totResultado,pctResultado};
 }
 const MESES_NOMBRE_LARGO=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -7035,7 +7110,8 @@ function verDetalleCierreVentas(cierreId){
         <div class="stat-card"><div class="stat-label">Reembolso ($218 x ${t.ventasPropias})</div><div class="stat-value">${fmtD(t.totReembolso)}</div></div>
         <div class="stat-card"><div class="stat-label">Total Ventas + Reembolso</div><div class="stat-value stat-green">${fmtD(t.totVentaConReembolso)}</div></div>
         <div class="stat-card"><div class="stat-label">Ganancia</div><div class="stat-value">${fmtD(t.totGan)}</div></div>
-        <div class="stat-card"><div class="stat-label">Total Ganancia + Reembolso</div><div class="stat-value stat-green">${fmtD(t.totGanReembolso??(t.totGan+t.totReembolso))}</div></div>
+        <div class="stat-card"><div class="stat-label">Comisiones directas</div><div class="stat-value stat-green">${fmtD(t.totComDir||0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Total Ganancia + Reembolso + Com. directas</div><div class="stat-value stat-green">${fmtD(t.totGanReembolso??(t.totGan+t.totReembolso))}</div></div>
         <div class="stat-card"><div class="stat-label">Reclamos de clientes</div><div class="stat-value" style="color:var(--red)">(${fmtD(t.totReclamosVtas)})</div></div>
         <div class="stat-card"><div class="stat-label">Costos Fijos del período</div><div class="stat-value" style="color:var(--amber)">${fmtD(t.totCostosFijos)}</div></div>
         <div class="stat-card" style="grid-column:span 3;border:2px solid var(--green)"><div class="stat-label">TOTAL RESULTADO</div><div class="stat-value" style="font-size:22px;color:${t.totResultado>=0?'var(--green)':'var(--red)'}">${fmtD(t.totResultado)}</div><div style="font-size:12px;font-weight:700;color:${(t.pctResultado??0)>0?'var(--red)':'var(--green)'};margin-top:2px">${(()=>{const p=t.pctResultado??(()=>{const cac=(t.totReclamosVtas||0)+(t.totCostosFijos||0);const gr=t.totGanReembolso??((t.totGan||0)+(t.totReembolso||0));const falt=Math.max(0,cac-gr);return cac>0?falt/cac*100:0;})();return p>0?'Falta cubrir '+p.toFixed(2)+'% de costos':'Costos 100% cubiertos';})()}</div></div>
@@ -8936,7 +9012,7 @@ function abrirModalVehiculo(id){
     if(el)el.value=v?v[f]||'':'';
   });
   if(!v){document.getElementById('mv-estado').value='Disponible';document.getElementById('mv-tipo').value='Sedán';document.getElementById('mv-trans').value='Mecánico';}
-  mvCargarBancos(v);
+  mvCargarPagos(v);
   // Numeración automática de recibo de compra (req #9)
   const mvReciboEl=document.getElementById('mv-recibo');
   if(mvReciboEl){
@@ -9054,37 +9130,41 @@ function calcMargenVehiculo(){
 // Al elegir el medio de pago de la compra, se propone de dónde sale el dinero en la caja.
 function mvSugerirPagaCaja(){
   const medio=document.getElementById('mv-mediopago')?.value||'';
-  const sel=document.getElementById('mv-pagacaja');
-  if(!sel)return;
-  if(medio==='Caja (efectivo)'){if(!sel.value)sel.value='cajafuerte';}
-  else sel.value='';
-  mvMostrarBancos();
+  const f0=document.getElementById('mv-pf-fuente-0');
+  if(f0&&!f0.value){if(medio==='Caja (efectivo)')f0.value='cajafuerte';else if(medio==='Banco (transferencia)')f0.value='banco';}
+  [0,1,2].forEach(mvPfCambio);
 }
-// Compra por transferencia: se elige de qué banco(s) salió el dinero (hoja Bancos).
-function mvMostrarBancos(){
-  const box=document.getElementById('mv-bancos-box');if(!box)return;
-  const medio=document.getElementById('mv-mediopago')?.value||'';
-  const caja=document.getElementById('mv-pagacaja')?.value||'';
-  box.style.display=(medio==='Banco (transferencia)'&&!caja)?'block':'none';
+// Formas de pago de la compra (hasta 3): Caja fuerte / Fondo JM / Banco (/ Cash Julio M)
+function mvPfCambio(i){
+  const f=document.getElementById('mv-pf-fuente-'+i)?.value||'';
+  const b=document.getElementById('mv-pf-banco-'+i);if(b)b.style.display=f==='banco'?'':'none';
 }
-function mvCargarBancos(v){
-  const lista=(v&&Array.isArray(v.pagoBancos))?v.pagoBancos:[];
+function pagosCompraDe(v){
+  if(!v)return[];
+  if(Array.isArray(v.pagosCompra))return v.pagosCompra.filter(p=>p&&p.fuente);
+  // Compras anteriores: se arman desde los campos viejos (pagacaja / pagoBancos)
+  const res=[];
+  if(v.pagacaja==='cajafuerte'||v.pagacaja==='cashjulio')res.push({fuente:v.pagacaja,monto:Number(v.costo||0)});
+  (Array.isArray(v.pagoBancos)?v.pagoBancos:[]).forEach(p=>{if(p&&p.banco)res.push({fuente:'banco',banco:p.banco,monto:Number(p.monto||0)});});
+  return res;
+}
+function mvCargarPagos(v){
+  const l=pagosCompraDe(v);
   [0,1,2].forEach(i=>{
-    const s=document.getElementById('mv-banco-'+i),m=document.getElementById('mv-banco-monto-'+i);
-    if(s)s.value=lista[i]?lista[i].banco:'';
-    if(m)m.value=lista[i]&&lista[i].monto!=null&&lista[i].monto!==''?lista[i].monto:'';
+    const f=document.getElementById('mv-pf-fuente-'+i),b=document.getElementById('mv-pf-banco-'+i),m=document.getElementById('mv-pf-monto-'+i);
+    if(f)f.value=l[i]?l[i].fuente:'';if(b)b.value=l[i]&&l[i].banco?l[i].banco:'';
+    if(m)m.value=l[i]&&l[i].monto?l[i].monto:'';
+    mvPfCambio(i);
   });
-  mvMostrarBancos();
 }
-function mvLeerBancos(costo){
+function mvLeerPagos(costo){
   const res=[];
   [0,1,2].forEach(i=>{
-    const b=document.getElementById('mv-banco-'+i)?.value||'';
-    const mRaw=document.getElementById('mv-banco-monto-'+i)?.value;
-    if(!b)return;
-    res.push({banco:b,monto:mRaw===''||mRaw==null?null:Number(mRaw)});
+    const fuente=document.getElementById('mv-pf-fuente-'+i)?.value||'';
+    if(!fuente)return;
+    const mRaw=document.getElementById('mv-pf-monto-'+i)?.value;
+    res.push({fuente,banco:fuente==='banco'?(document.getElementById('mv-pf-banco-'+i)?.value||''):'',monto:mRaw===''||mRaw==null?null:Number(mRaw)});
   });
-  // Un solo banco sin monto = todo el costo de compra
   if(res.length===1&&res[0].monto==null)res[0].monto=Number(costo||0);
   return res;
 }
@@ -9093,22 +9173,23 @@ function guardarVehiculo(){
   const vals={};f.forEach(k=>{const el=document.getElementById('mv-'+k);if(el)vals[k]=el.value;});
   if(!vals.marca||!vals.modelo){alert('Marca y modelo son obligatorios');return;}
   vals.compraConfirmada=!!document.getElementById('mv-confirmarcompra')?.checked;
-  // Transferencia bancaria: banco(s) de donde salió el dinero → salida automática en hoja Bancos
-  if(vals.mediopago==='Banco (transferencia)'&&!vals.pagacaja){
-    const pb=mvLeerBancos(vals.costo);
-    if(pb.some(x=>x.monto==null||!(x.monto>0))){alert('Poné el monto de cada banco (o dejá un solo banco sin monto para que tome todo el costo).');return;}
-    const suma=pb.reduce((s,x)=>s+x.monto,0);
-    if(pb.length&&Math.abs(suma-Number(vals.costo||0))>0.009&&!confirm(`Los montos de los bancos suman ${fmtD(suma)} y el costo del vehículo es ${fmtD(Number(vals.costo||0))}.\n\n¿Guardar así de todos modos?`))return;
-    if(!pb.length&&!document.getElementById('mv-id').value){alert('Elegí de qué banco salió la transferencia para esta compra.');return;}
-    vals.pagoBancos=pb;
-  } else vals.pagoBancos=[];
-  // Salida de caja por la compra: va en el día de la fecha de compra (o hoy, si no tiene).
-  if(vals.pagacaja){
+  // Formas de pago de la compra (hasta 3) → Caja fuerte (Reporte de Caja), Fondo JM, Banco (hoja Bancos)
+  {
+    const pagos=mvLeerPagos(vals.costo);
+    if(pagos.some(p=>p.monto==null||!(p.monto>0))){alert('Poné el monto de cada forma de pago (o dejá una sola sin monto para que tome todo el costo).');return;}
+    if(pagos.some(p=>p.fuente==='banco'&&!p.banco)){alert('Elegí el banco de donde salió la transferencia.');return;}
+    if(pagos.length&&!(parseFloat(vals.costo)>0)){alert('Para registrar de dónde sale el dinero hace falta el costo (precio de compra) del vehículo.');return;}
+    const suma=pagos.reduce((s,p)=>s+p.monto,0);
+    if(pagos.length&&Math.abs(suma-Number(vals.costo||0))>0.009&&!confirm(`Las formas de pago suman ${fmtD(suma)} y el costo del vehículo es ${fmtD(Number(vals.costo||0))}.\n\n¿Guardar así de todos modos?`))return;
+    const esNuevoV=!document.getElementById('mv-id').value;
+    if(esNuevoV&&!pagos.length&&(vals.mediopago==='Caja (efectivo)'||vals.mediopago==='Banco (transferencia)')){alert('Indicá de dónde sale el dinero de esta compra (Caja fuerte, Fondo JM o Banco).');return;}
+    vals.pagosCompra=pagos;
+    vals.pagacaja='';vals.pagoBancos=[];
+    vals.fechaPagoCaja=vals.fechacompra||hoyLocal();
     const vPrev=vehiculos.find(v=>v.id===document.getElementById('mv-id').value);
-    vals.fechaPagoCaja=vals.fechacompra||vPrev?.fechaPagoCaja||hoyLocal();
-    if(!(parseFloat(vals.costo)>0)){alert('Para registrar la salida de caja hace falta el costo (precio de compra) del vehículo.');return;}
-    try{if(cdCierreDe(vals.fechaPagoCaja)&&!(vPrev&&vPrev.pagacaja===vals.pagacaja&&(vPrev.fechacompra||vPrev.fechaPagoCaja)===vals.fechaPagoCaja))
-      alert(`⚠️ La caja del ${vals.fechaPagoCaja} ya está cerrada, así que esta salida NO va a aparecer en ese cierre.\n\nSi corresponde a ese día, el Administrador tiene que reabrir la caja del ${vals.fechaPagoCaja} y volver a cerrarla.`);}catch(e){}
+    const usaCaja=pagos.some(p=>p.fuente==='cajafuerte'||p.fuente==='cashjulio');
+    const yaEstaba=vPrev&&pagosCompraDe(vPrev).some(p=>p.fuente==='cajafuerte'||p.fuente==='cashjulio')&&(vPrev.fechacompra||vPrev.fechaPagoCaja)===vals.fechaPagoCaja;
+    if(usaCaja&&!yaEstaba){try{if(cdCierreDe(vals.fechaPagoCaja))alert(`⚠️ La caja del ${vals.fechaPagoCaja} ya está cerrada, así que esta salida NO va a aparecer en ese cierre.\n\nSi corresponde a ese día, el Administrador tiene que reabrir la caja del ${vals.fechaPagoCaja} y volver a cerrarla.`);}catch(e){}}
   }
   const id=document.getElementById('mv-id').value||uid();
   const esNuevo=!vehiculos.find(v=>v.id===id);
@@ -10149,6 +10230,7 @@ function abrirModalVenta(id){
     const elCanjeDesc=document.getElementById('mvt-canje-desc');if(elCanjeDesc)elCanjeDesc.value=v.canjeDesc||'';
     const elCanjeValor=document.getElementById('mvt-canje-valor');if(elCanjeValor)elCanjeValor.value=parseFloat(v.canjeValor||0).toFixed(2);
     const elCash=document.getElementById('mvt-cash');if(elCash)elCash.value=parseFloat(v.cash||0).toFixed(2);
+    mvtCargarDepositos(v);
     const elNombreFact=document.getElementById('mvt-nombre-factura');if(elNombreFact)elNombreFact.value=v.nombreFactura||'';
     const elCedulaFact=document.getElementById('mvt-cedula-factura');if(elCedulaFact)elCedulaFact.value=v.cedulaFactura||'';
     const liqV=document.getElementById('mvt-liquidacion');if(liqV)liqV.style.display='none';
@@ -10161,6 +10243,7 @@ function abrirModalVenta(id){
     ['anticipo','bancario','canje-valor','cash','comision'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
     if(document.getElementById('mvt-banco'))document.getElementById('mvt-banco').value='';
     if(document.getElementById('mvt-bancario-tipo'))document.getElementById('mvt-bancario-tipo').value='financiamiento';
+    mvtCargarDepositos(null);
     ['recibo-anticipo','recibo-banco','canje-desc','recibo','nombre-factura','cedula-factura'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
     if(document.getElementById('mvt-tel1'))document.getElementById('mvt-tel1').value='';
     if(document.getElementById('mvt-tel2'))document.getElementById('mvt-tel2').value='';
@@ -10266,6 +10349,26 @@ function autoFill(){
   calcLiquidacion();
 }
 
+// Depósitos del cliente en la venta (hasta 3, de diferentes bancos)
+const CD_BANCO_DEP_COL={'BAC':'bac','BAC GO':'bacgisselle','La Fise':'lafise','Ficohsa':'ficohsa','Banpro':'banpro','Credex':'credex'};
+function mvtLeerDepositos(){
+  const res=[];
+  [0,1,2].forEach(i=>{
+    const banco=document.getElementById('mvt-dep-banco-'+i)?.value||'';
+    const monto=parseFloat(document.getElementById('mvt-dep-monto-'+i)?.value||0)||0;
+    const ref=(document.getElementById('mvt-dep-ref-'+i)?.value||'').trim();
+    if(banco||monto)res.push({banco,monto,ref});
+  });
+  return res;
+}
+function mvtCargarDepositos(v){
+  const l=(v&&Array.isArray(v.depositos))?v.depositos:[];
+  [0,1,2].forEach(i=>{
+    const b=document.getElementById('mvt-dep-banco-'+i),m=document.getElementById('mvt-dep-monto-'+i),r=document.getElementById('mvt-dep-ref-'+i);
+    if(b)b.value=l[i]?l[i].banco||'':'';if(m)m.value=l[i]&&l[i].monto?Number(l[i].monto).toFixed(2):'';if(r)r.value=l[i]?l[i].ref||'':'';
+  });
+}
+function totalDepositosVenta(v){return(Array.isArray(v&&v.depositos)?v.depositos:[]).reduce((s,d)=>s+Number(d.monto||0),0);}
 function calcLiquidacion(){
   const precio=parseFloat(document.getElementById('mvt-precio').value)||0;
   const costo=parseFloat(document.getElementById('mvt-costo').value)||0;
@@ -10273,7 +10376,8 @@ function calcLiquidacion(){
   const bancario=parseFloat(document.getElementById('mvt-bancario').value)||0;
   const canje=parseFloat(document.getElementById('mvt-canje-valor').value)||0;
   const comision=parseFloat(document.getElementById('mvt-comision').value)||0;
-  const saldo=precio-anticipo-bancario-canje;
+  const depositos=mvtLeerDepositos().reduce((s,d)=>s+d.monto,0);
+  const saldo=precio-anticipo-bancario-canje-depositos;
   const vid=document.getElementById('mvt-vehiculo').value;
   const v=buscarVehiculoPropioOGer(vid);
   const reps=v?(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo),0):0;
@@ -10286,6 +10390,7 @@ function calcLiquidacion(){
     document.getElementById('liq-anticipo').textContent=anticipo>0?'-'+fmtD(anticipo):'$0.00';
     document.getElementById('liq-bancario').textContent=bancario>0?'-'+fmtD(bancario):'$0.00';
     document.getElementById('liq-canje').textContent=canje>0?'-'+fmtD(canje):'$0.00';
+    const elDep=document.getElementById('liq-depositos');if(elDep)elDep.textContent=depositos>0?'-'+fmtD(depositos):'$0.00';
     document.getElementById('liq-saldo').textContent=fmtD(Math.max(saldo,0));
     document.getElementById('liq-saldo').style.color=saldo>=0?'var(--green)':'var(--red)';
     document.getElementById('liq-costo').textContent=fmtD(costoTotal);
@@ -10459,6 +10564,9 @@ async function guardarVenta(){
   const ventaConfirmada=!!document.getElementById('mvt-confirmarventa')?.checked;
 
   if(!vehiculoId||!precio){alert('Vehículo y precio de venta son obligatorios');return;}
+  const depositos=mvtLeerDepositos();
+  if(depositos.some(d=>!d.banco||!(d.monto>0))){alert('⚠️ En cada depósito elegí el banco y poné el monto (o dejá la fila vacía).');return;}
+  const totDep=depositos.reduce((s,d)=>s+d.monto,0);
   if(bancario>0&&bancarioTipo!=='transferencia'&&!banco){alert('⚠️ Hay un monto financiado por banco: elegí el banco ("Banco del depósito") para que la Cuenta por Cobrar quede a nombre de ese banco.');return;}
 
   // Handle consignacion vehicles
@@ -10475,7 +10583,9 @@ async function guardarVenta(){
 
   // Determinar forma de pago
   let pago='Contado';
-  if(bancario>0&&cash>0)pago='Mixto (Cash + Banco)';
+  if(totDep>0&&(cash>0||bancario>0||canjeValor>0))pago='Mixto (Depósitos'+(cash>0?' + Cash':'')+(bancario>0?' + Banco':'')+(canjeValor>0?' + Canje':'')+')';
+  else if(totDep>0)pago='Depósito / Transferencia';
+  else if(bancario>0&&cash>0)pago='Mixto (Cash + Banco)';
   else if(bancario>0)pago='Financiado/Banco';
   else if(canjeValor>0&&cash>0)pago='Mixto (Cash + Canje)';
   else if(canjeValor>0)pago='Canje';
@@ -10490,6 +10600,7 @@ async function guardarVenta(){
     comision:comision.toFixed(2),notas,recibo,contacto,
     anticipo:anticipo.toFixed(2),reciboAnticipo,
     bancario:bancario.toFixed(2),bancarioTipo,reciboBanco,banco,
+    depositos:depositos.map(d=>({banco:d.banco,monto:Number(d.monto.toFixed(2)),ref:d.ref})),
     canjeDesc,canjeValor:canjeValor.toFixed(2),
     cash:cash.toFixed(2),
     nombreFactura,cedulaFactura,tel1,tel2,
@@ -10601,6 +10712,13 @@ async function guardarVenta(){
         desc:`DÉBITO CAJA: ${descVeh} | Efectivo: ${fmtD(cash)}`});
     }
 
+    // 4b. DÉBITO Banco — depósitos del cliente (hasta 3, cada uno en su banco)
+    depositos.forEach(d=>{
+      contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Ingreso',medio:'Banco (transferencia)',banco:d.banco,
+        monto:d.monto,cat:'Venta de vehículo',ref:d.ref||recibo,
+        persona:compNombre,vehId:vehiculoId,
+        desc:`DÉBITO BANCO ${d.banco}: ${descVeh} | Depósito: ${fmtD(d.monto)} | Ref: ${d.ref||''}`});
+    });
     // 4. DÉBITO Banco — transferencia recibida
     if(bancario>0){
       contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Ingreso',medio:'Banco (transferencia)',
@@ -10661,6 +10779,9 @@ async function guardarVenta(){
         monto:cash,fecha,ref:recibo||id,comprobanteId,
         concepto:`Venta: ${descVeh} — Efectivo`,cuentaContable:'Venta de vehículo'});
     }
+    depositos.forEach(d=>contData.auxiliares.push({id:uid(),persona:'edwin',tipo:'Entrada',medio:'Transferencia',
+        monto:d.monto,fecha,ref:d.ref||recibo||id,comprobanteId,
+        concepto:`Venta: ${descVeh} — Depósito ${d.banco}`,cuentaContable:'Venta de vehículo'}));
     if(bancario>0){
       contData.auxiliares.push({id:uid(),persona:'edwin',tipo:'Entrada',medio:'Transferencia',
         monto:bancario,fecha,ref:reciboBanco||recibo||id,comprobanteId,
@@ -11035,7 +11156,7 @@ function puedeEditarFondoPersonal(clave){
   return false;
 }
 function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
-  const filas=ensureFondoPersonal(clave);
+  const filas=[...ensureFondoPersonal(clave),...(clave==='fondosJM'?fondosJMMovsCompras():[])];
   const puedeEditar=puedeEditarFondoPersonal(clave);
   const simbolo=clave==='fondosJM'?'$':'C$'; // Fondos JM se lleva en dólares; Fondos GO sigue en córdobas
   let saldo=0;
@@ -11065,17 +11186,17 @@ function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
     <tbody>${conSaldo.length?conSaldo.map(f=>`<tr>
       <td>${f.fechaIngreso||'—'}</td><td>${f.fechaPago||'—'}</td>
       <td><span class="badge ${f.tipo==='Ingreso'?'badge-green':'badge-red'}">${f.tipo}</span></td>
-      <td>${f.detalle||'—'}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
+      <td>${f.detalle||'—'}${f.auto?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':''}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
       <td style="color:${f.tipo==='Ingreso'?'var(--green)':'var(--red)'};font-weight:700">${f.tipo==='Ingreso'?'+':'-'}${simbolo} ${fmtNio(f.monto)}</td>
       <td style="font-weight:700">${simbolo} ${fmtNio(f.saldoCorrido)}</td>
-      ${puedeEditar?`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
+      ${puedeEditar?f.auto?`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
     </tr>`).join(''):`<tr><td colspan="${puedeEditar?10:9}" style="text-align:center;color:var(--text3);padding:1.5rem">Sin movimientos registrados todavía</td></tr>`}</tbody>
   </table>`;
 }
 async function exportExcelFondoPersonal(clave){
   const simbolo=clave==='fondosJM'?'US$':'C$';
   const rows=[['Fecha Ingreso','Fecha Pago','Tipo','Detalle','Clasificación','Placa','Forma de Pago',`Monto (${simbolo})`,'Registrado por']];
-  ensureFondoPersonal(clave).forEach(f=>rows.push([f.fechaIngreso||'',f.fechaPago||'',f.tipo||'',f.detalle||'',f.clasificacion||'',f.placa||'',f.formaPago||'',f.monto||0,f.registradoPor||'']));
+  [...ensureFondoPersonal(clave),...(clave==='fondosJM'?fondosJMMovsCompras():[])].forEach(f=>rows.push([f.fechaIngreso||'',f.fechaPago||'',f.tipo||'',f.detalle||'',f.clasificacion||'',f.placa||'',f.formaPago||'',f.monto||0,f.registradoPor||'']));
   await exportarExcelConFormato(rows,(clave==='fondosJM'?'fondos_jm':'fondos_go')+'_nicauto',clave==='fondosJM'?'Fondos JM':'Fondos GO');
 }
 // Reinicia una hoja de Fondo Personal (JM o GO) para empezar una cuenta nueva — archiva TODOS
@@ -12011,10 +12132,10 @@ function bancosMovsDesdeCaja(){
 function bancosMovsDesdeCompras(){
   const res=[];
   (vehiculos||[]).forEach(v=>{
-    if(!Array.isArray(v.pagoBancos)||!v.pagoBancos.length)return;
-    if(v.mediopago&&v.mediopago!=='Banco (transferencia)')return;
+    const lista=pagosCompraDe(v).filter(p=>p.fuente==='banco');
+    if(!lista.length)return;
     const desc=`Compra de ${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.placa?' — '+v.placa:''}${v.nombrecomprador?' (a '+v.nombrecomprador+')':''}`;
-    v.pagoBancos.forEach((p,i)=>{
+    lista.forEach((p,i)=>{
       if(!p||!p.banco||!(Number(p.monto)>0))return;
       res.push({id:'VC_'+v.id+'_'+i,cuenta:p.banco,fecha:v.fechacompra||'',tipo:'egreso',monto:Number(p.monto),auto:true,autoCompra:true,vehId:v.id,desc,ref:v.recibo||''});
     });
@@ -12023,7 +12144,7 @@ function bancosMovsDesdeCompras(){
 }
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
-  return[...bancosMovsDesdeCaja().filter(m=>m.cuenta===k),...bancosMovsDesdeCompras().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  return[...bancosMovsDesdeCaja().filter(m=>m.cuenta===k),...bancosMovsDesdeCompras().filter(m=>m.cuenta===k),...bancosMovsDesdeCajaEgresos().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
 }
 function bancoSaldo(k,hasta){
   const ini=bancoSaldoInicial(k);
@@ -12064,8 +12185,26 @@ function cajaFuerte1Saldo(hasta){
   try{const h=cdCalcular(hasta||hoyLocal());return Number((h.saldoFinal&&h.saldoFinal.cajafuerte)||0);}catch(e){console.warn('cajaFuerte1Saldo',e);return 0;}
 }
 // Caja Fuerte #2: saldo de la hoja Fondos JM (ingresos − egresos) hasta la fecha de corte.
+// Egresos automáticos en Fondos JM por compras de vehículos pagadas con "Fondo JM".
+// Solo cuentan las compras desde el último reinicio de la hoja (para no arrastrar cuentas cerradas).
+function fondosJMMovsCompras(){
+  const hist=contData.fondosJMHistorial||[];
+  const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
+  const res=[];
+  (vehiculos||[]).forEach(v=>{
+    pagosCompraDe(v).forEach((p,i)=>{
+      if(p.fuente!=='fondojm'||!(Number(p.monto)>0))return;
+      const f=v.fechacompra||v.fechaPagoCaja||'';
+      if(desde&&f&&f<=desde)return;
+      res.push({id:'FJC_'+v.id+'_'+i,auto:true,vehId:v.id,tipo:'Egreso',monto:Number(p.monto),fechaIngreso:f,fechaPago:f,
+        detalle:`Compra de ${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.nombrecomprador?' (a '+v.nombrecomprador+')':''}`,
+        clasificacion:'Compra de vehículo',placa:v.placa||'',formaPago:'Compra (Inventario)',registradoPor:'Automático (Inventario)'});
+    });
+  });
+  return res;
+}
 function cajaFuerte2Saldo(hasta){
-  return(contData.fondosJM||[]).filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
+  return[...(contData.fondosJM||[]),...fondosJMMovsCompras()].filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
 }
 function bancosTotal(hasta){return BANCOS_CTAS.reduce((s,b)=>s+bancoSaldo(b.k,hasta),0);}
 function renderBancos(){
@@ -16805,6 +16944,11 @@ function verAnticipo(vid){
 function abrirLiquidacion(ventaId){
   const v=ventas.find(x=>x.id===ventaId);
   if(!v){alert('Venta no encontrada');return;}
+  // El No. de Recibo SIEMPRE tiene que salir en la liquidación: si la venta no tiene, se pide aquí.
+  if(!String(v.recibo||'').trim()){
+    const r=prompt('Esta venta no tiene No. de Recibo.\n\nEscribilo para que salga en la hoja de liquidación:','');
+    if(r&&r.trim()){v.recibo=r.trim();marcarEdicion(v);saveOne('ventas',v);}
+  }
   const vh=buscarVehiculoOConsig(v.vehiculoId);
   const comp=clientes.find(x=>x.id===v.compradorId);
   const vnd=clientes.find(x=>x.id===v.vendedorId);
@@ -16874,6 +17018,7 @@ function abrirLiquidacion(ventaId){
         <span>Forma de pago:</span><span style="font-weight:600">${v.pago||'—'}</span>
         ${Number(v.anticipo)>0?`<span>Anticipo recibido:</span><span style="font-weight:600;color:#E67700">${fmtD(v.anticipo)} ${v.reciboAnticipo?'('+v.reciboAnticipo+')':''}</span>`:''}
         ${Number(v.bancario)>0?`<span>Monto bancario:</span><span style="font-weight:600;color:#1971C2">${fmtD(v.bancario)} ${v.reciboBanco?'('+v.reciboBanco+')':''}</span>`:''}
+        ${(Array.isArray(v.depositos)?v.depositos:[]).map((d,i)=>`<span>Depósito ${i+1} — ${d.banco||''}:</span><span style="font-weight:600;color:#1971C2">${fmtD(d.monto)} ${d.ref?'(Recibo/Ref. '+d.ref+')':''}</span>`).join('')}
         ${Number(v.canjeValor)>0?`<span>Canje (${v.canjeDesc||'vehículo'}):</span><span style="font-weight:600;color:#6741D9">${fmtD(v.canjeValor)}</span>`:''}
         ${Number(v.cash)>0?`<span>Efectivo recibido:</span><span style="font-weight:600;color:#2F9E44">${fmtD(v.cash)}</span>`:''}
         <span>¿Cómo nos contactó?:</span><span style="font-weight:600">${contactoMap[v.contacto]||'—'}</span>
@@ -17353,6 +17498,8 @@ function cdLineasAuto(fecha){
           forma:financiado?'Financiamiento':'Transferencia'+(v.banco?' '+v.banco:''),
           col:financiado?'cxc':(CD_BANCO_COL[v.banco]||'sinbanco'),banco:v.banco||'',monto:banc,tipoLinea:'Venta'});
       }
+      (Array.isArray(v.depositos)?v.depositos:[]).forEach((d,i)=>{if(Number(d.monto||0)>0)lineas.push({...base,key:'V_'+v.id+'_dep'+i,recibo:d.ref||v.recibo||'',
+        forma:'Depósito '+(d.banco||''),col:CD_BANCO_DEP_COL[d.banco]||'sinbanco',banco:d.banco||'',monto:Number(d.monto),tipoLinea:'Venta'});});
       if(canje>0)lineas.push({...base,key:'V_'+v.id+'_canje',forma:'Canje'+(v.canjeDesc?': '+v.canjeDesc:''),col:'canje',monto:canje,tipoLinea:'Venta'});
     } else if(v.estado==='Pendiente'&&Number(v.anticipo||0)>0){
       const pago=v.pago||'Efectivo';
@@ -17366,13 +17513,24 @@ function cdLineasAuto(fecha){
 // Salidas automáticas: compras de vehículos propios (no consignación) pagadas con Caja fuerte o
 // Cash Julio M. Se arman del Inventario, así que si se corrige la compra, la caja se corrige sola.
 function cdEgresosAuto(fecha){
-  return(vehiculos||[]).filter(v=>(v.pagacaja==='cajafuerte'||v.pagacaja==='cashjulio')&&Number(v.costo||0)>0&&(v.fechacompra||v.fechaPagoCaja)===fecha)
+  const desc=v=>`Compra de ${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.color?' '+v.color:''}${v.placa?' — '+v.placa:''}${v.nombrecomprador?' (a '+v.nombrecomprador+')':''}`;
+  // Compras con formas de pago (nuevo): una salida por cada pago de Caja fuerte / Cash Julio M
+  const nuevas=[];
+  (vehiculos||[]).filter(v=>Array.isArray(v.pagosCompra)&&(v.fechacompra||v.fechaPagoCaja)===fecha).forEach(v=>{
+    v.pagosCompra.forEach((p,i)=>{
+      if(!p||(p.fuente!=='cajafuerte'&&p.fuente!=='cashjulio')||!(Number(p.monto)>0))return;
+      const l={key:'C_'+v.id+(i?'_'+i:''),fecha,auto:true,tipoLinea:'Compra',col:p.fuente,monto:Number(p.monto),recibo:v.recibo||'',desc:desc(v)+(v.pagosCompra.length>1?' (pago '+(i+1)+')':'')};
+      const a=cdAjuste(l.key);
+      nuevas.push(a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,nota:a.nota||'',oculta:!!a.oculta}:l);
+    });
+  });
+  return nuevas.concat((vehiculos||[]).filter(v=>!Array.isArray(v.pagosCompra)&&(v.pagacaja==='cajafuerte'||v.pagacaja==='cashjulio')&&Number(v.costo||0)>0&&(v.fechacompra||v.fechaPagoCaja)===fecha)
     .map(v=>{
       const l={key:'C_'+v.id,fecha,auto:true,tipoLinea:'Compra',col:v.pagacaja,monto:Number(v.costo),recibo:v.recibo||'',
         desc:`Compra de ${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.color?' '+v.color:''}${v.placa?' — '+v.placa:''}${v.nombrecomprador?' (a '+v.nombrecomprador+')':''}`};
       const a=cdAjuste(l.key);
       return a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,nota:a.nota||'',oculta:!!a.oculta}:l;
-    });
+    }));
 }
 function cdMovsManual(fecha,tipo){
   return(contData.cajaDiariaMovs||[]).filter(m=>m.fecha===fecha&&m.tipo===tipo&&!m.anulado);
@@ -17391,7 +17549,7 @@ function cdDiasPendientes(fecha){
   const cerrados=new Set(cdCierres().map(c=>c.fecha));
   const dias=new Set();
   (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
-  (vehiculos||[]).forEach(v=>{if((v.pagacaja==='cajafuerte'||v.pagacaja==='cashjulio')&&Number(v.costo||0)>0)dias.add(v.fechacompra||v.fechaPagoCaja);});
+  (vehiculos||[]).forEach(v=>{if(pagosCompraDe(v).some(p=>(p.fuente==='cajafuerte'||p.fuente==='cashjulio')&&Number(p.monto)>0))dias.add(v.fechacompra||v.fechaPagoCaja);});
   (ventas||[]).forEach(v=>{if(v.fecha&&(v.estado==='Completada'||(v.estado==='Pendiente'&&Number(v.anticipo||0)>0)))dias.add(v.fecha);});
   return[...dias].filter(d=>d&&d>=ini&&d<fecha&&!cerrados.has(d)).sort();
 }
@@ -17473,7 +17631,7 @@ function cdHojaHTML(h,enPantalla){
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
     <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
     <tbody>${h.egresos.length?h.egresos.map(e=>`<tr>
-      <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte'}</td>
+      <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='banco'?'🏦 '+((BANCOS_CTAS.find(b=>b.k===e.bancoCta)||{}).t||'Banco')+(e.forma?' — '+e.forma:''):(e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte')}${e.col!=='banco'&&e.forma&&e.forma!=='Cash'?' — '+e.forma:''}</td>
       <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
       :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
   </table>
@@ -17492,7 +17650,7 @@ function cdHojaHTML(h,enPantalla){
 function cdSalidasBancariasHTML(fecha){
   let movs=[];
   try{
-    movs=[...bancosMovsDesdeCompras(),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
+    movs=[...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
       .filter(m=>m.fecha===fecha&&m.tipo!=='ingreso'&&Number(m.monto||0)>0);
   }catch(e){return'';}
   if(!movs.length)return'';
@@ -17589,7 +17747,11 @@ function cdAbrirMov(tipo,editId){
       <div class="form-group"><label>Recibe</label><input id="cd-recibe" value="${m?.recibe||''}"></div>`:''}
     <div class="form-row"><div class="form-group"><label>No. Recibo / ROC</label><input id="cd-recibo" value="${m?.recibo||''}"></div>
       <div class="form-group"><label>Monto (USD $)</label><input id="cd-monto" type="number" step="0.01" value="${m?.monto||''}"></div></div>
-    <div class="form-group"><label>${esIng?'Columna donde entra':'Sale de'}</label><select id="cd-col">${cdOpcionesCol(m?.col||'cajafuerte',!esIng)}</select></div>
+    <div class="form-group"><label>Forma de pago</label><select id="cd-forma" onchange="cdFormaCambio('${tipo}')">
+      ${['Cash','Depósito','Transferencia bancaria'].map(f=>`<option ${((m?.forma)||(m&&m.col==='banco'?'Transferencia bancaria':'Cash'))===f?'selected':''}>${f}</option>`).join('')}</select></div>
+    <div class="form-group" id="cd-col-wrap" style="display:${!esIng&&m?.col==='banco'?'none':'block'}"><label>${esIng?'Columna donde entra':'Sale de'}</label><select id="cd-col">${cdOpcionesCol(m?.col&&m.col!=='banco'?m.col:'cajafuerte',!esIng)}</select></div>
+    ${esIng?'':`<div class="form-group" id="cd-banco-wrap" style="display:${m?.col==='banco'?'block':'none'}"><label>Sale del banco (cuentas de Don Julio M)</label><select id="cd-bancocta"><option value="">— Elegir banco —</option>${BANCOS_CTAS.map(b=>`<option value="${b.k}" ${m?.bancoCta===b.k?'selected':''}>${b.t}</option>`).join('')}</select>
+      <p style="font-size:10px;color:var(--text3);margin-top:3px">No resta de la caja: sale como Salida en la hoja Bancos y aparece en "Salidas bancarias de Gerencia".</p></div>`}
     <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="cd-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px" placeholder="Ej. el cliente pagó en dos partes; recibo físico extraviado…">${(m?.nota)||''}</textarea></div>
     <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--purple-light);border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer">
       <input type="checkbox" id="cd-trasladojm" ${m?.trasladoJM?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-fjm-wrap').style.display=this.checked?'block':'none'">
@@ -17604,10 +17766,13 @@ function cdAbrirMov(tipo,editId){
     const monto=parseFloat(cdVal('cd-monto'));
     if(!monto||monto<=0){alert('El monto es obligatorio.');return;}
     if(!cdVal('cd-desc')){alert('La descripción es obligatoria.');return;}
+    const forma=cdVal('cd-forma')||'Cash';
+    const salidaBanco=!esIng&&forma!=='Cash';
+    if(salidaBanco&&!cdVal('cd-bancocta')){alert('Elegí de qué banco sale.');return;}
     contData.cajaDiariaMovs=contData.cajaDiariaMovs||[];
     const obj={...(m||{}),id:m?.id||('CDM_'+uid()),fecha:m?.fecha||cdFecha,tipo,desc:cdVal('cd-desc'),
       vendedor:cdVal('cd-vendedor'),cliente:cdVal('cd-cliente'),recibe:cdVal('cd-recibe'),recibo:cdVal('cd-recibo'),
-      monto,col:cdVal('cd-col'),registradoPor:m?.registradoPor||getNombreUsuario(),
+      monto,col:salidaBanco?'banco':cdVal('cd-col'),forma,bancoCta:salidaBanco?cdVal('cd-bancocta'):'',registradoPor:m?.registradoPor||getNombreUsuario(),
       nota:cdVal('cd-nota'),
       trasladoJM:!!document.getElementById('cd-trasladojm')?.checked,
       fjmTipo:document.getElementById('cd-trasladojm')?.checked?(document.getElementById('cd-fjmtipo')?.value||''):''};
@@ -17616,6 +17781,26 @@ function cdAbrirMov(tipo,editId){
     cdSincronizarFondosJM(obj);
     await cdGuardarTodo();
   });
+}
+// Forma de pago en Ingreso/Salida manual de Cash in Hand: Cash, Depósito o Transferencia bancaria.
+function cdFormaCambio(tipo){
+  const forma=cdVal('cd-forma')||'Cash';
+  if(tipo==='egreso'){
+    const banco=forma!=='Cash';
+    const cw=document.getElementById('cd-col-wrap'),bw=document.getElementById('cd-banco-wrap');
+    if(cw)cw.style.display=banco?'none':'block';if(bw)bw.style.display=banco?'block':'none';
+  } else {
+    const sel=document.getElementById('cd-col');
+    const esCash=k=>(CD_COLS.find(c=>c.k===k)||{}).g==='cash';
+    if(sel&&forma!=='Cash'&&esCash(sel.value)){const b=CD_COLS.find(c=>c.g==='banco');if(b)sel.value=b.k;}
+    if(sel&&forma==='Cash'&&!esCash(sel.value))sel.value='cajafuerte';
+  }
+}
+// Salidas manuales de Cash in Hand pagadas por banco → Salida automática en la hoja Bancos
+function bancosMovsDesdeCajaEgresos(){
+  return(contData.cajaDiariaMovs||[]).filter(m=>!m.anulado&&m.tipo==='egreso'&&m.col==='banco'&&m.bancoCta&&Number(m.monto||0)>0)
+    .map(m=>({id:'CJE_'+m.id,cuenta:m.bancoCta,fecha:m.fecha,tipo:'egreso',monto:Number(m.monto),auto:true,
+      desc:`Caja ${m.fecha}: ${m.desc||''} (${m.forma||'Banco'})`,ref:m.recibo||'',nota:m.nota||''}));
 }
 // Traslado de fondos con Don Julio: el movimiento de caja queda espejado en Fondos JM (en US$).
 // Salida de caja (se le da dinero a Don Julio) → Ingreso en Fondos JM.
