@@ -4553,7 +4553,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-1200';
+const APP_VERSION='2026-10-20-1210';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -18289,6 +18289,22 @@ const TALLER_PASOS=['Recepción','Mecánico','Champuseo/Pulido','Tapizado','A/C'
 // estimada de entrega, porque suelen atrasar el proceso de alistamiento del carro.
 const TALLER_PASOS_EXTERNOS=['Mecánica Externa','Pintura Externa','Tapizado Externo','Eléctrico Externo','A/C Externo'];
 const TALLER_TRABAJADORES=['Maicol','Kevin','Francisco','Carlos','Rudy','Pedro'];
+// Lista para asignar un paso de Taller: trabajadores de Taller + Personal de Operaciones +
+// Proveedores (los que se registran en Operaciones). En pasos externos, los proveedores van primero.
+function personalOpsActivoNombres(){return(contData.personalOps||[]).filter(p=>p&&p.nombre&&String(p.activo)!=='false').map(p=>({n:p.nombre.trim(),area:p.area||''}));}
+function proveedoresTallerNombres(){return(contData.proveedoresTaller||[]).filter(p=>p&&(p.nombreComercial||p.nombre)).map(p=>({id:p.id,n:(p.nombreComercial||p.nombre).trim(),tipo:p.tipo||''}));}
+function proveedorTallerPorNombre(n){return proveedoresTallerNombres().find(p=>p.n===n)||null;}
+function opcionesAsignadosTallerHTML(paso,seleccionado,conProveedores){
+  const op=(v,l)=>`<option value="${String(v).replace(/"/g,'&quot;')}"${v===seleccionado?' selected':''}>${l||v}</option>`;
+  const taller=['Jefe Operativo',...TALLER_TRABAJADORES];
+  const pers=personalOpsActivoNombres().filter(p=>!taller.includes(p.n));
+  const provs=conProveedores===false?[]:proveedoresTallerNombres();
+  const gTaller=`<optgroup label="Taller">${taller.map(t=>op(t)).join('')}</optgroup>`;
+  const gPers=pers.length?`<optgroup label="Personal de Operaciones">${pers.map(p=>op(p.n,p.n+(p.area?' — '+p.area:''))).join('')}</optgroup>`:'';
+  const gProv=provs.length?`<optgroup label="Proveedores">${provs.map(p=>op(p.n,'🏭 '+p.n+(p.tipo?' — '+p.tipo:''))).join('')}</optgroup>`:'';
+  const extra=(seleccionado&&![...taller,...pers.map(p=>p.n),...provs.map(p=>p.n)].includes(seleccionado))?op(seleccionado):'';
+  return extra+(TALLER_PASOS_EXTERNOS.includes(paso)?gProv+gTaller+gPers:gTaller+gPers+gProv);
+}
 function getTallerRegistros(){if(!contData.tallerRegistros)contData.tallerRegistros=[];return contData.tallerRegistros;}
 // Corrige en silencio (una sola vez, sin avisar) cualquier registro que ya se haya guardado
 // con los nombres viejos de los pasos, para que queden consistentes con los nombres actuales.
@@ -18771,7 +18787,7 @@ function renderTaller(){
         <p style="font-size:10px;color:var(--text3);margin-top:4px">Para poder avisar si el proveedor se está atrasando con el carro.</p>
       </div>
       <div class="form-group" id="tlr-trabajador-wrap"><label>Trabajador (elegí tu nombre)</label>
-        <select id="tlr-trabajador"><option value="">-- Elegir --</option>${TALLER_TRABAJADORES.map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+        <select id="tlr-trabajador"><option value="">-- Elegir --</option>${opcionesAsignadosTallerHTML('','')}</select>
       </div>
       <div id="tlr-recepcion-box" style="display:none;background:var(--blue-light);border-radius:var(--radius);padding:.875rem;margin-bottom:.75rem">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
@@ -19363,8 +19379,7 @@ function abrirAsignarTrabajadorNuevoPaso(vehiculoId,paso){
   document.getElementById('mtip-vehiculoid').value=vehiculoId;
   document.getElementById('mtip-paso').value=paso;
   document.getElementById('mtip-info').innerHTML=`<b>${v?v.marca+' '+v.modelo+' '+v.anio+' — '+v.placa:'Vehículo'}</b> — vas a iniciar: <b>${paso}</b>`;
-  const opciones=['Jefe Operativo',...TALLER_TRABAJADORES];
-  document.getElementById('mtip-trabajador').innerHTML=opciones.map(t=>`<option value="${t}">${t}</option>`).join('');
+  document.getElementById('mtip-trabajador').innerHTML=opcionesAsignadosTallerHTML(paso,'');
   openOv('ov-taller-iniciar-paso');
 }
 function confirmarIniciarPasoConTrabajador(){
@@ -19424,6 +19439,7 @@ function renderMiTrabajoTaller(porVehiculoTodo,activosPorVehiculo){
           <option value="">-- Elegir --</option>
           <option value="Jefe Operativo"${quienSoy==='Jefe Operativo'?' selected':''}>Jefe Operativo</option>
           ${TALLER_TRABAJADORES.map(t=>`<option value="${t}"${quienSoy===t?' selected':''}>${t}</option>`).join('')}
+          ${personalOpsActivoNombres().filter(p=>!TALLER_TRABAJADORES.includes(p.n)&&p.n!=='Jefe Operativo').map(p=>`<option value="${p.n}"${quienSoy===p.n?' selected':''}>${p.n}${p.area?' — '+p.area:''}</option>`).join('')}
         </select>
       </div>
       ${!quienSoy?`<p style="font-size:12px;color:var(--text3);margin-top:.75rem">Elegí tu nombre arriba para ver y actualizar tu trabajo con un clic.</p>`:`
@@ -19473,7 +19489,7 @@ async function iniciarPasoTallerRapido(vehiculoId,paso,trabajadorForzado){
   regs.push({
     id:uid(),vehiculoId,
     vehiculoInfo:v?`${v.marca} ${v.modelo} ${v.anio} — ${v.placa}`:'Vehículo',
-    trabajador:quienSoy,paso,fechaInicio:hoy,fechaFin:paso==='Finalizado'?hoy:null,bitacora:'',
+    trabajador:quienSoy,proveedorId:(proveedorTallerPorNombre(quienSoy)||{}).id||null,paso,fechaInicio:hoy,fechaFin:paso==='Finalizado'?hoy:null,bitacora:'',
     pasosAsignados:null,fechaEstimada:fechaEstimada||null,
     creadoPor:getNombreUsuario(),fechaRegistro:hoy
   });
@@ -19669,9 +19685,8 @@ function reasignarTrabajadorTaller(regId){
   if(!r)return;
   document.getElementById('mtlrr-regid').value=regId;
   document.getElementById('mtlrr-info').innerHTML=`<b>${r.vehiculoInfo}</b> — ${r.paso}<br>Trabajador actual: ${r.trabajador||'—'}`;
-  const opciones=['Jefe Operativo',...TALLER_TRABAJADORES];
   const sel=document.getElementById('mtlrr-trabajador');
-  sel.innerHTML=opciones.map(t=>`<option value="${t}"${r.trabajador===t?' selected':''}>${t}</option>`).join('');
+  sel.innerHTML=opcionesAsignadosTallerHTML(r.paso,r.trabajador||'');
   openOv('ov-taller-reasignar');
 }
 async function guardarReasignarTallerRegistro(){
@@ -19680,6 +19695,7 @@ async function guardarReasignarTallerRegistro(){
   const r=getTallerRegistros().find(x=>x.id===regId);
   if(!r||!nuevo)return;
   r.trabajador=nuevo;
+  const provR=proveedorTallerPorNombre(nuevo);r.proveedorId=provR?provR.id:null;
   await saveOne('contable',{id:'main',...contData});
   closeOv('ov-taller-reasignar');
   renderTaller();
@@ -19818,7 +19834,7 @@ async function guardarTallerRegistro(){
   const fechaEstimada=TALLER_PASOS_EXTERNOS.includes(paso)?(document.getElementById('tlr-fecha-estimada').value||null):null;
   regs.push({
     id:uid(),vehiculoId,vehiculoInfo,esExterno:vehiculoId.startsWith('MANUAL_')||undefined,
-    trabajador,paso,fechaInicio:fecha,fechaFin:paso==='Finalizado'?fecha:null,bitacora,
+    trabajador,proveedorId:(proveedorTallerPorNombre(trabajador)||{}).id||null,paso,fechaInicio:fecha,fechaFin:paso==='Finalizado'?fecha:null,bitacora,
     pasosAsignados,fechaEstimada,
     creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()
   });
