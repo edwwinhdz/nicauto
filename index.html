@@ -4553,7 +4553,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-1210';
+const APP_VERSION='2026-10-20-1220';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -18291,19 +18291,24 @@ const TALLER_PASOS_EXTERNOS=['Mecánica Externa','Pintura Externa','Tapizado Ext
 const TALLER_TRABAJADORES=['Maicol','Kevin','Francisco','Carlos','Rudy','Pedro'];
 // Lista para asignar un paso de Taller: trabajadores de Taller + Personal de Operaciones +
 // Proveedores (los que se registran en Operaciones). En pasos externos, los proveedores van primero.
-function personalOpsActivoNombres(){return(contData.personalOps||[]).filter(p=>p&&p.nombre&&String(p.activo)!=='false').map(p=>({n:p.nombre.trim(),area:p.area||''}));}
-function proveedoresTallerNombres(){return(contData.proveedoresTaller||[]).filter(p=>p&&(p.nombreComercial||p.nombre)).map(p=>({id:p.id,n:(p.nombreComercial||p.nombre).trim(),tipo:p.tipo||''}));}
+function personalOpsActivoNombres(){const m=new Map();(contData.personalOps||[]).filter(p=>p&&p.nombre&&String(p.activo)!=='false').forEach(p=>{const n=p.nombre.trim();if(!m.has(n))m.set(n,{n,area:p.area||''});else if(p.area&&!m.get(n).area.includes(p.area))m.get(n).area+=' / '+p.area;});return[...m.values()];}
+// Proveedores: se muestra el NOMBRE de la persona (como se ingresó en Operaciones) y su negocio.
+function proveedoresTallerNombres(){return(contData.proveedoresTaller||[]).filter(p=>p&&(p.nombre||p.nombreComercial)).map(p=>({id:p.id,n:(p.nombre||p.nombreComercial).trim(),com:(p.nombre&&p.nombreComercial)?p.nombreComercial.trim():'',tipo:p.tipo||''}));}
 function proveedorTallerPorNombre(n){return proveedoresTallerNombres().find(p=>p.n===n)||null;}
 function opcionesAsignadosTallerHTML(paso,seleccionado,conProveedores){
+  // Orden pedido por Edwin: 1) Personal de Operaciones, 2) Proveedores (ambos en orden alfabético),
+  // y al final los nombres de Taller de antes (para no perder el historial guardado con ellos).
   const op=(v,l)=>`<option value="${String(v).replace(/"/g,'&quot;')}"${v===seleccionado?' selected':''}>${l||v}</option>`;
+  const az=(a,b)=>a.n.localeCompare(b.n,'es');
   const taller=['Jefe Operativo',...TALLER_TRABAJADORES];
-  const pers=personalOpsActivoNombres().filter(p=>!taller.includes(p.n));
-  const provs=conProveedores===false?[]:proveedoresTallerNombres();
-  const gTaller=`<optgroup label="Taller">${taller.map(t=>op(t)).join('')}</optgroup>`;
+  const pers=personalOpsActivoNombres().sort(az);
+  const provs=conProveedores===false?[]:proveedoresTallerNombres().sort(az);
+  const otros=taller.filter(t=>!pers.some(p=>p.n===t));
   const gPers=pers.length?`<optgroup label="Personal de Operaciones">${pers.map(p=>op(p.n,p.n+(p.area?' — '+p.area:''))).join('')}</optgroup>`:'';
-  const gProv=provs.length?`<optgroup label="Proveedores">${provs.map(p=>op(p.n,'🏭 '+p.n+(p.tipo?' — '+p.tipo:''))).join('')}</optgroup>`:'';
+  const gProv=provs.length?`<optgroup label="Proveedores">${provs.map(p=>op(p.n,'🏭 '+p.n+(p.com?' ('+p.com+')':'')+(p.tipo?' — '+p.tipo:''))).join('')}</optgroup>`:'';
+  const gOtros=`<optgroup label="Otros (Taller)">${otros.map(t=>op(t)).join('')}</optgroup>`;
   const extra=(seleccionado&&![...taller,...pers.map(p=>p.n),...provs.map(p=>p.n)].includes(seleccionado))?op(seleccionado):'';
-  return extra+(TALLER_PASOS_EXTERNOS.includes(paso)?gProv+gTaller+gPers:gTaller+gPers+gProv);
+  return extra+gPers+gProv+gOtros;
 }
 function getTallerRegistros(){if(!contData.tallerRegistros)contData.tallerRegistros=[];return contData.tallerRegistros;}
 // Corrige en silencio (una sola vez, sin avisar) cualquier registro que ya se haya guardado
