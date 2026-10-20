@@ -4577,7 +4577,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-1915';
+const APP_VERSION='2026-10-20-1950';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -10187,8 +10187,17 @@ async function guardarCorreccionVendedor(){
   renderVtas();
   showToast('✅ Vendedor corregido.','green');
 }
+// Firma estable de un registro (independiente del orden de las claves) para detectar si otra
+// persona lo modificó mientras uno lo tenía abierto.
+const CAMPOS_FIRMA_VENTA=['precio','costo','estado','fecha','anticipo','bancario','bancarioTipo','banco','cash','canjeValor','canjeDesc','depositos','comision','recibo','reciboBanco','vehiculoId','compradorId','vendedorId','nombreFactura'];
+function firmaVenta(v){const o={};CAMPOS_FIRMA_VENTA.forEach(k=>{let x=v?v[k]:undefined;if(k==='depositos')x=Array.isArray(x)?x:[];else if(x===undefined||x===null)x='';else if(!isNaN(parseFloat(x))&&/^[\d.\-]+$/.test(String(x)))x=Number(x).toFixed(2);o[k]=x;});return firmaEstable(o);}
+function firmaEstable(o){
+  const norm=x=>Array.isArray(x)?x.map(norm):(x&&typeof x==='object')?Object.keys(x).sort().reduce((a,k)=>{a[k]=norm(x[k]);return a;},{}):(typeof x==='number'?String(x):x);
+  try{return JSON.stringify(norm(o||{}));}catch(e){return'';}
+}
 function abrirModalVenta(id){
   const v=id?ventas.find(x=>x.id===id):null;
+  window._ventaAbierta=v?{id:v.id,firma:firmaVenta(v)}:null;
   document.getElementById('mvt-title').textContent=id?'Editar venta':'Nueva venta';
   document.getElementById('mvt-id').value=id||'';
   const sComp=document.getElementById('mvt-comprador');
@@ -10528,6 +10537,18 @@ async function sincronizarCxCBancoDesdeVenta(v){
   await saveOne('contable',{id:'main',...contData});
 }
 async function guardarVenta(){
+  // Protección: si otra persona modificó esta venta después de que se abrió aquí (ej. agregó
+  // depósitos), NO se guarda encima — eso fue lo que borró los depósitos de la RAV4 el 20/10.
+  const _idEdit=document.getElementById('mvt-id').value;
+  if(_idEdit&&window._ventaAbierta&&window._ventaAbierta.id===_idEdit){
+    const remoto=await obtenerFilaRemotaPorId('ventas',_idEdit);
+    if(remoto&&firmaVenta(remoto)!==window._ventaAbierta.firma){
+      const i0=ventas.findIndex(x=>x.id===_idEdit);if(i0>=0)ventas[i0]=remoto;
+      alert(`⚠️ Esta venta fue modificada por ${remoto.ultimaEdicionPor||'otra persona'}${remoto.ultimaEdicionFecha?' ('+remoto.ultimaEdicionFecha+')':''} después de que la abriste.\n\nPara no borrar esos cambios, NO se guardó. Se va a volver a abrir con los datos actualizados: hacé tu cambio otra vez y guardá.`);
+      abrirModalVenta(_idEdit);
+      return;
+    }
+  }
   const compradorId=document.getElementById('mvt-comprador').value;
   const vendedorId=document.getElementById('mvt-vendedor').value;
   const vehiculoId=document.getElementById('mvt-vehiculo').value;
