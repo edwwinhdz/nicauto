@@ -1573,6 +1573,7 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
   </div>
   <div id="taller-content"></div>
+  <div id="taller-finalizados" style="margin-top:1.5rem"></div>
 </div>
 
 <div class="page" id="page-marketing">
@@ -4589,7 +4590,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1100';
+const APP_VERSION='2026-10-21-1120';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -19641,6 +19642,7 @@ function renderTaller(){
     if(rec)window._tallerRecepcionPorVehiculo[vid]=rec;
   });
   actualizarPasoTaller();
+  try{renderFinalizadosPorDia();}catch(e){console.warn('Finalizados por día',e);}
 }
 // ======================== KPI de Taller (SOLO Administrador) ========================
 // Resumen por Trabajador (qué tan rápido trabaja cada uno), por Paso/Proceso (cuál etapa es
@@ -20048,6 +20050,7 @@ async function cambiarProcesoDirectoTimeline(vehiculoId,paso,esActual){
     // en el mismo vehículo, si los hay).
     const activo=regs.find(r=>r.vehiculoId===vehiculoId&&r.paso===paso&&!r.fechaFin);
     if(!activo)return;
+    if(!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
     if(!confirm(`¿Marcar "${activo.paso}" como Terminado?`))return;
     activo.fechaFin=hoyLocal();
     await saveOne('contable',{id:'main',...contData});
@@ -20089,8 +20092,11 @@ function confirmarIniciarPasoConTrabajador(){
   iniciarPasoTallerRapido(vehiculoId,paso,trabajador);
 }
 // Clic sobre el círculo ACTIVO (azul) = finalizarlo directo, sin pasos extra ni validaciones.
+// Solo Jordan (Jefe de Taller) da por TERMINADO cada proceso (y el Administrador).
+function puedeTerminarTaller(){return MODO==='operaciones2'||MODO==='admin';}
+function avisoSoloJordanTaller(){alert('⛔ Solo Jordan (Jefe de Taller) puede dar por terminado un proceso. Avisale para que lo marque.');}
 async function terminarPasoDesdeTimeline(regId){
-  if(MODO!=='admin'&&MODO!=='operaciones2'&&MODO!=='taller'){alert('⛔ No tenés permiso para marcar pasos como terminados.');return;}
+  if(!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
   const r=getTallerRegistros().find(x=>x.id===regId);
   if(!r)return;
   if(!confirm(`¿Marcar "${r.paso}" como Terminado en ${r.vehiculoInfo}?`))return;
@@ -20099,6 +20105,64 @@ async function terminarPasoDesdeTimeline(regId){
   if(r.paso==='Finalizado')await verificarYActivarMarketing(r.vehiculoId);
   renderTaller();
   alert(`✅ "${r.paso}" marcado como terminado${r.paso==='Finalizado'?' — el vehículo ya está Listo.':'.'}`);
+}
+
+// ======================== REPORTE: CARROS FINALIZADOS POR DÍA (Taller) ========================
+// Un carro cuenta como finalizado el día en que se cerró su paso "Finalizado".
+function finalizadosTaller(){
+  const vistos=new Set();const res=[];
+  getTallerRegistros().filter(r=>r.paso==='Finalizado'&&r.fechaFin).sort((a,b)=>(a.fechaFin||'').localeCompare(b.fechaFin||'')).forEach(r=>{
+    const k=r.vehiculoId+'|'+r.fechaFin;if(vistos.has(k))return;vistos.add(k);
+    const regsV=getTallerRegistros().filter(x=>x.vehiculoId===r.vehiculoId&&x.paso!=='Finalizado');
+    const ini=regsV.map(x=>x.fechaInicio).filter(Boolean).sort()[0]||r.fechaInicio;
+    const dias=ini?Math.max(0,Math.round((new Date(r.fechaFin+'T12:00:00')-new Date(ini+'T12:00:00'))/86400000)):null;
+    res.push({fecha:r.fechaFin,vehiculoId:r.vehiculoId,info:r.vehiculoInfo||'',por:r.trabajador||r.creadoPor||'',pasos:new Set(regsV.map(x=>x.paso)).size,dias});
+  });
+  return res;
+}
+function renderFinalizadosPorDia(){
+  const el=document.getElementById('taller-finalizados');if(!el)return;
+  const todos=finalizadosTaller();
+  const mes=window._finMes||hoyLocal().slice(0,7);
+  const meses=[...new Set([hoyLocal().slice(0,7),...todos.map(f=>f.fecha.slice(0,7))])].sort().reverse();
+  const lista=todos.filter(f=>mes==='todos'||f.fecha.slice(0,7)===mes);
+  const dias=[...new Set(lista.map(f=>f.fecha))].sort().reverse();
+  const abiertos=window._finDiasAbiertos||new Set();
+  const nd=f=>new Date(f+'T12:00:00').toLocaleDateString('es-NI',{weekday:'long',day:'numeric',month:'short'});
+  const prom=lista.filter(f=>f.dias!==null);const promDias=prom.length?(prom.reduce((s,f)=>s+f.dias,0)/prom.length).toFixed(1):'—';
+  const hoyN=todos.filter(f=>f.fecha===hoyLocal()).length;
+  el.innerHTML=`<div class="card">
+    <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h3><i class="ti ti-flag-check"></i> Carros finalizados por día</h3>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select onchange="window._finMes=this.value;renderFinalizadosPorDia()" style="padding:4px">${meses.map(m=>`<option value="${m}" ${m===mes?'selected':''}>${new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'})}</option>`).join('')}<option value="todos" ${mes==='todos'?'selected':''}>Todos</option></select>
+        <button class="btn btn-sm" onclick="exportarFinalizadosTaller()"><i class="ti ti-download"></i> Excel</button>
+      </div>
+    </div>
+    <div class="stats-grid" style="padding:.75rem 1rem 0;margin-bottom:0">
+      <div class="stat-card"><div class="stat-label">Finalizados hoy</div><div class="stat-value stat-green">${hoyN}</div></div>
+      <div class="stat-card"><div class="stat-label">Finalizados en el periodo</div><div class="stat-value stat-blue">${lista.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Promedio por día trabajado</div><div class="stat-value">${dias.length?(lista.length/dias.length).toFixed(1):'0'}</div></div>
+      <div class="stat-card"><div class="stat-label">Días promedio en Taller</div><div class="stat-value">${promDias}</div></div>
+    </div>
+    <div style="overflow-x:auto;padding:.5rem 0"><table class="tbl tbl-grid" style="font-size:12px">
+      <thead><tr><th>Día</th><th style="text-align:center">Carros finalizados</th><th>Vehículos</th></tr></thead>
+      <tbody>${dias.length?dias.map(f=>{const l=lista.filter(x=>x.fecha===f);const ab=abiertos.has(f);
+        return`<tr style="cursor:pointer" onclick="toggleDiaFinalizados('${f}')"><td style="font-weight:700;text-transform:capitalize;white-space:nowrap"><i class="ti ti-chevron-${ab?'down':'right'}"></i> ${nd(f)}</td><td style="text-align:center;font-weight:800;font-size:14px;color:var(--green)">${l.length}</td>
+          <td style="font-size:11px">${ab?l.map(x=>`<div>✅ <b>${x.info}</b> — ${x.pasos} paso${x.pasos===1?'':'s'}${x.dias!==null?' · '+x.dias+' día'+(x.dias===1?'':'s')+' en Taller':''}</div>`).join(''):l.map(x=>x.info.split(' — ')[0]).join(', ')}</td></tr>`;}).join('')
+      :'<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:1rem">No hay carros finalizados en este periodo</td></tr>'}</tbody>
+      ${dias.length?`<tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL</td><td style="text-align:center">${lista.length}</td><td></td></tr></tfoot>`:''}
+    </table></div>
+    <p style="font-size:11px;color:var(--text3);padding:0 1rem .75rem">Cuenta el día en que Jordan cerró el paso <b>Finalizado</b>. Tocá un día para ver el detalle (pasos y días que estuvo en Taller).</p>
+  </div>`;
+}
+function toggleDiaFinalizados(f){window._finDiasAbiertos=window._finDiasAbiertos||new Set();if(window._finDiasAbiertos.has(f))window._finDiasAbiertos.delete(f);else window._finDiasAbiertos.add(f);renderFinalizadosPorDia();}
+async function exportarFinalizadosTaller(){
+  const mes=window._finMes||hoyLocal().slice(0,7);
+  const l=finalizadosTaller().filter(f=>mes==='todos'||f.fecha.slice(0,7)===mes);
+  const rows=[['Fecha finalizado','Vehículo','Pasos realizados','Días en Taller','Finalizó']];
+  l.forEach(f=>rows.push([f.fecha,f.info,f.pasos,f.dias??'',f.por]));
+  await exportarExcelConFormato(rows,'carros_finalizados_taller','Finalizados por día');
 }
 // ======================== MI TRABAJO (acciones rápidas de un clic) ========================
 // Cada trabajador (o el Jefe Operativo, o el Admin para hacer pruebas) elige su nombre una vez
@@ -20146,7 +20210,7 @@ function renderMiTrabajoTaller(porVehiculoTodo,activosPorVehiculo){
       ${misActivos.length?misActivos.map(r=>`
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;background:var(--blue-light);border-radius:var(--radius);padding:.625rem .875rem;margin-bottom:6px">
           <div><b>${r.vehiculoInfo}</b><br><span style="font-size:11px;color:var(--text2)">${r.paso} — desde ${r.fechaInicio}</span></div>
-          <button class="btn btn-sm btn-success" onclick="terminarPasoTallerRapido('${r.id}')"><i class="ti ti-check"></i> Terminado</button>
+          ${puedeTerminarTaller()?`<button class="btn btn-sm btn-success" onclick="terminarPasoTallerRapido('${r.id}')"><i class="ti ti-check"></i> Terminado</button>`:'<span style="font-size:11px;color:var(--text2)">Jordan lo marca como terminado</span>'}
         </div>`).join(''):'<p style="font-size:12px;color:var(--text3)">No tenés ningún paso abierto ahora mismo.</p>'}
       <h4 style="font-size:12px;margin:1rem 0 .5rem"><i class="ti ti-player-play"></i> Trabajo disponible para empezar</h4>
       ${disponibles.length?disponibles.map(d=>`
@@ -20162,6 +20226,7 @@ function renderMiTrabajoTaller(porVehiculoTodo,activosPorVehiculo){
 }
 function cambiarQuienSoyTaller(v){safeStorage.setItem('taller_quien_soy',v);renderTaller();}
 async function terminarPasoTallerRapido(regId){
+  if(!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
   const r=getTallerRegistros().find(x=>x.id===regId);
   if(!r)return;
   r.fechaFin=hoyLocal();
@@ -20171,6 +20236,7 @@ async function terminarPasoTallerRapido(regId){
   alert(`✅ "${r.paso}" marcado como terminado en ${r.vehiculoInfo}.`);
 }
 async function iniciarPasoTallerRapido(vehiculoId,paso,trabajadorForzado){
+  if(paso==='Finalizado'&&!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
   const quienSoy=trabajadorForzado||safeStorage.getItem('taller_quien_soy')||'';
   if(!quienSoy){alert('Elegí primero quién sos, arriba.');return;}
   const regs=getTallerRegistros();
@@ -20358,7 +20424,7 @@ async function reclasificarPasoActivoTaller(){
 // Finalizar en 2 clics: clic en el botón + confirmar. Cierra lo que esté abierto y crea el
 // registro de Finalizado directo, sin tener que pasar paso por paso.
 async function finalizarAhoraTaller(){
-  if(MODO!=='admin'&&MODO!=='operaciones2'){alert('⛔ Solo el Administrador o el Jefe de Taller pueden finalizar directo.');return;}
+  if(!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
   const vehiculoId=document.getElementById('mtler-vid').value;
   if(!confirm('¿Finalizar este vehículo ahora mismo?\n\nSe cierra cualquier paso que esté abierto y el carro pasa directo a "Listos".'))return;
   const regs=getTallerRegistros();
@@ -20515,6 +20581,7 @@ async function guardarTallerRegistro(){
     }
   }
   const paso=document.getElementById('tlr-paso').value;
+  if(paso==='Finalizado'&&!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
   const fecha=document.getElementById('tlr-fecha').value;
   const bitacora=document.getElementById('tlr-bitacora').value;
   const esRecepcion=paso==='Recepción';
