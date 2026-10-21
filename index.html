@@ -4590,7 +4590,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1510';
+const APP_VERSION='2026-10-21-1525';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -18037,7 +18037,7 @@ function cdHojaHTML(h,enPantalla){
   <div style="margin-top:16px;font-weight:800;background:#E9ECEF;display:inline-block;padding:4px 12px">EGRESOS / SALIDAS</div>
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
     <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
-    <tbody>${h.egresos.length?h.egresos.map(e=>`<tr>
+    <tbody>${(()=>{const egrCaja=h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'));return egrCaja;})().length?h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco')).map(e=>`<tr>
       <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='banco'?'🏦 '+((BANCOS_CTAS.find(b=>b.k===e.bancoCta)||{}).t||'Banco')+(e.forma?' — '+e.forma:''):(e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte')}${e.col!=='banco'&&e.forma&&e.forma!=='Cash'?' — '+e.forma:''}</td>
       <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
       :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
