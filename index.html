@@ -3780,6 +3780,21 @@ let saving=false;
 // los gastos de Registro Directo). Ahora se recuerda qué ids venían del servidor ("base"); al
 // guardar, se respetan los borrados hechos en esta sesión y se conserva todo lo nuevo de otros.
 window._baseListas=window._baseListas||{};
+// ---- Base de 3 vías para las listas que antes se guardaban "manda la computadora local" ----
+// Para cada fila (main de Contable, o cada vehículo) se recuerda qué registros conocía esta
+// sesión la última vez que cargó/guardó. Al guardar: se respeta lo local, se SUMAN los
+// registros que otra sesión agregó (los que esta sesión nunca conoció), y solo se quitan los
+// que esta sesión sí conocía y borró. Así nunca se pierde lo que registró otra persona.
+const LISTAS_3VIAS=['reparaciones','reservas','fotos','cuentasPersonalizadas','ordenesServicio','baseDatosComprasReferencia','tallerRegistros','proveedoresTaller','registroDirectoGastos','fondosJM','fondosGO','auxiliares'];
+window._base3v=window._base3v||{};
+function _clave3v(x){return x&&typeof x==='object'?(x.id!=null?'id:'+x.id:(x.ventaId!=null?'vt:'+x.ventaId:null)):null;}
+function setBase3v(fila,obj){
+  if(!fila||!obj)return;
+  const b={};
+  LISTAS_3VIAS.forEach(k=>{if(Array.isArray(obj[k]))b[k]=new Set(obj[k].map(_clave3v).filter(Boolean));});
+  window._base3v[fila]=b;
+}
+function setBase3vVehiculos(lista){(lista||[]).forEach(v=>{if(v&&v.id!=null)setBase3v('vehiculos:'+v.id,v);});}
 function setBaseLista(campo,lista){
   window._baseListas[campo]=new Set((lista||[]).filter(x=>x&&x.id!=null).map(x=>x.id));
   const fila={gastos:'gastos_data',recibos:'recibos_data',compras:'compras_data',cuentas:'cuentas_data',tallerRegistros:'taller_data'}[campo];
@@ -3859,6 +3874,8 @@ async function load(){
       alert('⚠️ No se pudo cargar la información contable (Cuentas, Gastos, Recibos, Rendiciones, etc.) — posible problema de conexión.\n\nPor seguridad, esa parte del sistema va a quedar vacía en tu pantalla hasta que recargues.\n\nRecomendado: presiona Ctrl+Shift+R e intenta de nuevo antes de guardar cualquier cambio.');
     }
     contData=co||{cuentas:[],gastos:[],recibos:[],pizarraAjustes:{ventas:{},compras:{},reservas:{}}};
+    if(co)setBase3v('contable:main',co);
+    setBase3vVehiculos(vehiculos);
     if(!contData.pizarraAjustes)contData.pizarraAjustes={ventas:{},compras:{},reservas:{}};
     if(!clientes.length){
       alert('⚠️ No se pudieron cargar los Clientes/Vendedores (Personas) — posible problema de conexión.\n\nPor seguridad, esa parte va a quedar vacía en tu pantalla hasta que recargues. NO se va a inventar ni guardar información de muestra.\n\nRecomendado: presioná Ctrl+Shift+R e intentá de nuevo antes de guardar cualquier cambio.');
@@ -3960,7 +3977,7 @@ async function save(){
 // usuario haya agregado mientras tanto (ej. rendiciones, gastos, cuentas). Sin esto, como todo
 // el módulo Contable se guarda como un solo bloque, el último que guarda podía borrar sin
 // querer lo que otra persona acababa de agregar.
-function mergeContableArrays(remoto,local){
+function mergeContableArrays(remoto,local,base3v){
   if(!remoto||typeof remoto!=='object')return local;
   const resultado={...local};
   Object.keys(remoto).forEach(clave=>{
@@ -3986,8 +4003,52 @@ function mergeContableArrays(remoto,local){
       resultado[clave]=[...mapa.values()].filter(it=>!borrados.has(it.id)||restaurados.has(it.id));
       return;
     }
-    const LISTAS_SIEMPRE_LOCAL=['rendicionMovs','reparaciones','reservas','fotos','cuentasPersonalizadas','ordenesServicio','baseDatosComprasReferencia','tallerRegistros','proveedoresTaller','registroDirectoGastos','fondosJM','fondosGO','auxiliares'];
+    // rendicionMovs (gastos de la rendición ABIERTA): antes mandaba siempre la lista local
+    // completa, y una sesión abierta desde antes borraba sin querer los gastos que otro (Jordan)
+    // acababa de registrar — así se perdieron gastos con TC de la RDC-041. Ahora se combinan por
+    // id: nunca se pierde un gasto que esté en el servidor o en esta sesión. Solo se quitan:
+    //  • los que alguien borró a propósito (lista rendicionMovsBorrados, se respeta en todas las sesiones)
+    //  • los que ya pasaron al historial de una rendición cerrada.
+    // Si el mismo gasto está en los dos lados, manda el local, salvo que el servidor ya lo tenga
+    // validado en Contabilidad y esta sesión no (sesión vieja) — ahí manda el del servidor.
+    if(clave==='rendicionMovs'&&Array.isArray(valLocal)){
+      const mapaB=new Map();
+      [...(remoto.rendicionMovsBorrados||[]),...(local.rendicionMovsBorrados||[])].forEach(b=>{if(b&&b.id!=null){const prev=mapaB.get(b.id);if(!prev||(b.ts||0)>=(prev.ts||0))mapaB.set(b.id,b);}});
+      const borrados=new Set([...mapaB.values()].filter(b=>!b.restaurado).map(b=>b.id));
+      const enHist=new Set();
+      [...(local.rendicionHistorial||[]),...((typeof contData!=='undefined'&&contData.rendicionHistorial)||[])].forEach(h=>(h.movs||[]).forEach(m=>{if(m&&m.id!=null)enHist.add(m.id);}));
+      const mapa=new Map();
+      (Array.isArray(valRemoto)?valRemoto:[]).forEach(it=>{if(it&&it.id!=null)mapa.set(it.id,it);});
+      valLocal.forEach(it=>{
+        if(!it||it.id==null)return;
+        const r=mapa.get(it.id);
+        if(r&&r.registradoContable&&!it.registradoContable)return; // el servidor ya lo validó
+        mapa.set(it.id,it);
+      });
+      resultado[clave]=[...mapa.values()].filter(it=>!borrados.has(it.id)&&!enHist.has(it.id));
+      return;
+    }
+    if(clave==='rendicionMovsBorrados'&&(Array.isArray(valLocal)||Array.isArray(valRemoto))){
+      const mapaB=new Map();
+      [...(Array.isArray(valRemoto)?valRemoto:[]),...(Array.isArray(valLocal)?valLocal:[])].forEach(b=>{if(b&&b.id!=null){const prev=mapaB.get(b.id);if(!prev||(b.ts||0)>=(prev.ts||0))mapaB.set(b.id,b);}});
+      resultado[clave]=[...mapaB.values()];
+      return;
+    }
+    const LISTAS_SIEMPRE_LOCAL=['reparaciones','reservas','fotos','cuentasPersonalizadas','ordenesServicio','baseDatosComprasReferencia','tallerRegistros','proveedoresTaller','registroDirectoGastos','fondosJM','fondosGO','auxiliares'];
     if(LISTAS_SIEMPRE_LOCAL.includes(clave)&&Array.isArray(valLocal)){
+      // Fusión de 3 vías (si se conoce lo que esta sesión tenía): lo local + lo que otra sesión
+      // agregó y esta no conocía. Lo que esta sesión conocía y quitó, queda quitado.
+      const base=base3v&&base3v[clave];
+      if(base&&Array.isArray(valRemoto)){
+        const clavesLocales=new Set(valLocal.map(_clave3v).filter(Boolean));
+        const extras=valRemoto.filter(x=>{const k=_clave3v(x);return k&&!clavesLocales.has(k)&&!base.has(k);});
+        if(extras.length){
+          console.warn(`🛟 Se conservaron ${extras.length} registro(s) de '${clave}' que otra sesión había agregado.`);
+          resultado[clave]=[...valLocal,...extras];
+          window._extras3v=window._extras3v||[];window._extras3v.push(clave);
+          return;
+        }
+      }
       // PROTECCIÓN CONTRA SOBRESCRITURA VACÍA: si el servidor ya tiene datos reales acá y la
       // sesión local está vacía (típicamente porque esa carga falló), NUNCA se sobrescribe con
       // la lista vacía — eso fue justo lo que le pasó a Gastos. Se avisa y se respeta lo que ya
@@ -3997,7 +4058,7 @@ function mergeContableArrays(remoto,local){
       // bug que le pasó a Jordan con la Rendición 33: se cerró bien, pero esta protección
       // pensó que era un error y revivió los movimientos viejos en la rendición nueva.
       const vaciadoIntencional=(window._clavesVaciadoIntencional||[]).includes(clave);
-      if(valLocal.length===0&&Array.isArray(valRemoto)&&valRemoto.length>0&&!vaciadoIntencional){
+      if(valLocal.length===0&&Array.isArray(valRemoto)&&valRemoto.length>0&&!vaciadoIntencional&&!(base&&valRemoto.every(x=>{const k=_clave3v(x);return k&&base.has(k);}))){
         console.error(`⛔ Se bloqueó un guardado que hubiera vaciado '${clave}' (el servidor tiene ${valRemoto.length} registros reales, la sesión local tiene 0).`);
         window._bloqueoVacioDetectado=window._bloqueoVacioDetectado||[];
         window._bloqueoVacioDetectado.push(clave);
@@ -4518,7 +4579,20 @@ async function saveOne(table,obj){
       if(remoto){
         ['rendicionHistorial','historialChequeoFisico','papeleraBorrados','gastos','recibos','compras','cuentas','tallerRegistros','politicasManuales'].forEach(k=>{if(remoto[k])delete remoto[k];}); // ya viven aparte
         window._bloqueoVacioDetectado=null;
-        const fusionado=mergeContableArrays(remoto,obj);
+        window._extras3v=[];
+        const fusionado=mergeContableArrays(remoto,obj,window._base3v['contable:main']);
+        try{
+          (window._extras3v||[]).forEach(k=>{if(Array.isArray(fusionado[k]))contData[k]=fusionado[k];});
+          setBase3v('contable:main',fusionado);
+        }catch(e){}
+        try{
+          if(Array.isArray(fusionado.rendicionMovs)){
+            const antes=JSON.stringify((contData.rendicionMovs||[]).map(m=>m.id).sort());
+            contData.rendicionMovs=fusionado.rendicionMovs;
+            contData.rendicionMovsBorrados=fusionado.rendicionMovsBorrados||contData.rendicionMovsBorrados||[];
+            if(antes!==JSON.stringify(fusionado.rendicionMovs.map(m=>m.id).sort())&&safeStorage.getItem('nicauto_page')==='operaciones'){try{setTimeout(()=>renderRendicionCuentas(),50);}catch(e){}}
+          }
+        }catch(e){}
         if(window._bloqueoVacioDetectado){
           // Esto conserva el resto del guardado (no lo cancela), pero avisa: alguna lista se
           // iba a vaciar por error y se protegió sola — hay que revisar por qué esa sesión
@@ -4534,8 +4608,17 @@ async function saveOne(table,obj){
       }
     } else if(TABLAS_CON_FUSION_POR_REGISTRO.includes(table)&&obj.id){
       const remoto=await obtenerFilaRemotaPorId(table,obj.id);
-      const fusionado=remoto?mergeContableArrays(remoto,obj):obj;
+      window._extras3v=[];
+      const fusionado=remoto?mergeContableArrays(remoto,obj,window._base3v[table+':'+obj.id]):obj;
       await sbSet(table,obj.id,fusionado);
+      try{
+        setBase3v(table+':'+obj.id,fusionado);
+        if((window._extras3v||[]).length){
+          const lista=table==='vehiculos'?vehiculos:null;
+          const loc=lista&&lista.find(x=>x.id===obj.id);
+          if(loc)window._extras3v.forEach(k=>{loc[k]=fusionado[k];});
+        }
+      }catch(e){}
     } else {
       await sbSet(table,obj.id,obj);
     }
@@ -4590,7 +4673,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1525';
+const APP_VERSION='2026-10-21-1700';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5371,7 +5454,7 @@ async function realtimeSync(){
           nuevasSol.forEach(v=>mostrarBurbujaGerencia(`${v.marca} ${v.modelo} ${v.anio} — $${v.gerenciaPrecio} (solicitado por ${v.gerenciaVendedor||'—'})`));
         }
       }
-      vehiculos=vRows||[];lastVehiculosHash=newVHash;
+      vehiculos=vRows||[];lastVehiculosHash=newVHash;setBase3vVehiculos(vehiculos);
       const pg=document.querySelector('.page.active')?.id;
       if(pg==='page-inventario')renderInv();
       if(pg==='page-listaprecios')renderListaPrecios();
@@ -5435,6 +5518,7 @@ async function realtimeSync(){
       // guardados en el servidor. Se preservan a propósito.
       const {rendicionHistorial,historialChequeoFisico,papeleraBorrados,gastos,recibos,compras,cuentas,tallerRegistros}=contData;
       contData=coRow||contData;
+      if(coRow)setBase3v('contable:main',coRow);
       contData.rendicionHistorial=rendicionHistorial;
       contData.historialChequeoFisico=historialChequeoFisico;
       contData.papeleraBorrados=papeleraBorrados;
@@ -5642,7 +5726,7 @@ async function autoRefrescarTallerSiActivo(){
     // casillas de "Jordan clasifica" volvían todas a marcadas, aunque las hubiera desmarcado.
     if(document.getElementById('tlr-vehiculo')?.value)return;
     const [v,co]=await Promise.all([sbGet('vehiculos'),sbGetMainContable()]);
-    if(v)vehiculos=v;
+    if(v){vehiculos=v;setBase3vVehiculos(vehiculos);}
     if(co){
       // IMPORTANTE: preservar los 8 datos que ya viven en filas separadas (rendicionHistorial,
       // historialChequeoFisico, papeleraBorrados, gastos, recibos, compras, cuentas,
@@ -5650,6 +5734,7 @@ async function autoRefrescarTallerSiActivo(){
       // mismo bug que ya corregimos en la sincronización general.
       const {rendicionHistorial,historialChequeoFisico,papeleraBorrados,gastos,recibos,compras,cuentas,tallerRegistros}=contData;
       contData=co;
+      setBase3v('contable:main',co);
       contData.rendicionHistorial=rendicionHistorial;
       contData.historialChequeoFisico=historialChequeoFisico;
       contData.papeleraBorrados=papeleraBorrados;
@@ -9600,6 +9685,7 @@ async function delReparacion(rid){
   // Cuentas, se elimina también el movimiento original y cualquier partida contable conectada
   // — para que no quede ningún rastro suelto de ese gasto en otras áreas del sistema.
   if(rep?.rendicionMovId){
+    marcarBorradoRendicion([rep.rendicionMovId],'reparación eliminada');
     contData.rendicionMovs=(contData.rendicionMovs||[]).filter(m=>m.id!==rep.rendicionMovId);
     contData.gastos=(contData.gastos||[]).filter(g=>g.origenMovId!==rep.rendicionMovId);
     contData.cuentas=(contData.cuentas||[]).filter(c=>!(c.origenMovId===rep.rendicionMovId&&esTipoCuentaTC(c.tipo)));
@@ -16894,6 +16980,7 @@ async function reabrirRendicionParaReconstruir(){
   // Guardar aparte lo que ya estaba en la rendición actual, para no perderlo
   contData._rendicionEnPausa={config:{...cfg},movs:[...movsActuales]};
   contData.rendicionConfig={saldoInicial:saldoInicialReconstruir,fondosRecibidos:[],numeroActual:numeroAReconstruir};
+  marcarBorradoRendicion(movsActuales.map(m=>m.id),'en pausa (reconstrucción)');
   contData.rendicionMovs=[];
   // Esta es una excepción intencional (autorizada por el Administrador) a la regla de que el
   // número de rendición nunca retrocede — sin esta bandera, la fusión de datos bloquearía el
@@ -23209,6 +23296,25 @@ function sumaFondosRecibidos(cfg){
   return (cfg.fondosRecibidos||[]).reduce((s,f)=>s+Number(f.monto||0),0);
 }
 function getRendicionMovs(){return contData.rendicionMovs||[];}
+// Marca gastos de la rendición abierta como BORRADOS A PROPÓSITO, para que ninguna otra sesión
+// los vuelva a meter al combinar los datos.
+function marcarBorradoRendicion(ids,motivo){
+  contData.rendicionMovsBorrados=contData.rendicionMovsBorrados||[];
+  const ts=Date.now();
+  (ids||[]).filter(Boolean).forEach(id=>{
+    contData.rendicionMovsBorrados=contData.rendicionMovsBorrados.filter(b=>b.id!==id);
+    contData.rendicionMovsBorrados.push({id,fecha:hoyLocal(),por:getNombreUsuario(),motivo:motivo||'eliminado',ts});
+  });
+}
+// Lo contrario: vuelven a ser válidos (ej. se retoma la rendición que estaba en pausa).
+function restaurarBorradoRendicion(ids){
+  contData.rendicionMovsBorrados=contData.rendicionMovsBorrados||[];
+  const ts=Date.now();
+  (ids||[]).filter(Boolean).forEach(id=>{
+    contData.rendicionMovsBorrados=contData.rendicionMovsBorrados.filter(b=>b.id!==id);
+    contData.rendicionMovsBorrados.push({id,fecha:hoyLocal(),por:getNombreUsuario(),restaurado:true,ts});
+  });
+}
 function getRendicionHistorial(){return contData.rendicionHistorial||[];}
 function fmtRDC(n){return'RDC-'+String(n||1).padStart(3,'0');}
 // ---- Trazabilidad: en cada detalle de pago se ve de qué Rendición viene, con qué Recibo y a
@@ -24709,6 +24815,7 @@ async function cerrarRendicion(){
     // Se estaba reconstruyendo una rendición anterior — al cerrarla, se retoma automáticamente
     // la rendición que había quedado en pausa, sin perder lo que ya tenía.
     contData.rendicionConfig=enPausa.config;
+    restaurarBorradoRendicion((enPausa.movs||[]).map(m=>m.id));
     contData.rendicionMovs=enPausa.movs||[];
     delete contData._rendicionEnPausa;
     await saveOne('contable',{id:'main',...contData});
@@ -25400,6 +25507,7 @@ async function delRendicion(id){
   if(cuentaCxC){
     contData.cuentas=(contData.cuentas||[]).filter(c=>c.id!==cuentaCxC.id);
   }
+  marcarBorradoRendicion([id],'eliminado');
   contData.rendicionMovs=(contData.rendicionMovs||[]).filter(mv=>mv.id!==id);
   await saveOne('contable',{id:'main',...contData});
   renderRendicionCuentas();
