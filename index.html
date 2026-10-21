@@ -2552,6 +2552,13 @@ body.no-delete .confirmDelete{display:none!important}
         <div class="form-group"><label>Monto pagado (USD $)</label><input id="mcta-pago-monto" type="number" step="0.01" placeholder="Saldo completo"></div>
         <div class="form-group"><label>Fecha del pago</label><input id="mcta-pago-fecha" type="date"></div>
       </div>
+      <div id="mcta-pf-box" style="background:#fff;border:1px dashed #8CE99A;border-radius:8px;padding:.5rem;margin-bottom:.5rem">
+        <label style="font-size:11px;font-weight:700;color:var(--green)">¿Cómo se pagó? — hasta 3 formas (Cash y/o banco)</label>
+        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-0" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option></select><input id="mcta-pf-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el pago)" style="width:150px"></div>
+        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-1" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option></select><input id="mcta-pf-monto-1" type="number" step="0.01" placeholder="Monto" style="width:150px"></div>
+        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-2" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option></select><input id="mcta-pf-monto-2" type="number" step="0.01" placeholder="Monto" style="width:150px"></div>
+        <p style="font-size:10px;color:var(--text3);margin:3px 0 0">Entra al Cash in Hand del día del pago (Cash en Caja fuerte / Cash Julio M; banco en su columna) y de ahí a la hoja Bancos.</p>
+      </div>
       <p style="font-size:10px;color:var(--text2);margin:0">Si ponés un número de recibo, al guardar se registra el pago: baja el saldo y, si llega a $0, la cuenta queda <b>Pagada</b>. Si dejás el monto vacío se cancela el saldo completo.</p>
       <div id="mcta-pagos-hist" style="margin-top:.5rem;font-size:11px"></div>
     </div>
@@ -4577,7 +4584,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1000';
+const APP_VERSION='2026-10-21-1040';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5692,7 +5699,7 @@ function renderCtrlClientesLP(){
       <td>${alertaLlamada}<b>${x.nombre}</b></td>
       <td><a href="https://wa.me/${(x.cel||'').replace(/[^0-9]/g,'')}" target="_blank" style="color:var(--green);text-decoration:none"><i class="ti ti-brand-whatsapp"></i> ${x.cel||'—'}</a></td>
       <td style="font-size:12px;color:var(--blue)">${x.email||'—'}</td>
-      <td style="font-size:12px">${vnd?vnd.nombre.split(' ')[0]:'—'}</td>
+      <td style="font-size:12px">${(vendedorDeRegistro(x)||'—').split(' ')[0]}</td>
       <td>${badge(x.estado||'Prospecto','')}</td>
       <td style="font-size:12px">${x.interes||'—'}</td>
       <td style="font-size:11px">${comoMap[x.como]||'—'}</td>
@@ -5797,8 +5804,13 @@ function miVendIdCtrl(){const n=getNombreUsuario();const c=clientes.find(x=>x.ro
 function vendedorDeRegistro(x){
   if(!x)return'';
   if(x.tipoReg==='piso')return x.vendedor||x.registradoPor||'';
+  if(x.vendNomResp)return x.vendNomResp;
   const c=x.vendId?clientes.find(k=>k.id===x.vendId):null;
-  return(c&&c.nombre)||x.vendNomResp||x.vendNombre||x.registradoPor||'';
+  // Alonso y Jordan: si lo registraron ellos y no hay un vendedor real asignado (vacío o "Gerencia"),
+  // el contacto sale a nombre de quien lo registró.
+  const otro=OTROS_REGISTRAN_CTRL.find(n=>_nomEq(n,x.registradoPor));
+  if(otro&&(!c||_nomEq(c.nombre,'Gerencia')))return otro;
+  return(c&&c.nombre)||x.vendNombre||x.registradoPor||'';
 }
 function esMioCtrl(x){
   if(!x)return false;
@@ -11979,8 +11991,10 @@ function abrirModalCuenta(id,tipoDefault){
   document.getElementById('mcta-pago-recibo').value='';
   document.getElementById('mcta-pago-monto').value='';
   document.getElementById('mcta-pago-fecha').value=hoyLocal();
+  [0,1,2].forEach(i=>{const d=document.getElementById('mcta-pf-dest-'+i),m=document.getElementById('mcta-pf-monto-'+i);if(d)d.value='';if(m)m.value='';});
+  const pfBox=document.getElementById('mcta-pf-box');if(pfBox)pfBox.style.display=(c&&String(c.tipo||'').startsWith('CxC'))?'block':'none';
   const histEl=document.getElementById('mcta-pagos-hist');
-  if(histEl)histEl.innerHTML=(c&&c.historialPagos&&c.historialPagos.length)?'<b>Pagos registrados:</b><br>'+c.historialPagos.map(p=>`${p.fecha} — ${fmtD(p.monto)}${p.recibo?' — Recibo '+p.recibo:''} (${p.registradoPor||''})`).join('<br>'):'';
+  if(histEl)histEl.innerHTML=(c&&c.historialPagos&&c.historialPagos.length)?'<b>Pagos registrados:</b><br>'+c.historialPagos.map((p,ix)=>`${p.fecha} — ${fmtD(p.monto)}${p.recibo?' — Recibo '+p.recibo:''} (${p.registradoPor||''})${Array.isArray(p.formas)&&p.formas.length?' — <b>'+p.formas.map(f=>(CXC_DEST_TXT[f.dest]||f.dest)+' '+fmtD(f.monto)).join(' + ')+'</b>':''}${String(c.tipo||'').startsWith('CxC')&&(MODO==='admin'||MODO==='coordinador')?` <button class="btn btn-sm" style="padding:0 6px;font-size:10px" onclick="editarFormasPagoCuenta('${c.id}',${ix})">${Array.isArray(p.formas)&&p.formas.length?'✏️ Cambiar forma de pago':'➕ Registrar cómo se pagó'}</button>`:''}`).join('<br>'):'';
   const pagoBox=document.getElementById('mcta-pago-box');
   if(pagoBox)pagoBox.style.display=(c&&(MODO==='admin'||MODO==='coordinador'))?'block':'none';
   // Ver el comprobante/detalle es libre para todos; modificar una cuenta existente es solo del Administrador (req #17)
@@ -11991,6 +12005,65 @@ function abrirModalCuenta(id,tipoDefault){
   const btnG=document.querySelector('#ov-cuenta .modal-foot .btn-primary');
   if(btnG)btnG.style.display=soloLectura?'none':'inline-flex';
   openOv('ov-cuenta');
+}
+// ---- Cobros de CxC: cómo se pagó (Cash y/o bancos) → Cash in Hand → Bancos ----
+const CXC_DEST_COL={cajafuerte:'cajafuerte',cashjulio:'cashjulio',BACJM:'bac',BACGO:'bacgisselle',LAFISE:'lafise',FICOHSA:'ficohsa'};
+const CXC_DEST_TXT={cajafuerte:'Cash Caja fuerte',cashjulio:'Cash Julio M',BACJM:'BAC JM',BACGO:'BAC GO',LAFISE:'La Fise',FICOHSA:'Ficohsa'};
+function mctaLeerFormas(total){
+  const res=[];
+  [0,1,2].forEach(i=>{
+    const dest=document.getElementById('mcta-pf-dest-'+i)?.value||'';if(!dest)return;
+    const mRaw=document.getElementById('mcta-pf-monto-'+i)?.value;
+    res.push({dest,monto:mRaw===''||mRaw==null?null:Number(mRaw)});
+  });
+  if(res.length===1&&res[0].monto==null)res[0].monto=Number(total||0);
+  return res;
+}
+// Líneas del Cash in Hand por cobros de CxC con forma de pago registrada
+function cdLineasCobrosCxC(fecha){
+  const res=[];
+  (contData.cuentas||[]).forEach(c=>{
+    if(!String(c.tipo||'').startsWith('CxC'))return;
+    (Array.isArray(c.historialPagos)?c.historialPagos:[]).forEach((p,ix)=>{
+      if(p.fecha!==fecha||!Array.isArray(p.formas))return;
+      p.formas.forEach((f,j)=>{
+        if(!(Number(f.monto)>0)||!CXC_DEST_COL[f.dest])return;
+        res.push({key:'P_'+c.id+'_'+ix+'_'+j,fecha,auto:true,tipoLinea:'Cobro',cliente:c.persona||'',vehiculo:'Cobro '+(NOMBRE_TIPO_CUENTA[c.tipo]||c.tipo)+(c.banco?' ('+c.banco+')':'')+(c.desc?' — '+c.desc:''),
+          recibo:p.recibo||'',forma:'Cobro CxC — '+(CXC_DEST_TXT[f.dest]||f.dest),col:CXC_DEST_COL[f.dest],monto:Number(f.monto),cuentaId:c.id});
+      });
+    });
+  });
+  return res;
+}
+function diasCobrosCxC(){const d=new Set();(contData.cuentas||[]).forEach(c=>(c.historialPagos||[]).forEach(p=>{if(p&&p.fecha&&Array.isArray(p.formas)&&p.formas.length)d.add(p.fecha);}));return d;}
+function editarFormasPagoCuenta(cuentaId,ix){
+  const c=(contData.cuentas||[]).find(x=>x.id===cuentaId);if(!c)return;
+  const p=(c.historialPagos||[])[ix];if(!p)return;
+  let ov=document.getElementById('ov-formas-cxc');
+  if(!ov){ov=document.createElement('div');ov.className='overlay';ov.id='ov-formas-cxc';document.body.appendChild(ov);}
+  const f=Array.isArray(p.formas)?p.formas:[];
+  ov.innerHTML=`<div class="modal" style="max-width:520px"><div class="modal-head"><h3><i class="ti ti-cash"></i> ¿Cómo se pagó?</h3><button class="btn-ghost btn" onclick="closeOv('ov-formas-cxc')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><p style="font-size:12px;margin-bottom:.5rem"><b>${c.persona||''}</b> — pago del ${p.fecha} por <b>${fmtD(p.monto)}</b>${p.recibo?' — Recibo '+p.recibo:''}</p>
+    ${[0,1,2].map(i=>`<div style="display:flex;gap:6px;margin-top:4px"><select id="fcx-dest-${i}" style="flex:1">${'<option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option>'.replace('value="'+((f[i]||{}).dest||'')+'"','value="'+((f[i]||{}).dest||'')+'" selected')}</select><input id="fcx-monto-${i}" type="number" step="0.01" value="${f[i]?f[i].monto:''}" placeholder="${i?'Monto':'Monto (vacío = todo)'}" style="width:140px"></div>`).join('')}
+    <p style="font-size:10px;color:var(--text3);margin-top:6px">Se refleja en el Cash in Hand del ${p.fecha} y de ahí en la hoja Bancos.</p></div>
+    <div class="modal-foot"><button class="btn" onclick="closeOv('ov-formas-cxc')">Cancelar</button><button class="btn btn-primary" onclick="guardarFormasPagoCuenta('${cuentaId}',${ix})"><i class="ti ti-check"></i> Guardar</button></div></div>`;
+  openOv('ov-formas-cxc');
+}
+async function guardarFormasPagoCuenta(cuentaId,ix){
+  const c=(contData.cuentas||[]).find(x=>x.id===cuentaId);if(!c)return;
+  const p=(c.historialPagos||[])[ix];if(!p)return;
+  const res=[];
+  [0,1,2].forEach(i=>{const dest=document.getElementById('fcx-dest-'+i)?.value||'';if(!dest)return;const mRaw=document.getElementById('fcx-monto-'+i)?.value;res.push({dest,monto:mRaw===''?null:Number(mRaw)});});
+  if(res.length===1&&res[0].monto==null)res[0].monto=Number(p.monto||0);
+  if(res.some(x=>!(x.monto>0))){alert('Poné el monto de cada forma de pago (o dejá una sola sin monto).');return;}
+  const suma=res.reduce((s,x)=>s+x.monto,0);
+  if(res.length&&Math.abs(suma-Number(p.monto||0))>0.009&&!confirm(`Las formas suman ${fmtD(suma)} y el pago es de ${fmtD(p.monto)}. ¿Guardar así?`))return;
+  try{if(res.some(x=>x.dest==='cajafuerte'||x.dest==='cashjulio')&&cdCierreDe(p.fecha))alert(`⚠️ La caja del ${p.fecha} ya está cerrada: la parte en Cash no va a aparecer en ese cierre hasta que el Administrador la reabra y la vuelva a cerrar.`);}catch(e){}
+  p.formas=res;p.formasPor=getNombreUsuario();
+  await saveOne('contable',{id:'main',...contData});
+  closeOv('ov-formas-cxc');
+  if(document.getElementById('ov-cuenta')?.classList.contains('open'))abrirModalCuenta(cuentaId);
+  try{renderCuentas();}catch(e){}
 }
 function guardarCuenta(){
   const idExistente=document.getElementById('mcta-id').value;
@@ -12015,7 +12088,11 @@ function guardarCuenta(){
   if(previa&&reciboPago){
     const montoPago=parseFloat(document.getElementById('mcta-pago-monto').value)||obj.saldo;
     if(montoPago>0){
-      obj.historialPagos=[...(obj.historialPagos||[]),{fecha:document.getElementById('mcta-pago-fecha').value||hoyLocal(),monto:montoPago,recibo:reciboPago,registradoPor:getNombreUsuario()}];
+      const formas=String(obj.tipo||'').startsWith('CxC')?mctaLeerFormas(montoPago):[];
+      if(formas.some(f=>!(f.monto>0))){alert('Poné el monto de cada forma de pago (o dejá una sola sin monto).');return;}
+      const sumaF=formas.reduce((s,f)=>s+f.monto,0);
+      if(formas.length&&Math.abs(sumaF-montoPago)>0.009&&!confirm(`Las formas de pago suman ${fmtD(sumaF)} y el pago es de ${fmtD(montoPago)}. ¿Guardar así?`))return;
+      obj.historialPagos=[...(obj.historialPagos||[]),{fecha:document.getElementById('mcta-pago-fecha').value||hoyLocal(),monto:montoPago,recibo:reciboPago,registradoPor:getNombreUsuario(),formas}];
       obj.saldo=Math.max(0,parseFloat((obj.saldo-montoPago).toFixed(2)));
       obj.reciboCancelacion=reciboPago;
       obj.estado=obj.saldo<=0.005?'Pagada':'Parcial';
@@ -12096,6 +12173,7 @@ async function registrarPagoCuenta(id){
   await saveOne('contable',{id:'main',...contData});
   renderCuentas();
   alert(`✅ Pago de ${fmtD(monto)} registrado. Saldo restante: ${fmtD(c.saldo)}.`);
+  if(String(c.tipo||'').startsWith('CxC'))editarFormasPagoCuenta(c.id,c.historialPagos.length-1);
 }
 // El Administrador valida una Cuenta por Cobrar creada desde Rendición de Operaciones (req #22)
 async function validarCxCRendicion(id){
@@ -12149,6 +12227,7 @@ function bancosMovsDesdeCaja(){
   cdCierres().forEach(c=>dias.add(c.fecha));
   (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
   (ventas||[]).forEach(v=>{if(v.fecha)dias.add(v.fecha);});
+  diasCobrosCxC().forEach(d=>dias.add(d));
   [...dias].filter(d=>d&&d>=inicio&&d<=hoyLocal()).sort().forEach(d=>{
     let h;try{h=cdCalcular(d);}catch(e){return;}
     (h.ingresos||[]).forEach(l=>{
@@ -16388,7 +16467,7 @@ function renderCtrlClientes(){
   const comoMap={'redes_pagina':'📱 Redes página','redes_vendedor':'📲 Redes vendedor','llego_solo':'🚶 Llegó solo','referido':'👥 Referido'};
   document.getElementById('tbl-ctrcli').innerHTML=data.length?data.map((x,i)=>{
     const vnd=clientes.find(c=>c.id===x.vendId);
-    const vendNombre=x.vendNombre||vnd?.nombre?.split(' ')[0]||'—';
+    const vendNombre=(vendedorDeRegistro(x)||'—').split(' ')[0];
     const alertaLlamada=citaRequiereLlamada(x)?`<span title="🔴 Llamar al cliente hoy — cita programada" style="color:#fff;background:var(--red);border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;animation:pulseAlerta 1.2s infinite;margin-right:4px"><i class="ti ti-phone-call" style="font-size:13px"></i></span>`:'';
     return`<tr>
       <td style="font-weight:700;color:var(--text2);text-align:center">${i+1}</td>
@@ -17598,7 +17677,7 @@ function cdAjuste(key){return(contData.cajaDiariaAjustes||[]).find(a=>a.id===key
 
 // Líneas automáticas del día, sacadas de Ventas (completadas) y Reservas (anticipos).
 function cdLineasAuto(fecha){
-  const lineas=[];
+  const lineas=[...cdLineasCobrosCxC(fecha)];
   (ventas||[]).filter(v=>v.fecha===fecha).forEach(v=>{
     const base={fecha,vendedor:cdNombrePersona(v.vendedorId),cliente:v.nombreFactura||cdNombrePersona(v.compradorId)||'',
       vehiculo:cdVehiculoTxt(v.vehiculoId),recibo:v.recibo||'',auto:true,ventaId:v.id};
@@ -17664,6 +17743,7 @@ function cdDiasPendientes(fecha){
   (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
   (vehiculos||[]).forEach(v=>{if(pagosCompraDe(v).some(p=>(p.fuente==='cajafuerte'||p.fuente==='cashjulio')&&Number(p.monto)>0))dias.add(v.fechacompra||v.fechaPagoCaja);});
   (ventas||[]).forEach(v=>{if(v.fecha&&(v.estado==='Completada'||(v.estado==='Pendiente'&&Number(v.anticipo||0)>0)))dias.add(v.fecha);});
+  diasCobrosCxC().forEach(d=>dias.add(d));
   return[...dias].filter(d=>d&&d>=ini&&d<fecha&&!cerrados.has(d)).sort();
 }
 function cdSaldoAnterior(fecha){
