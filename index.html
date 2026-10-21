@@ -4590,7 +4590,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1120';
+const APP_VERSION='2026-10-21-1240';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -19611,7 +19611,7 @@ function renderTaller(){
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-flag-check"></i> ✅ Listos (${completados.length}) — vehículos que ya finalizaron</h3></div>
     <table class="tbl" style="font-size:12px">
-      <thead><tr><th>Vehículo</th><th>Inicio del proceso</th><th>Fecha Fin</th><th>Pasos registrados</th><th>Días totales</th><th></th>${(MODO==='admin'||MODO==='operaciones2')?'<th>Editar</th>':''}</tr></thead>
+      <thead><tr><th>Vehículo</th><th>Inicio del proceso</th><th>Fecha Fin</th><th>Pasos registrados</th><th>Días totales</th><th></th>${(MODO==='admin'||MODO==='operaciones2')?'<th>Editar</th>':''}${puedeTerminarTaller()?'<th>Revertir</th>':''}</tr></thead>
       <tbody>${completados.length?completados.map(c=>{
         const colorDias=c.dias===null?'':c.dias<=7?'var(--green)':c.dias<=15?'var(--amber)':'var(--red)';
         return`<tr>
@@ -19622,6 +19622,7 @@ function renderTaller(){
           <td style="font-weight:700;color:${colorDias}">${c.dias!=null?c.dias+' día'+(c.dias===1?'':'s'):'—'}</td>
           <td style="cursor:pointer" onclick="verHistorialTallerVehiculo('${c.vehiculoId}')"><i class="ti ti-eye" style="color:var(--blue)"></i></td>
           ${(MODO==='admin'||MODO==='operaciones2')?`<td><button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="abrirEditarRecepcionTaller('${c.vehiculoId}')" title="Editar recepción / reabrir / reclasificar"><i class="ti ti-edit"></i></button></td>`:''}
+          ${puedeTerminarTaller()?`<td><button class="btn btn-sm" style="color:var(--red);border-color:var(--red)" onclick="revertirFinalizadoTaller('${c.vehiculoId}')" title="Revertir: el carro deja de estar Finalizado y vuelve a Taller"><i class="ti ti-arrow-back-up"></i> Revertir</button></td>`:''}
         </tr>`;
       }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Todavía no hay ningún vehículo con el proceso terminado</td></tr>'}</tbody>
     </table>
@@ -20077,6 +20078,7 @@ function iniciarPasoDesdeTimeline(vehiculoId,paso){
   iniciarPasoTallerRapido(vehiculoId,paso);
 }
 function abrirAsignarTrabajadorNuevoPaso(vehiculoId,paso){
+  if(paso==='Finalizado'&&!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
   const v=vehiculos.find(x=>x.id===vehiculoId);
   document.getElementById('mtip-vehiculoid').value=vehiculoId;
   document.getElementById('mtip-paso').value=paso;
@@ -20092,8 +20094,36 @@ function confirmarIniciarPasoConTrabajador(){
   iniciarPasoTallerRapido(vehiculoId,paso,trabajador);
 }
 // Clic sobre el círculo ACTIVO (azul) = finalizarlo directo, sin pasos extra ni validaciones.
-// Solo Jordan (Jefe de Taller) da por TERMINADO cada proceso (y el Administrador).
-function puedeTerminarTaller(){return MODO==='operaciones2'||MODO==='admin';}
+// Solo Jordan (Jefe de Taller) da por TERMINADO cada proceso (pedido de Edwin, 21/10).
+function puedeTerminarTaller(){return MODO==='operaciones2';} // SOLO Jordan — ni siquiera el Administrador
+// Jordan puede REVERTIR un carro finalizado (por error o porque le falta algo): se quita el
+// "Finalizado", el carro vuelve al estado que se elija y sale de Marketing si no se publicó.
+async function revertirFinalizadoTaller(vehiculoId){
+  if(!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
+  const regs=getTallerRegistros();
+  const fins=regs.filter(r=>r.vehiculoId===vehiculoId&&r.paso==='Finalizado');
+  if(!fins.length){alert('Este carro no tiene un "Finalizado" para revertir.');return;}
+  const v=vehiculos.find(x=>x.id===vehiculoId);
+  const info=fins[0].vehiculoInfo||(v?v.marca+' '+v.modelo:'');
+  const ESTADOS=['Taller','Taller Externo','En Pintura','En Alistamiento'];
+  const sel=prompt(`Revertir el Finalizado de ${info}.\n\n¿A qué estado vuelve el carro?\n${ESTADOS.map((e,i)=>`${i+1}. ${e}`).join('\n')}\n\nEscribí el número:`,'1');
+  if(sel===null)return;
+  const estado=ESTADOS[(parseInt(sel,10)||1)-1]||'Taller';
+  const motivo=(prompt('Motivo (opcional):','')||'').trim();
+  if(!confirm(`¿Confirmás revertir ${info}?\n\n• Se quita el paso "Finalizado"\n• El carro vuelve a: ${estado}${v&&v.marketingFecha&&!v.marketingPublicado?'\n• Sale de Marketing (todavía no estaba publicado)':''}`))return;
+  contData.tallerRegistros=regs.filter(r=>!(r.vehiculoId===vehiculoId&&r.paso==='Finalizado'));
+  contData.tallerReversiones=contData.tallerReversiones||[];
+  contData.tallerReversiones.push({id:uid(),vehiculoId,vehiculoInfo:info,fecha:hoyLocal(),por:getNombreUsuario(),estado,motivo,finalizadoEra:fins.map(f=>f.fechaFin)});
+  await saveOne('contable',{id:'main',...contData});
+  if(v){
+    if(v.estado!=='Vendido'&&v.estado!=='Reservado')v.estado=estado;
+    if(!v.marketingPublicado)delete v.marketingFecha;
+    marcarEdicion(v);
+    await saveOne('vehiculos',v);
+  }
+  renderTaller();
+  alert(`✅ ${info} ya no está Finalizado. Volvió a "${estado}".`);
+}
 function avisoSoloJordanTaller(){alert('⛔ Solo Jordan (Jefe de Taller) puede dar por terminado un proceso. Avisale para que lo marque.');}
 async function terminarPasoDesdeTimeline(regId){
   if(!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
@@ -20494,6 +20524,7 @@ async function editarTallerRegistro(idx){
   r.paso=nuevoPaso.trim()||r.paso;
   r.trabajador=nuevoTrabajador.trim()||r.trabajador;
   r.fechaInicio=nuevaFechaInicio.trim();
+  if(!r.fechaFin&&nuevaFechaFin.trim()&&!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
   r.fechaFin=nuevaFechaFin.trim()||null;
   r.bitacora=nuevaBitacora;
   await saveOne('contable',{id:'main',...contData});
