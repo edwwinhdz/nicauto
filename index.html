@@ -4577,7 +4577,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-20-2005';
+const APP_VERSION='2026-10-21-1000';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -5785,6 +5785,11 @@ function filtroMesesBitacora(modo){
 // Cada vendedor ve SOLO sus propios clientes (prospectos y control de piso). Gerencia (Edwin,
 // Samir, Don Julio y Gisselle) ve los registros de todos los vendedores.
 const ROLES_GERENCIA_CTRL=['admin','jefecomercial','gerente1','gerente2'];
+// También registran clientes y citas (sin ser vendedores): NO se evalúan en la meta de 5 clientes
+// ni en la tabla "Clientes contactados por vendedor".
+const OTROS_REGISTRAN_CTRL=['Alonso Hasbani','Jordan Lopez'];
+const NO_EVALUADOS_CTRL=['alonso hasbani','jordan lopez','gerencia','sin vendedor'];
+function noEvaluadoCtrl(n){return NO_EVALUADOS_CTRL.includes(String(n||'').trim().toLowerCase().replace(/\s+/g,' '));}
 const META_CLIENTES_DIA=5;
 function esGerenciaCtrl(){return ROLES_GERENCIA_CTRL.includes(MODO);}
 function _nomEq(a,b){return String(a||'').trim().toLowerCase().replace(/\s+/g,' ')===String(b||'').trim().toLowerCase().replace(/\s+/g,' ')&&String(a||'').trim()!=='';}
@@ -5793,13 +5798,13 @@ function vendedorDeRegistro(x){
   if(!x)return'';
   if(x.tipoReg==='piso')return x.vendedor||x.registradoPor||'';
   const c=x.vendId?clientes.find(k=>k.id===x.vendId):null;
-  return(c&&c.nombre)||x.vendNombre||x.registradoPor||'';
+  return(c&&c.nombre)||x.vendNomResp||x.vendNombre||x.registradoPor||'';
 }
 function esMioCtrl(x){
   if(!x)return false;
   const n=getNombreUsuario();
   if(_nomEq(x.registradoPor,n)||_nomEq(x.vendedor,n))return true;
-  if(x.tipoReg!=='piso'&&_nomEq(x.vendNombre,n))return true;
+  if(x.tipoReg!=='piso'&&(_nomEq(x.vendNombre,n)||_nomEq(x.vendNomResp,n)))return true;
   const vid=miVendIdCtrl();return !!vid&&x.vendId===vid;
 }
 function ctrlVisible(x){return esGerenciaCtrl()||esMioCtrl(x);}
@@ -5818,7 +5823,7 @@ function renderAlertasVendedores(){
   const hoy=hoyLocal();
   const ger=esGerenciaCtrl();
   const yo=getNombreUsuario();
-  const vendedores=ger?vendedoresCtrl():(MODO==='vendedor'?[yo]:[]);
+  const vendedores=(ger?vendedoresCtrl():(MODO==='vendedor'?[yo]:[])).filter(n=>!noEvaluadoCtrl(n));
   const cuentaHoy=n=>ctrlClientes.filter(x=>x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length+controlPiso.filter(x=>x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length;
   const faltan=vendedores.map(n=>({n,c:cuentaHoy(n)})).filter(o=>o.c<META_CLIENTES_DIA);
   const porLlamar=controlPiso.filter(ctrlVisible).filter(pisoRequiereLlamada);
@@ -5857,7 +5862,7 @@ function renderConteoContactados(){
       prosp:lm.filter(x=>x._t==='p').length,piso:lm.filter(x=>x._t==='f').length,
       clientes:lm.filter(x=>x._t==='p'&&x.estado==='Cliente').length,neg:l.filter(x=>x._t==='f'&&x.negociacion).length,
       ant:l.filter(x=>f(x).slice(0,7)===mesAnt).length,total:l.length};
-  }).filter(r=>esGerenciaCtrl()?(r.total>0||vendedoresCtrl().some(v=>_nomEq(v,r.n))):true).sort((a,b)=>b.mes-a.mes||b.total-a.total||a.n.localeCompare(b.n,'es'));
+  }).filter(r=>!noEvaluadoCtrl(r.n)).filter(r=>esGerenciaCtrl()?(r.total>0||vendedoresCtrl().some(v=>_nomEq(v,r.n))):true).sort((a,b)=>b.mes-a.mes||b.total-a.total||a.n.localeCompare(b.n,'es'));
   const sum=k=>filas.reduce((s,r)=>s+r[k],0);
   const nmMes=m=>new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long'});
   const c=(v,extra)=>`<td style="text-align:center;${extra||''}">${v||'<span style="color:var(--text3)">0</span>'}</td>`;
@@ -5944,7 +5949,7 @@ function abrirModalPiso(id){
   const ger=esGerenciaCtrl();
   const selV=document.getElementById('mpiso-vend');
   const yo=getNombreUsuario();
-  selV.innerHTML=(ger?vendedoresCtrl():[yo]).map(n=>`<option>${n}</option>`).join('');
+  selV.innerHTML=(ger?[...vendedoresCtrl(),...OTROS_REGISTRAN_CTRL.filter(n=>!vendedoresCtrl().some(v=>_nomEq(v,n)))]:[yo]).map(n=>`<option>${n}</option>`).join('');
   selV.value=x?(x.vendedor||x.registradoPor||yo):(ger?(vendedoresCtrl()[0]||yo):yo);
   if(x&&![...selV.options].some(o=>o.value===selV.value)){selV.innerHTML+=`<option>${x.vendedor}</option>`;selV.value=x.vendedor;}
   document.getElementById('mpiso-vend-wrap').style.display=ger?'':'none';
@@ -12411,11 +12416,11 @@ function tablaCxCBancos(tblRows){
   window._cxcBancoMesesAbiertos=window._cxcBancoMesesAbiertos||new Set();
   const meses=[...new Set(hist.map(c=>(c.fecha||'').slice(0,7)||'sin-fecha'))].sort().reverse();
   const nm=m=>m==='sin-fecha'?'Sin fecha':new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'});
-  const filaHist=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+'</td><td style="text-align:center;font-size:11px;color:var(--text3)">'+(c.historialPagos&&c.historialPagos.length?Math.max(0,Math.round((new Date(c.historialPagos[c.historialPagos.length-1].fecha)-new Date(c.fecha))/86400000))+' d':'—')+'</td><td>'+(bancoDeCxC(c)||'—')+'</td>');
+  const filaHist=c=>tblRows(c).replace('<td>'+c.fecha+'</td>','<td>'+c.fecha+' <i class="ti ti-list-details" style="color:var(--blue);cursor:pointer" title="Ver historial de cobros de esta cuenta" onclick="event.stopPropagation();abrirHistorialCxCBanco(\'\',\''+c.id+'\')"></i></td><td style="text-align:center;font-size:11px;color:var(--text3)">'+(c.historialPagos&&c.historialPagos.length?Math.max(0,Math.round((new Date(c.historialPagos[c.historialPagos.length-1].fecha)-new Date(c.fecha))/86400000))+' d':'—')+'</td><td>'+(bancoDeCxC(c)||'—')+'</td>');
   return`<div class="card" style="margin-bottom:1rem">
     <div class="card-head"><h3><i class="ti ti-building-bank"></i> CxC — Bancos <span style="font-weight:400;font-size:12px;color:var(--text2)">— ${fmtD(total)} pendiente</span></h3>
-      <div style="display:flex;gap:4px">${botonesReporteCuentas(['CxC-Banco'],'CxC - Bancos')}<button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'CxC-Banco')"><i class="ti ti-plus"></i>Nueva</button></div></div>
-    ${pend.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:.75rem 1rem 0">${Object.entries(porBanco).sort((a,b)=>b[1]-a[1]).map(([b,t])=>`<span style="background:${b==='Sin asignar'?'var(--red-light)':'var(--green-light)'};color:${b==='Sin asignar'?'var(--red)':'var(--green)'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700"><i class="ti ti-building-bank"></i> ${b}: ${fmtD(t)}</span>`).join('')}</div>`:''}
+      <div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="abrirHistorialCxCBanco('')" title="Auxiliar: todas las cuentas por cobrar a bancos con sus cobros (recibos) y saldo"><i class="ti ti-list-details"></i>Auxiliar / historial</button>${botonesReporteCuentas(['CxC-Banco'],'CxC - Bancos')}<button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'CxC-Banco')"><i class="ti ti-plus"></i>Nueva</button></div></div>
+    ${pend.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:.75rem 1rem 0">${Object.entries(porBanco).sort((a,b)=>b[1]-a[1]).map(([b,t])=>`<span onclick="abrirHistorialCxCBanco('${b==='Sin asignar'?'__sin__':b}')" title="Ver auxiliar de ${b}" style="cursor:pointer;background:${b==='Sin asignar'?'var(--red-light)':'var(--green-light)'};color:${b==='Sin asignar'?'var(--red)':'var(--green)'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700"><i class="ti ti-building-bank"></i> ${b}: ${fmtD(t)} <i class="ti ti-chevron-right" style="font-size:10px"></i></span>`).join('')}</div>`:''}
     <table class="tbl"><thead><tr><th>Fecha</th><th>Días</th><th>Banco que debe</th><th>Persona/Entidad</th><th>Monto</th><th>Saldo</th><th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
     <tbody>${pend.length?pend.map(filaPend).join(''):'<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:1rem">No hay cuentas por cobrar a bancos pendientes</td></tr>'}
     ${pend.length?`<tr style="background:var(--surface2);font-weight:800"><td colspan="5" style="text-align:right">TOTAL POR COBRAR A BANCOS:</td><td>${fmtD(total)}</td><td colspan="5"></td></tr>`:''}
@@ -12424,6 +12429,48 @@ function tablaCxCBancos(tblRows){
       return`<tr style="cursor:pointer" onclick="toggleMesCxCBanco('${m}')"><td colspan="11" style="font-size:12px;color:var(--text2);padding:6px 12px"><i class="ti ti-chevron-${ab?'down':'right'}"></i> <span style="text-transform:capitalize">${nm(m)}</span> (${lista.length})${ab?'':' — clic para ver'}</td></tr>`+(ab?lista.map(filaHist).join(''):'');}).join('')}
     </tbody></table>
   </div>`;
+}
+// ---- Auxiliar / historial de Cuentas por Cobrar a Bancos ----
+// Cada cuenta aparece como CARGO (lo que el banco quedó debiendo) y cada cobro con su recibo como
+// ABONO, con el saldo corrido — así lo que se cancela con recibo no "desaparece": queda aquí.
+function abrirHistorialCxCBanco(banco,soloCuentaId){
+  const todas=(contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco');
+  const lista=todas.filter(c=>soloCuentaId?c.id===soloCuentaId:(!banco||(banco==='__sin__'?!bancoDeCxC(c):bancoDeCxC(c)===banco)));
+  const movs=[];
+  lista.forEach(c=>{
+    const nom=`${c.persona||''}${c.desc?' — '+c.desc:''}`;
+    movs.push({fecha:c.fecha||'',desc:nom,banco:bancoDeCxC(c)||'Sin asignar',recibo:'',cargo:Number(c.monto||0),abono:0,id:c.id,estado:c.estado});
+    const hp=Array.isArray(c.historialPagos)?c.historialPagos:[];
+    hp.forEach(p=>movs.push({fecha:p.fecha||'',desc:'Cobro — '+(c.persona||''),banco:bancoDeCxC(c)||'Sin asignar',recibo:p.recibo||'',cargo:0,abono:Number(p.monto||0),id:c.id,por:p.registradoPor||''}));
+    // Cuentas viejas cobradas sin historial de pagos: se muestra el cobro con lo que falta
+    const pagado=hp.reduce((s,p)=>s+Number(p.monto||0),0);
+    const sinHist=Number(c.monto||0)-Number(c.saldo||0)-pagado;
+    if(sinHist>0.005)movs.push({fecha:c.fechaPago||c.fecha||'',desc:'Cobro registrado (sin detalle) — '+(c.persona||''),banco:bancoDeCxC(c)||'Sin asignar',recibo:c.reciboCancelacion||'',cargo:0,abono:sinHist,id:c.id});
+  });
+  movs.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||(b.cargo-a.cargo));
+  let saldo=0;movs.forEach(m=>{saldo+=m.cargo-m.abono;m.saldo=saldo;});
+  const totC=movs.reduce((s,m)=>s+m.cargo,0),totA=movs.reduce((s,m)=>s+m.abono,0);
+  const titulo=soloCuentaId?'Historial de la cuenta':('Auxiliar CxC Bancos'+(banco?' — '+(banco==='__sin__'?'Sin banco asignado':banco):' — todos los bancos'));
+  window._auxiliarActual={titulo,movimientos:movs.map(m=>({fecha:m.fecha,desc:m.desc+(m.recibo?' | Recibo '+m.recibo:''),cat:m.banco,monto:m.cargo||m.abono,signo:m.cargo?'+':'-'})),cuenta:'CxC-Banco',desde:'',hasta:''};
+  document.getElementById('auxiliar-title').innerHTML=`<i class="ti ti-list-details" style="color:var(--blue)"></i> ${titulo}`;
+  document.getElementById('auxiliar-body').innerHTML=`<div style="padding:1rem">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:.75rem;font-size:12px">
+      <span>Cargos: <b>${fmtD(totC)}</b></span><span>Cobrado: <b style="color:var(--green)">${fmtD(totA)}</b></span><span>Saldo pendiente: <b style="color:var(--red)">${fmtD(totC-totA)}</b></span>
+      <span style="flex:1"></span>
+      ${!soloCuentaId?`<select onchange="abrirHistorialCxCBanco(this.value)" style="padding:4px"><option value="">Todos los bancos</option>${[...new Set(todas.map(c=>bancoDeCxC(c)).filter(Boolean))].sort().map(b=>`<option ${b===banco?'selected':''}>${b}</option>`).join('')}<option value="__sin__" ${banco==='__sin__'?'selected':''}>Sin banco asignado</option></select>`:''}
+      <button class="btn btn-sm" onclick="imprimirAuxiliarCuenta()"><i class="ti ti-printer"></i> Imprimir</button>
+      <button class="btn btn-sm" onclick="exportExcelAuxiliarCuenta()"><i class="ti ti-download"></i> Excel</button>
+    </div>
+    <div style="max-height:440px;overflow-y:auto"><table class="tbl tbl-grid" style="font-size:12px">
+      <thead><tr><th>Fecha</th><th>Descripción</th><th>Banco</th><th>Recibo</th><th style="text-align:right">Cargo</th><th style="text-align:right">Abono (cobro)</th><th style="text-align:right">Saldo</th></tr></thead>
+      <tbody>${movs.length?movs.map(m=>`<tr style="cursor:pointer" onclick="closeOv('ov-auxiliar');abrirModalCuenta('${m.id}')" title="Abrir la cuenta">
+        <td style="white-space:nowrap">${m.fecha||'—'}</td><td>${m.desc}${m.por?` <span style="font-size:10px;color:var(--text3)">(${m.por})</span>`:''}</td><td>${m.banco}</td>
+        <td style="font-weight:700;color:var(--green)">${m.recibo||''}</td>
+        <td style="text-align:right">${m.cargo?fmtD(m.cargo):''}</td><td style="text-align:right;color:var(--green)">${m.abono?fmtD(m.abono):''}</td>
+        <td style="text-align:right;font-weight:700">${fmtD(m.saldo)}</td></tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Sin movimientos</td></tr>'}</tbody>
+      <tfoot><tr style="background:var(--surface2);font-weight:800"><td colspan="4" style="text-align:right">TOTALES</td><td style="text-align:right">${fmtD(totC)}</td><td style="text-align:right;color:var(--green)">${fmtD(totA)}</td><td style="text-align:right">${fmtD(totC-totA)}</td></tr></tfoot>
+    </table></div></div>`;
+  openOv('ov-auxiliar');
 }
 // ======================== IMPRIMIR / EXPORTAR CUENTAS ========================
 const NOMBRE_TIPO_CUENTA={'CxC-Cliente':'CxC — Clientes','CxC-Banco':'CxC — Bancos','CxC-Empleado':'CxC — Empleados','CxC-Tercero':'CxC — Terceros / Ajenos','CxC-Inversor':'CxC — Inversores',
@@ -12936,7 +12983,7 @@ function renderBalance(){
     +BANCOS_CTAS.map(b=>fS(b.t,bancoSaldo(b.k,fechaCorte||undefined))).join('')
     +bancoHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
     +fM('Cuentas por cobrar',totCxC,bgDet?'':`localStorage.setItem('bgConSubcuentas','1');renderBalance()`)
-    +subCxC.map(([l,v,k])=>fS(l,v,aux(k))+(k==='CxC-Banco'?Object.entries(bancosPorCxC).map(([b,t])=>fS(b,t,'',2)).join(''):'')).join('')
+    +subCxC.map(([l,v,k])=>fS(l,v,aux(k))+(k==='CxC-Banco'?Object.entries(bancosPorCxC).map(([b,t])=>fS(b,t,`abrirHistorialCxCBanco('${b==='Sin asignar'?'__sin__':b}')`,2)).join(''):'')).join('')
     +cxcHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
     +fM('Inventario de vehículos — a costo',valorInv+valorInvGer,bgDet?'':aux('inventario'))
     +fS('Inventario vehículos ('+vehiculos.filter(v=>v.estado!=='Vendido'&&hastaCorte(v.fechacompra)).length+' und.)',valorInv,aux('inventario'))
@@ -16375,11 +16422,14 @@ function abrirModalCtrlCliente(id){
   document.getElementById('mctrcli-title').textContent=id?'Editar contacto':'Nuevo contacto';
   document.getElementById('mctrcli-id').value=id||'';
   const sv=document.getElementById('mctrcli-vend');
-  sv.innerHTML='<option value="">-- Seleccionar --</option>'+clientes.filter(c=>c.rol==='vendedor').map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+  sv.innerHTML='<option value="">-- Seleccionar --</option>'+clientes.filter(c=>c.rol==='vendedor').map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('')
+    +`<optgroup label="También registran clientes">${OTROS_REGISTRAN_CTRL.map(n=>`<option value="NOM:${n}">${n}${n==='Alonso Hasbani'?' (comprador)':''}</option>`).join('')}</optgroup>`;
   ['nombre','cel','email','estado','como','interes','notas','fecha','cita'].forEach(f=>{
     const el=document.getElementById('mctrcli-'+f);if(el)el.value=x?x[f]||'':'';
   });
-  document.getElementById('mctrcli-vend').value=x?x.vendId||'':(esGerenciaCtrl()?'':(miVendIdCtrl()||''));
+  const yoCtrl=getNombreUsuario();
+  const propioNom=OTROS_REGISTRAN_CTRL.find(n=>_nomEq(n,yoCtrl));
+  document.getElementById('mctrcli-vend').value=x?(x.vendId||(x.vendNomResp?'NOM:'+x.vendNomResp:'')):(esGerenciaCtrl()?'':(miVendIdCtrl()||(propioNom?'NOM:'+propioNom:'')));
   if(!x){document.getElementById('mctrcli-fecha').value=hoyLocal();document.getElementById('mctrcli-estado').value='Prospecto';}
   // Resultado (req #3)
   setResultadoUICtrlCliente(x?x.resultado||'':'');
@@ -16471,7 +16521,8 @@ function guardarCtrlCliente(){
   const obj={...(existing||{}),id,nombre,cedula,visita:visitNum,
     cel:document.getElementById('mctrcli-cel').value,
     email:document.getElementById('mctrcli-email').value,
-    vendId:document.getElementById('mctrcli-vend').value||'',
+    vendId:(document.getElementById('mctrcli-vend').value||'').startsWith('NOM:')?'':(document.getElementById('mctrcli-vend').value||''),
+    vendNomResp:(document.getElementById('mctrcli-vend').value||'').startsWith('NOM:')?document.getElementById('mctrcli-vend').value.slice(4):'',
     vendNombre:existing?.vendNombre||getNombreUsuario(),
     registradoPor:existing?.registradoPor||getNombreUsuario(), // auto-registro de usuario (req #21)
     estado:document.getElementById('mctrcli-estado').value,
