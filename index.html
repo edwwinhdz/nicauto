@@ -4590,7 +4590,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1240';
+const APP_VERSION='2026-10-21-1320';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -9466,7 +9466,7 @@ function renderListaRep(v){
       return`<tr>
       <td style="white-space:nowrap">${r.fecha||'—'}</td>
       <td><span class="badge badge-amber" style="font-size:10px">${r.tipo||(origenAuto?'Conectado':'—')}</span></td>
-      <td style="font-size:12px;max-width:160px">${r.desc||'—'}</td>
+      <td style="font-size:12px;max-width:200px">${r.desc||'—'}${trazaHTML({rendicionMovId:r.rendicionMovId,desc:r.desc},true)}</td>
       <td style="font-size:12px;color:var(--text2)">${r.taller||'—'}</td>
       <td style="font-size:11px"><span class="badge badge-${pago.includes('Banco')?'blue':pago.includes('Tarjeta')?'purple':'gray'}" style="font-size:10px">${pago.split(' ')[0]}</span></td>
       <td style="font-size:11px;color:var(--text2)">${r.factura||'—'}</td>
@@ -12676,7 +12676,7 @@ function renderCuentas(){
     <td>${c.vence||'—'}</td>
     <td><span class="badge badge-${estColor[c.estado]||'gray'}">${c.estado==='Pendiente Validación'?'🕒 Pend. Validación':c.estado}</span></td>
     <td style="font-size:12px">${origenCuenta(c)}</td>
-    <td style="font-size:12px;color:var(--text2)">${c.desc||'—'}${c.reciboCancelacion?`<div style="font-size:10px;color:var(--green);font-weight:700"><i class="ti ti-receipt"></i> Recibo ${c.reciboCancelacion}</div>`:''}</td>
+    <td style="font-size:12px;color:var(--text2)">${c.desc||'—'}${trazaHTML({origenMovId:c.origenMovId,desc:c.desc,recibo:c.reciboCancelacion,recibosPagos:(c.historialPagos||[]).map(p=>p.recibo)},true)}</td>
     <td onclick="event.stopPropagation()"><div class="tbl-actions">
       ${c.estado==='Pendiente Validación'&&(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm btn-success" onclick="validarCxCRendicion('${c.id}')" title="Validar"><i class="ti ti-check"></i></button>`:''}
       ${c.estado!=='Pagada'&&(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm btn-success" onclick="registrarPagoCuenta('${c.id}')" title="Registrar pago"><i class="ti ti-cash"></i></button>`:''}
@@ -13596,7 +13596,7 @@ function renderEstado(){
     if(!items.length)return'';
     return`<div style="margin:2px 0 10px 22px;border-left:2px solid var(--border);padding-left:10px">
       ${items.map(g=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--text2);padding:2px 0">
-        <span>${g.fecha||'—'} — ${g.desc||'(sin descripción)'}${g.beneficiario?' · '+g.beneficiario:''}${g.medio?' · '+g.medio:''}${g.vehiculoRef?' · 🚗 '+g.vehiculoRef:''}</span>
+        <span>${g.fecha||'—'} — ${g.desc||'(sin descripción)'}${g.beneficiario?' · '+g.beneficiario:''}${g.medio?' · '+g.medio:''}${trazaHTML(g)}</span>
         <span style="white-space:nowrap;color:var(--red)">(${fmtD(g.monto)})</span>
       </div>`).join('')}
     </div>`;
@@ -23119,6 +23119,36 @@ function sumaFondosRecibidos(cfg){
 function getRendicionMovs(){return contData.rendicionMovs||[];}
 function getRendicionHistorial(){return contData.rendicionHistorial||[];}
 function fmtRDC(n){return'RDC-'+String(n||1).padStart(3,'0');}
+// ---- Trazabilidad: en cada detalle de pago se ve de qué Rendición viene, con qué Recibo y a
+// qué carro se conecta (Cuentas, BG, ER y reparaciones del vehículo). ----
+function rdcDeMov(movId){
+  if(!movId)return'';
+  const cfg=contData.rendicionConfig||{};
+  if((contData.rendicionMovs||[]).some(m=>m.id===movId))return fmtRDC(cfg.numeroActual)+' (abierta)';
+  const h=(contData.rendicionHistorial||[]).find(x=>(x.movs||[]).some(m=>m.id===movId));
+  if(h)return fmtRDC(h.numero);
+  try{
+    const cc=contData.cajaChicaConfig||{};
+    if((contData.cajaChicaMovs||[]).some(m=>m.id===movId))return fmtCCM(cc.numeroActual)+' (abierta)';
+    const hc=(contData.cajaChicaHistorial||[]).find(x=>(x.movs||[]).some(m=>m.id===movId));
+    if(hc)return fmtCCM(hc.numero);
+  }catch(e){}
+  return'';
+}
+function vehTxtTraza(id){
+  if(!id)return'';
+  try{const v=buscarVehiculoOConsig(id)||(vehGerencia||[]).find(g=>g.id===id||('VGER_'+g.id)===id);if(v)return`${(v.marca||'').trim()} ${(v.modelo||'').trim()}${v.placa?' ('+v.placa+')':''}`.trim();}catch(e){}
+  return'';
+}
+function trazaHTML(o,sinVehiculo){
+  if(!o)return'';
+  const rdc=rdcDeMov(o.origenMovId||o.rendicionMovId)||((String(o.desc||'').match(/R?DC-\d+|CCM-\d+/)||[])[0]||'');
+  const recibos=[...new Set([o.recibo,o.ref,o.factura,o.reciboCancelacion,...(Array.isArray(o.recibosPagos)?o.recibosPagos:[])].map(x=>String(x||'').trim()).filter(x=>x&&x!=='—'&&!/^id[0-9a-z]{10,}$/i.test(x)&&!/^(M|MY|MT|CT|ZC)\s?\d/i.test(x)&&!/^(inventario|oficina|taller|bodega|venta)$/i.test(x)))];
+  const veh=sinVehiculo?'':(o.vehiculoRef||vehTxtTraza(o.vehId||o.vehiculoId)||(o.placa&&o.placa!=='Oficina'&&o.placa!=='Taller'?o.placa:''));
+  const b=(ic,t,c)=>`<span style="display:inline-block;font-size:10px;font-weight:700;border-radius:8px;padding:0 6px;margin:1px 3px 0 0;background:${c}22;color:${c};white-space:nowrap">${ic} ${t}</span>`;
+  const out=(rdc?b('📄',rdc,'#7048E8'):'')+(recibos.length?b('🧾','Recibo '+recibos.join(', '),'#2F9E44'):'')+(veh?b('🚗',veh,'#1971C2'):'');
+  return out?`<div>${out}</div>`:'';
+}
 
 async function marcarRendicionRevisada(numero){
   if(MODO!=='admin'){alert('⛔ Solo el Administrador (Edwin) puede marcar esto.');return;}
@@ -25052,6 +25082,19 @@ function cambiarTipoRendicion(tipo){
 
 // Conecta un gasto de inversión/reparación a la placa correspondiente, ya sea del
 // Inventario normal o de Gerencia/Taller (req: seleccionables también desde ahí).
+async function _desconectarReparacionDeOtros(movId,placaQueda){
+  for(const v of vehiculos){
+    if(v.placa===placaQueda||!Array.isArray(v.reparaciones))continue;
+    if(v.reparaciones.some(r=>r.rendicionMovId===movId)){v.reparaciones=v.reparaciones.filter(r=>r.rendicionMovId!==movId);await saveOne('vehiculos',v);}
+  }
+  for(const g of (vehGerencia||[])){
+    if(g.placa===placaQueda||!Array.isArray(g.reparaciones))continue;
+    if(g.reparaciones.some(r=>r.rendicionMovId===movId)){g.reparaciones=g.reparaciones.filter(r=>r.rendicionMovId!==movId);await saveOne('vehgerencia',g);}
+  }
+  let cambioC=false;
+  (contData.consignacion||[]).forEach(c=>{if(c.placa!==placaQueda&&Array.isArray(c.reparaciones)&&c.reparaciones.some(r=>r.rendicionMovId===movId)){c.reparaciones=c.reparaciones.filter(r=>r.rendicionMovId!==movId);cambioC=true;}});
+  if(cambioC)await saveOne('contable',{id:'main',...contData});
+}
 async function _conectarReparacionPorPlaca(placa,id,desc,montoUSD,fecha,montoOrigenCordobas,tasa){
   const vi=vehiculos.findIndex(v=>v.placa===placa);
   if(vi>=0){
@@ -25164,6 +25207,9 @@ async function guardarRendicion(){
   // también aplica al EDITAR un gasto existente y marcarlo como inversión, no solo al crear uno nuevo).
   // IMPORTANTE (bimoneda): el monto se ingresa en córdobas, pero el costo del vehículo es en dólares,
   // así que se convierte con la tasa de cambio vigente antes de sumarlo (corrige costo incorrecto).
+  // Si al EDITAR se cambió la placa (o ya no es inversión), se quita la reparación del vehículo
+  // anterior — antes quedaba "huérfana" (pasó con el empaque del Mazda 2 el 15/10).
+  await _desconectarReparacionDeOtros(id,esInversion?placa:null);
   if(esInversion){
     const tasa=Number(getRendicionConfig().tasaCambio||36.50);
     const montoUSD=parseFloat((parseFloat(monto)/tasa).toFixed(2));
@@ -25703,7 +25749,7 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
     movimientos=vehiculos.filter(v=>v.estado!=='Vendido'&&enRango(v.fechacompra)).map(v=>{const tot=costoInventarioVeh(v,hasta||undefined);return{id:v.id,fecha:v.fechacompra||'—',desc:v.marca+' '+v.modelo+' '+v.anio+' ('+v.placa+') — '+(v.estado||'')+' · compra '+fmtD(v.costo||0)+' + reparaciones '+fmtD(tot-Number(v.costo||0)),cat:'Inventario',monto:tot,signo:'+',color:'var(--green)'};}).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   } else if(cuenta.startsWith('CxC')){
     titulo='Auxiliar — '+cuenta.replace('-',' ');
-    movimientos=cuentas.filter(ct=>ct.tipo===cuenta).map(ct=>({id:ct.id,fecha:ct.fecha,desc:ct.desc||ct.persona||'',cat:ct.tipo,monto:ct.saldo,signo:'+',color:'var(--blue)',estado:ct.estado}));
+    movimientos=cuentas.filter(ct=>ct.tipo===cuenta).map(ct=>({id:ct.id,fecha:ct.fecha,desc:ct.desc||ct.persona||'',cat:ct.tipo,monto:ct.saldo,signo:'+',color:'var(--blue)',estado:ct.estado,origenMovId:ct.origenMovId,vehId:ct.vehId,recibo:ct.reciboCancelacion,recibosPagos:(ct.historialPagos||[]).map(p=>p.recibo)}));
     if(cuenta==='CxC-Empleado'){
       // Gastos cargados a "CxC Empleados" (ej. reparación cobrada a un empleado): también son cuenta por cobrar.
       const hayCuentaPers=(contData.cuentasPersonalizadas||[]).some(c=>c.tipo==='activo'&&esCxCEmpleadosCat(c.nombre));
@@ -25711,16 +25757,16 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
     }
   } else if(cuenta.startsWith('CxP')){
     titulo='Auxiliar — '+cuenta.replace('-',' ');
-    movimientos=cuentas.filter(ct=>ct.tipo===cuenta).map(ct=>({id:ct.id,fecha:ct.fecha,desc:ct.desc||ct.persona||'',cat:ct.tipo,monto:ct.saldo,signo:'-',color:'var(--red)',estado:ct.estado}));
+    movimientos=cuentas.filter(ct=>ct.tipo===cuenta).map(ct=>({id:ct.id,fecha:ct.fecha,desc:ct.desc||ct.persona||'',cat:ct.tipo,monto:ct.saldo,signo:'-',color:'var(--red)',estado:ct.estado,origenMovId:ct.origenMovId,vehId:ct.vehId,recibo:ct.reciboCancelacion,recibosPagos:(ct.historialPagos||[]).map(p=>p.recibo)}));
   } else if(cuenta==='ventas'||cuenta==='ingresos'){
     titulo='Auxiliar — Ingresos por Ventas';
-    movimientos=ventas.filter(v=>v.estado==='Completada'&&enRango(v.fecha)).map(v=>{const vh=buscarVehiculoOConsig(v.vehiculoId);const cl=clientes.find(x=>x.id===v.compradorId);return{id:v.id,fecha:v.fecha,desc:(vh?vh.marca+' '+vh.modelo:'')+(cl?' — '+cl.nombre:''),cat:'Venta',monto:Number(v.precio),signo:'+',color:'var(--green)'};});
+    movimientos=ventas.filter(v=>v.estado==='Completada'&&enRango(v.fecha)).map(v=>{const vh=buscarVehiculoOConsig(v.vehiculoId);const cl=clientes.find(x=>x.id===v.compradorId);return{id:v.id,fecha:v.fecha,desc:(vh?vh.marca+' '+vh.modelo:'')+(cl?' — '+cl.nombre:''),cat:'Venta',monto:Number(v.precio),signo:'+',color:'var(--green)',recibo:v.recibo,vehiculoId:v.vehiculoId};});
   } else if(cuenta==='costoventas'){
     titulo='Auxiliar — Costo de Venta de Vehículos';
-    movimientos=ventas.filter(v=>v.estado==='Completada'&&enRango(v.fecha)).map(v=>{const vh=buscarVehiculoOConsig(v.vehiculoId);return{id:v.id,fecha:v.fecha,desc:'Costo — '+(vh?vh.marca+' '+vh.modelo:''),cat:'Costo de venta',monto:Number(v.costo||0),signo:'-',color:'var(--red)'};});
+    movimientos=ventas.filter(v=>v.estado==='Completada'&&enRango(v.fecha)).map(v=>{const vh=buscarVehiculoOConsig(v.vehiculoId);return{id:v.id,fecha:v.fecha,desc:'Costo — '+(vh?vh.marca+' '+vh.modelo:''),cat:'Costo de venta',monto:Number(v.costo||0),signo:'-',color:'var(--red)',recibo:v.recibo,vehiculoId:v.vehiculoId};});
   } else if(cuenta==='comisiones'){
     titulo='Auxiliar — Comisiones';
-    movimientos=ventas.filter(v=>v.estado==='Completada'&&Number(v.comision)>0&&enRango(v.fecha)).map(v=>{const vnd=clientes.find(x=>x.id===v.vendedorId);return{id:v.id,fecha:v.fecha,desc:'Comisión '+(vnd?vnd.nombre:''),cat:'Comisión',monto:Number(v.comision),signo:'-',color:'var(--amber)'};});
+    movimientos=ventas.filter(v=>v.estado==='Completada'&&Number(v.comision)>0&&enRango(v.fecha)).map(v=>{const vnd=clientes.find(x=>x.id===v.vendedorId);return{id:v.id,fecha:v.fecha,desc:'Comisión '+(vnd?vnd.nombre:''),cat:'Comisión',monto:Number(v.comision),signo:'-',color:'var(--amber)',recibo:v.recibo,vehiculoId:v.vehiculoId};});
   } else if(cpActivo){
     titulo='Auxiliar — '+cpActivo.codigo+' '+cpActivo.nombre;
     if(Number(cpActivo.saldo||0))movimientos.push({id:'',fecha:'',desc:'Saldo inicial de la cuenta',cat:'Saldo inicial',monto:Number(cpActivo.saldo),signo:'+',color:'var(--green)'});
@@ -25794,7 +25840,7 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
         <thead><tr><th>Fecha</th><th>Descripción</th>${puedeReclasificar?'<th style="width:180px">Cuenta contable</th>':'<th>Categoría</th>'}${esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th><th>Vehículo</th>':''}<th style="text-align:right">Monto</th>${cuenta.startsWith('Cx')?'<th>Estado</th>':''}${hayAcciones?'<th>Acciones</th>':''}</tr></thead>
         <tbody>${movimientos.length?movimientos.map((m,i)=>`<tr>
           <td>${m.fecha||'—'}</td>
-          <td>${m.desc||m.persona||'—'}</td>
+          <td>${m.desc||m.persona||'—'}${cuenta==='inventario'?'':trazaHTML(m)}</td>
           ${puedeReclasificar?`<td><select style="width:100%;padding:4px;font-size:11px" onchange="reasignarCuentaGastoDesdeAuxiliar('${m.id}',this.value,'${desde}','${hasta}')">${opcionesCuentaGastoPlano(m.cat)}</select></td>`:`<td style="font-size:11px;color:var(--text2)">${m.cat||'—'}</td>`}
           ${esAuxiliarDeGasto?`<td style="font-size:11px;color:var(--text2)">${m.beneficiario||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.medio||'—'}</td><td style="font-size:11px;color:var(--text2)">${m.vehiculoRef?'🚗 '+m.vehiculoRef:'—'}</td>`:''}
           <td style="text-align:right;font-weight:700;color:${m.color};white-space:nowrap">${m.signo}${fmtD(m.monto)}</td>
