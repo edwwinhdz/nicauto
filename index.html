@@ -1179,9 +1179,9 @@ body.no-delete .confirmDelete{display:none!important}
       </div>
       <div class="form-group"><label>No. de Recibo</label><input id="resr-recibo" placeholder="Ej. 276"></div>
     </div>
-    <div class="form-row" id="resr-destino-wrap" style="display:none">
-      <div class="form-group" id="resr-bancoing-wrap"><label>Banco donde entró el dinero</label>
-        <select id="resr-bancoing"></select>
+    <div class="form-row" id="resr-destino-wrap" style="background:var(--blue-light);border-radius:8px;padding:.5rem .6rem;margin-bottom:.6rem">
+      <div class="form-group" id="resr-bancoing-wrap" style="margin:0"><label style="font-weight:700">¿Dónde entró el dinero de la reserva?</label>
+        <select id="resr-bancoing" onchange="resrDestinoCambio()"></select>
       </div>
       <div class="form-group" id="resr-tercero-wrap" style="display:none"><label>¿Quién tiene el dinero? (CxC Tercero)</label>
         <input id="resr-tercero" placeholder="Nombre de la persona o negocio">
@@ -4681,7 +4681,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1715';
+const APP_VERSION='2026-10-21-1800';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -8270,17 +8270,29 @@ function abrirReservaRapida(vid,esConsig){
 // Reserva: si el anticipo no fue en efectivo, se elige el banco donde entró (va a esa columna
 // en Cash in Hand y de ahí a Bancos); si lo tiene un tercero, queda como CxC Tercero.
 const RESR_BANCOS_ING=[{k:'bac',t:'BAC (D. Julio)'},{k:'bacgisselle',t:'BAC Gisselle'},{k:'lafise',t:'La Fise (D. Julio)'},{k:'ficohsa',t:'Ficohsa (D. Julio)'},{k:'banpro',t:'Banpro-Norvin'},{k:'credex',t:'Credex'}];
+// El campo "¿Dónde entró el dinero?" se ve SIEMPRE: Caja fuerte, un banco, o CxC Tercero.
+// Va de la mano con la Forma de pago (si elegís un banco con "Efectivo", pasa a Transferencia).
+function resrLlenarDestinos(){
+  const sel=document.getElementById('resr-bancoing');if(!sel||sel.options.length)return;
+  sel.innerHTML='<option value="cajafuerte">💵 Caja fuerte (efectivo)</option><optgroup label="🏦 Bancos">'+RESR_BANCOS_ING.map(b=>`<option value="${b.k}">${b.t}</option>`).join('')+'</optgroup><option value="cxc">📄 CxC Tercero (lo tiene otra persona)</option>';
+}
+function resrDestinoCambio(){
+  resrLlenarDestinos();
+  const d=document.getElementById('resr-bancoing').value;
+  const pagoEl=document.getElementById('resr-pago');
+  if(d==='cxc')pagoEl.value='CxC Tercero';
+  else if(d==='cajafuerte'){if(pagoEl.value!=='Efectivo')pagoEl.value='Efectivo';}
+  else if(pagoEl.value==='Efectivo'||pagoEl.value==='CxC Tercero')pagoEl.value='Transferencia';
+  document.getElementById('resr-tercero-wrap').style.display=d==='cxc'?'block':'none';
+}
 function resrPagoCambio(){
+  resrLlenarDestinos();
   const pago=document.getElementById('resr-pago')?.value||'Efectivo';
-  const wrap=document.getElementById('resr-destino-wrap');if(!wrap)return;
-  const esBanco=pago==='Transferencia'||pago==='Depósito bancario'||pago==='Tarjeta';
-  const esTercero=pago==='CxC Tercero';
-  wrap.style.display=(esBanco||esTercero)?'flex':'none';
-  document.getElementById('resr-bancoing-wrap').style.display=esBanco?'block':'none';
-  document.getElementById('resr-tercero-wrap').style.display=esTercero?'block':'none';
   const sel=document.getElementById('resr-bancoing');
-  if(sel&&!sel.options.length)sel.innerHTML='<option value="">— Elegí el banco —</option>'+RESR_BANCOS_ING.map(b=>`<option value="${b.k}">${b.t}</option>`).join('');
-  if(sel&&!esBanco)sel.value='';
+  if(pago==='Efectivo')sel.value='cajafuerte';
+  else if(pago==='CxC Tercero')sel.value='cxc';
+  else if(sel.value==='cajafuerte'||sel.value==='cxc')sel.value=RESR_BANCOS_ING[0].k;
+  document.getElementById('resr-tercero-wrap').style.display=sel.value==='cxc'?'block':'none';
 }
 async function guardarReservaRapida(){
   const vid=document.getElementById('resr-vid').value;
@@ -8294,11 +8306,11 @@ async function guardarReservaRapida(){
   const condicion=document.getElementById('resr-condicion').value;
   const banco=condicion==='Crédito'?document.getElementById('resr-banco').value:'';
   const montoAnticipo=parseFloat(document.getElementById('resr-anticipo').value||0);
-  const pagoResr=document.getElementById('resr-pago').value;
-  const esBancoResr=pagoResr==='Transferencia'||pagoResr==='Depósito bancario'||pagoResr==='Tarjeta';
-  const bancoIngresoCol=esBancoResr?(document.getElementById('resr-bancoing').value||''):'';
-  const terceroResr=pagoResr==='CxC Tercero'?(document.getElementById('resr-tercero').value||'').trim():'';
-  if(montoAnticipo>0&&esBancoResr&&!bancoIngresoCol){alert('Elegí el banco donde entró el dinero de la reserva.');return;}
+  const destResr=document.getElementById('resr-bancoing').value||'cajafuerte';
+  let pagoResr=document.getElementById('resr-pago').value;
+  if(destResr==='cxc')pagoResr='CxC Tercero';
+  const bancoIngresoCol=destResr;
+  const terceroResr=destResr==='cxc'?(document.getElementById('resr-tercero').value||'').trim():'';
   if(montoAnticipo>0&&pagoResr==='CxC Tercero'&&!terceroResr){alert('Escribí quién tiene el dinero (CxC Tercero).');return;}
   const nueva={
     id:uid(),vehiculoId:vid,compradorId:'',nombreFactura:cliente,celularFactura:document.getElementById('resr-cel').value,
@@ -17967,8 +17979,8 @@ function cdLineasAuto(fecha){
       if(canje>0)lineas.push({...base,key:'V_'+v.id+'_canje',forma:'Canje'+(v.canjeDesc?': '+v.canjeDesc:''),col:'canje',monto:canje,tipoLinea:'Venta'});
     } else if((v.estado==='Pendiente'||(v.estado==='Anulada'&&v.devolucionReserva))&&Number(v.anticipo||0)>0){
       const pago=v.pago||'Efectivo';
-      const colR=pago==='Efectivo'?'cajafuerte':pago==='CxC Tercero'?'cxc':(v.bancoIngresoCol||CD_BANCO_COL[v.banco]||'sinbanco');
-      const bancoTxt=v.bancoIngresoCol?' '+((CD_COLS.find(c=>c.k===v.bancoIngresoCol)||{}).t||''):'';
+      const colR=v.bancoIngresoCol||(pago==='Efectivo'?'cajafuerte':pago==='CxC Tercero'?'cxc':(CD_BANCO_COL[v.banco]||'sinbanco'));
+      const bancoTxt=v.bancoIngresoCol&&v.bancoIngresoCol!=='cajafuerte'&&v.bancoIngresoCol!=='cxc'?' '+((CD_COLS.find(c=>c.k===v.bancoIngresoCol)||{}).t||''):'';
       lineas.push({...base,key:'R_'+v.id,forma:'Reserva — '+pago+(pago==='CxC Tercero'&&v.terceroReserva?' ('+v.terceroReserva+')':bancoTxt),tipoLinea:'Reserva',
         col:colR,monto:Number(v.anticipo)});
     }
@@ -18050,6 +18062,18 @@ function cdCalcular(fecha){
   const disponible={cajafuerte:saldoAnt.cajafuerte+tot.cajafuerte,cashjulio:saldoAnt.cashjulio+tot.cashjulio};
   const saldoFinal={cajafuerte:disponible.cajafuerte-salidas.cajafuerte,cashjulio:disponible.cashjulio-salidas.cashjulio};
   return{fecha,saldoAnterior:saldoAnt,ingresos,egresos,tot,totalIngresos,salidas,disponible,saldoFinal,cerrado:false};
+}
+// Cash in Hand: las filas se muestran ordenadas por No. de Recibo, de menor a mayor (los que
+// no tienen recibo van al final). Solo cambia el orden en pantalla/impresión, no los datos.
+function cdOrdenarPorRecibo(lista){
+  const num=r=>{const m=String(r||'').match(/\d+/);return m?parseInt(m[0],10):Infinity;};
+  return(lista||[]).map((l,i)=>({l,i})).sort((a,b)=>{
+    const na=num(a.l.recibo),nb=num(b.l.recibo);
+    if(na!==nb)return na-nb;
+    const ta=String(a.l.recibo||''),tb=String(b.l.recibo||'');
+    if(ta!==tb)return ta.localeCompare(tb);
+    return a.i-b.i;
+  }).map(x=>x.l);
 }
 function cdColsVisibles(h){return CD_COLS.filter(c=>!c.opcional||(h.tot&&h.tot[c.k]));}
 
@@ -18149,7 +18173,7 @@ function cdHojaHTML(h,enPantalla){
       </tr>
     </thead>
     <tbody>
-      ${h.ingresos.length?h.ingresos.map(l=>`<tr>
+      ${h.ingresos.length?cdOrdenarPorRecibo(h.ingresos).map(l=>`<tr>
         <td>${l.fecha}</td><td>${l.vendedor||''}</td><td>${l.cliente||''}</td>
         <td>${l.vehiculo||l.desc||''}${l.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">← Fondos JM</span>':''}${l.forma?`<br><span style="font-size:9px;color:#868E96">${l.forma}</span>`:''}${l.col==='cxc'?`<br><span style="font-size:9px;font-weight:700;color:${l.banco?'#E67700':'#C92A2A'}">Banco: ${l.banco||'sin asignar'}</span>`:''}${l.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${l.nota}</div>`:''}${CD_COL_BANCO[l.col]?`<div style="font-size:9px;color:#1971C2"><i class="ti ti-building-bank"></i> Entra a ${(BANCOS_CTAS.find(b=>b.k===CD_COL_BANCO[l.col])||{}).t||''} (hoja Bancos)</div>`:''}</td>
         <td>${l.recibe||''}</td><td>${l.recibo||''}</td><td style="text-align:right">${f(Number(l.monto))}</td>
@@ -18169,7 +18193,7 @@ function cdHojaHTML(h,enPantalla){
   <div style="margin-top:16px;font-weight:800;background:#E9ECEF;display:inline-block;padding:4px 12px">EGRESOS / SALIDAS</div>
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
     <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
-    <tbody>${(()=>{const egrCaja=h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'));return egrCaja;})().length?h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco')).map(e=>`<tr>
+    <tbody>${(()=>{const egrCaja=h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'));return egrCaja;})().length?cdOrdenarPorRecibo(h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'))).map(e=>`<tr>
       <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='banco'?'🏦 '+((BANCOS_CTAS.find(b=>b.k===e.bancoCta)||{}).t||'Banco')+(e.forma?' — '+e.forma:''):(e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte')}${e.col!=='banco'&&e.forma&&e.forma!=='Cash'?' — '+e.forma:''}</td>
       <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
       :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
