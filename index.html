@@ -1175,9 +1175,17 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-row">
       <div class="form-group"><label>Forma de pago de la reserva</label>
-        <select id="resr-pago"><option>Efectivo</option><option>Transferencia</option><option>Depósito bancario</option><option>Tarjeta</option></select>
+        <select id="resr-pago" onchange="resrPagoCambio()"><option>Efectivo</option><option>Transferencia</option><option>Depósito bancario</option><option>Tarjeta</option><option>CxC Tercero</option></select>
       </div>
       <div class="form-group"><label>No. de Recibo</label><input id="resr-recibo" placeholder="Ej. 276"></div>
+    </div>
+    <div class="form-row" id="resr-destino-wrap" style="display:none">
+      <div class="form-group" id="resr-bancoing-wrap"><label>Banco donde entró el dinero</label>
+        <select id="resr-bancoing"></select>
+      </div>
+      <div class="form-group" id="resr-tercero-wrap" style="display:none"><label>¿Quién tiene el dinero? (CxC Tercero)</label>
+        <input id="resr-tercero" placeholder="Nombre de la persona o negocio">
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>La venta será</label>
@@ -4673,7 +4681,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1700';
+const APP_VERSION='2026-10-21-1715';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -8245,6 +8253,8 @@ function abrirReservaRapida(vid,esConsig){
   document.getElementById('resr-cel').value='';
   document.getElementById('resr-anticipo').value='';
   document.getElementById('resr-pago').value='Efectivo';
+  document.getElementById('resr-tercero').value='';
+  resrPagoCambio();
   document.getElementById('resr-recibo').value=previsualizarNumeroRecibo('venta');
   document.getElementById('resr-condicion').value='Contado';
   document.getElementById('resr-banco').value='La Fise';
@@ -8256,6 +8266,21 @@ function abrirReservaRapida(vid,esConsig){
   const miNombreResr=getNombreUsuario();
   if([...selVend.options].some(o=>o.value===miNombreResr))selVend.value=miNombreResr;
   openOv('ov-reserva-rapida');
+}
+// Reserva: si el anticipo no fue en efectivo, se elige el banco donde entró (va a esa columna
+// en Cash in Hand y de ahí a Bancos); si lo tiene un tercero, queda como CxC Tercero.
+const RESR_BANCOS_ING=[{k:'bac',t:'BAC (D. Julio)'},{k:'bacgisselle',t:'BAC Gisselle'},{k:'lafise',t:'La Fise (D. Julio)'},{k:'ficohsa',t:'Ficohsa (D. Julio)'},{k:'banpro',t:'Banpro-Norvin'},{k:'credex',t:'Credex'}];
+function resrPagoCambio(){
+  const pago=document.getElementById('resr-pago')?.value||'Efectivo';
+  const wrap=document.getElementById('resr-destino-wrap');if(!wrap)return;
+  const esBanco=pago==='Transferencia'||pago==='Depósito bancario'||pago==='Tarjeta';
+  const esTercero=pago==='CxC Tercero';
+  wrap.style.display=(esBanco||esTercero)?'flex':'none';
+  document.getElementById('resr-bancoing-wrap').style.display=esBanco?'block':'none';
+  document.getElementById('resr-tercero-wrap').style.display=esTercero?'block':'none';
+  const sel=document.getElementById('resr-bancoing');
+  if(sel&&!sel.options.length)sel.innerHTML='<option value="">— Elegí el banco —</option>'+RESR_BANCOS_ING.map(b=>`<option value="${b.k}">${b.t}</option>`).join('');
+  if(sel&&!esBanco)sel.value='';
 }
 async function guardarReservaRapida(){
   const vid=document.getElementById('resr-vid').value;
@@ -8269,18 +8294,36 @@ async function guardarReservaRapida(){
   const condicion=document.getElementById('resr-condicion').value;
   const banco=condicion==='Crédito'?document.getElementById('resr-banco').value:'';
   const montoAnticipo=parseFloat(document.getElementById('resr-anticipo').value||0);
+  const pagoResr=document.getElementById('resr-pago').value;
+  const esBancoResr=pagoResr==='Transferencia'||pagoResr==='Depósito bancario'||pagoResr==='Tarjeta';
+  const bancoIngresoCol=esBancoResr?(document.getElementById('resr-bancoing').value||''):'';
+  const terceroResr=pagoResr==='CxC Tercero'?(document.getElementById('resr-tercero').value||'').trim():'';
+  if(montoAnticipo>0&&esBancoResr&&!bancoIngresoCol){alert('Elegí el banco donde entró el dinero de la reserva.');return;}
+  if(montoAnticipo>0&&pagoResr==='CxC Tercero'&&!terceroResr){alert('Escribí quién tiene el dinero (CxC Tercero).');return;}
   const nueva={
     id:uid(),vehiculoId:vid,compradorId:'',nombreFactura:cliente,celularFactura:document.getElementById('resr-cel').value,
     vendedorId:(clientes.find(c=>c.nombre===vendedorNombre)||{}).id||'',
     fecha:hoyLocal(),
     precio:parseFloat(precio),anticipo:montoAnticipo,
-    pago:document.getElementById('resr-pago').value,estado:'Pendiente',recibo,condicion,banco,
+    pago:pagoResr,estado:'Pendiente',recibo,condicion,banco,
+    bancoIngresoCol,terceroReserva:terceroResr,
     registradoPor:getNombreUsuario()
   };
   ventas.push(nueva);
   await saveOne('ventas',nueva);
+  // Anticipo que quedó en manos de un tercero → Cuenta por Cobrar — Terceros, conectada a la reserva
+  if(montoAnticipo>0&&pagoResr==='CxC Tercero'){
+    const vhR=buscarVehiculoOConsig(vid);
+    const descVehR=vhR?`${vhR.marca||''} ${vhR.modelo||''} ${vhR.anio||''}${vhR.placa?' ('+vhR.placa+')':''}`.trim():'';
+    contData.cuentas=contData.cuentas||[];
+    contData.cuentas.push({id:uid(),fecha:nueva.fecha,vence:'',tipo:'CxC-Tercero',estado:'Pendiente',
+      monto:montoAnticipo,saldo:montoAnticipo,persona:terceroResr,vehId:vid,recibo,
+      desc:`Anticipo de reserva de ${cliente} — ${descVehR} (Recibo ${recibo}). El dinero lo tiene ${terceroResr}.`,
+      origenVentaId:nueva.id,origenReservaVentaId:nueva.id,registradoPor:getNombreUsuario()});
+    await saveOne('contable',{id:'main',...contData});
+  }
   // Registrar esta reserva/anticipo en la lista del vehículo (hasta 3 — req: reservas como anticipo de pago)
-  const nuevaReserva={vendedor:vendedorNombre,cliente,celular:document.getElementById('resr-cel').value,monto:montoAnticipo,fecha:nueva.fecha,ventaId:nueva.id,recibo,precioVenta:parseFloat(precio),condicion,banco};
+  const nuevaReserva={vendedor:vendedorNombre,cliente,celular:document.getElementById('resr-cel').value,monto:montoAnticipo,fecha:nueva.fecha,ventaId:nueva.id,recibo,precioVenta:parseFloat(precio),condicion,banco,pago:pagoResr,bancoIngresoCol,terceroReserva:terceroResr};
   if(vid.startsWith('CONSIG_')){
     const cid=vid.replace('CONSIG_','');
     const c=(contData.consignacion||[]).find(x=>x.id===cid);
@@ -17924,8 +17967,10 @@ function cdLineasAuto(fecha){
       if(canje>0)lineas.push({...base,key:'V_'+v.id+'_canje',forma:'Canje'+(v.canjeDesc?': '+v.canjeDesc:''),col:'canje',monto:canje,tipoLinea:'Venta'});
     } else if((v.estado==='Pendiente'||(v.estado==='Anulada'&&v.devolucionReserva))&&Number(v.anticipo||0)>0){
       const pago=v.pago||'Efectivo';
-      lineas.push({...base,key:'R_'+v.id,forma:'Reserva — '+pago,tipoLinea:'Reserva',
-        col:pago==='Efectivo'?'cajafuerte':(CD_BANCO_COL[v.banco]||'sinbanco'),monto:Number(v.anticipo)});
+      const colR=pago==='Efectivo'?'cajafuerte':pago==='CxC Tercero'?'cxc':(v.bancoIngresoCol||CD_BANCO_COL[v.banco]||'sinbanco');
+      const bancoTxt=v.bancoIngresoCol?' '+((CD_COLS.find(c=>c.k===v.bancoIngresoCol)||{}).t||''):'';
+      lineas.push({...base,key:'R_'+v.id,forma:'Reserva — '+pago+(pago==='CxC Tercero'&&v.terceroReserva?' ('+v.terceroReserva+')':bancoTxt),tipoLinea:'Reserva',
+        col:colR,monto:Number(v.anticipo)});
     }
   });
   // Ajustes hechos a mano (columna donde cayó el dinero, quién lo recibió, o línea quitada)
