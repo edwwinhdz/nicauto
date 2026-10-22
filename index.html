@@ -4681,7 +4681,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-21-1800';
+const APP_VERSION='2026-10-22-1310';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -10683,6 +10683,19 @@ function devolverReservaLP(vid,idx,origen){
   if(!vt||vt.estado!=='Pendiente'){alert('Esta reserva no tiene un registro de reserva (Pendiente) vinculado en Ventas, así que su anticipo no entró a Cash in Hand.\n\nSi solo hay que quitarla, usá el botón 🗑.');return;}
   cancelarReservaConDevolucion(vt.id,{vid,idx,origen});
 }
+async function _liberarVehiculoDeReserva(v,desdeLP){
+  const esConsig=(v.vehiculoId||'').startsWith('CONSIG_');
+  const lista=esConsig?(contData.consignacion||[]):vehiculos;
+  const vidReal=esConsig?v.vehiculoId.replace('CONSIG_',''):v.vehiculoId;
+  const veh=lista.find(x=>x.id===vidReal);
+  if(!veh)return;
+  const antes=Array.isArray(veh.reservas)?veh.reservas:[];
+  veh.reservas=antes.filter((r,k)=>r.ventaId!==v.id&&!(desdeLP&&desdeLP.vid===veh.id&&desdeLP.idx===k));
+  const otrasPend=ventas.some(o=>o.vehiculoId===v.vehiculoId&&o.estado==='Pendiente'&&o.id!==v.id);
+  if(!veh.reservas.length){veh.vendedorreserva=null;veh.clientereserva=null;if(!otrasPend&&veh.estado==='Reservado')veh.estado='Disponible';}
+  else{veh.vendedorreserva=veh.reservas[0].vendedor;veh.clientereserva=veh.reservas[0].cliente;}
+  if(esConsig)await saveOne('contable',{id:'main',...contData});else await saveOne('vehiculos',veh);
+}
 function cancelarReservaConDevolucion(id,desdeLP){
   if(MODO!=='admin'){alert('⛔ Solo el Administrador (Edwin) puede cancelar una reserva con devolución.');return;}
   const v=ventas.find(x=>x.id===id);
@@ -10690,12 +10703,22 @@ function cancelarReservaConDevolucion(id,desdeLP){
   const anticipo=Number(v.anticipo||0);
   const cliente=v.nombreFactura||cdNombrePersona(v.compradorId)||'';
   const vehTxt=cdVehiculoTxt(v.vehiculoId);
+  // Si el anticipo cayó en una cuenta que no es de NICAUTO (ej. Banpro-Norvin), se sugiere
+  // que lo devolvió esa misma persona desde esa cuenta.
+  const devExternaSugerida=v.bancoIngresoCol==='banpro';
+  const quienSugerido=devExternaSugerida?'Norvin — desde su cuenta Banpro':'';
   cdModal('↩️ Cancelar reserva y devolver anticipo',`
     <div style="background:var(--surface2);border-radius:8px;padding:.6rem;font-size:12px;margin-bottom:.75rem">
       <b>${vehTxt}</b><br>Cliente: ${cliente||'—'}<br>Recibo de reserva: <b>${v.recibo||'—'}</b> · Fecha ${v.fecha} · Anticipo <b>${fmtD(anticipo)}</b> (${v.pago||'Efectivo'})</div>
     <div class="form-row"><div class="form-group"><label>Fecha de la devolución</label><input id="cd-dev-fecha" type="date" value="${hoyLocal()}"></div>
       <div class="form-group"><label>No. Recibo / ROC de la devolución</label><input id="cd-recibo" placeholder="opcional"></div></div>
     <div class="form-group"><label>Monto total devuelto (USD $)</label><input id="cd-monto" type="number" step="0.01" value="${anticipo}"></div>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--amber-light);border-radius:8px;padding:.6rem .75rem;cursor:pointer;margin-bottom:.6rem">
+      <input type="checkbox" id="cd-dev-externa" ${devExternaSugerida?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-dev-formas').style.display=this.checked?'none':'block';document.getElementById('cd-dev-quien-wrap').style.display=this.checked?'block':'none'">
+      <span><b>No salió de mis cuentas — lo devolvió quien recibió el dinero</b><br>No se registra ninguna salida en Caja ni en Bancos. Solo queda anotado abajo del reporte de Cash in Hand.</span>
+    </label>
+    <div class="form-group" id="cd-dev-quien-wrap" style="display:${devExternaSugerida?'block':'none'}"><label>¿Quién lo pagó / desde qué cuenta?</label><input id="cd-dev-quien" value="${quienSugerido}"></div>
+    <div id="cd-dev-formas" style="display:${devExternaSugerida?'none':'block'}">
     <div style="background:var(--surface2);border-radius:8px;padding:.6rem;margin-bottom:.75rem">
       <label style="font-size:11px;font-weight:700">¿Cómo se devolvió? — hasta 3 (ej. parte en Cash y parte por Transferencia)</label>
       ${[0,1,2].map(i=>`<div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
@@ -10704,6 +10727,7 @@ function cancelarReservaConDevolucion(id,desdeLP){
         <input id="cd-pf-monto-${i}" type="number" step="0.01" placeholder="${i?'Monto':'Monto (vacío = todo)'}" oninput="cdPfTotal()" style="width:120px">
       </div>`).join('')}
       <p style="font-size:10px;color:var(--text3);margin-top:4px">Cash sale de Caja fuerte o Cash Julio M. Transferencia/Depósito sale del banco elegido (aparece en la hoja Bancos).</p>
+    </div>
     </div>
     <div class="form-group"><label>Motivo / nota</label><textarea id="cd-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px">Cliente desistió de la compra — se le devolvió el anticipo.</textarea></div>
     <p style="font-size:11px;color:var(--text3)">El ingreso del anticipo se queda en la caja del ${v.fecha}; la devolución sale como Salida en la fecha que pongas. La reserva queda Anulada (en el historial) y el vehículo deja de estar reservado.</p>`,
@@ -10714,6 +10738,26 @@ function cancelarReservaConDevolucion(id,desdeLP){
     if(cdCierreDe(fecha)&&!confirm('⚠️ El día '+fecha+' ya tiene CIERRE de Cash in Hand. La salida se va a registrar igual en ese día y el cierre guardado no cambia. ¿Continuar?'))return;
     const monto=parseFloat(cdVal('cd-monto'));
     if(!monto||monto<=0){alert('El monto devuelto es obligatorio.');return;}
+    const externa=!!document.getElementById('cd-dev-externa')?.checked;
+    if(externa){
+      const quien=cdVal('cd-dev-quien');
+      if(!quien){alert('Escribí quién hizo el reembolso y desde qué cuenta.');return;}
+      if(Math.abs(monto-anticipo)>0.009&&!confirm(`Se devuelve ${fmtD(monto)} y el anticipo era ${fmtD(anticipo)}. ¿Continuar?`))return;
+      const notaE=cdVal('cd-nota');
+      v.estado='Anulada';
+      v.motivoCancelacion=notaE||'Cliente desistió — anticipo devuelto';
+      v.fechaAnulacion=fecha;
+      v.ajusteContableRealizado=true;
+      v.devolucionReserva={fecha,monto:Number(monto.toFixed(2)),partes:[],externa:{quien},detalle:`Pagado por ${quien} (no salió de cuentas de NICAUTO)`,movId:'',
+        reciboDevolucion:cdVal('cd-recibo'),registradoPor:getNombreUsuario(),registradoFecha:hoyLocal()};
+      await saveOne('ventas',v);
+      await _liberarVehiculoDeReserva(v,desdeLP);
+      closeOv('ov-cajadiaria');
+      if(desdeLP){try{renderListaPrecios();verReservadoLP(desdeLP.vid,desdeLP.origen);}catch(e){}}
+      alert(`✅ Reserva cancelada.\n\nDevolución de ${fmtD(monto)} el ${fecha}, pagada por ${quien}.\n\n• No se registró ninguna salida en Caja ni en Bancos.\n• Queda anotada abajo del reporte de Cash in Hand del ${fecha}.\n• El ingreso del ${v.fecha} se mantiene con la nota de la devolución.\n• El vehículo ya no está reservado.`);
+      renderVtas();renderInv();renderAuxiliares();
+      return;
+    }
     const partes=cdPfLeer('egreso',monto);
     if(!partes.length){alert('Elegí cómo se devolvió.');return;}
     if(partes.some(p=>!p.dest)){alert('En cada forma elegí de dónde salió (caja o banco).');return;}
@@ -10739,18 +10783,7 @@ function cancelarReservaConDevolucion(id,desdeLP){
     v.ajusteContableRealizado=true;
     v.devolucionReserva={fecha,monto:suma,partes:partesObj,detalle,movId,reciboDevolucion:cdVal('cd-recibo'),registradoPor:getNombreUsuario(),registradoFecha:hoyLocal()};
     await saveOne('ventas',v);
-    const esConsig=(v.vehiculoId||'').startsWith('CONSIG_');
-    const lista=esConsig?(contData.consignacion||[]):vehiculos;
-    const vidReal=esConsig?v.vehiculoId.replace('CONSIG_',''):v.vehiculoId;
-    const veh=lista.find(x=>x.id===vidReal);
-    if(veh){
-      const antes=Array.isArray(veh.reservas)?veh.reservas:[];
-      veh.reservas=antes.filter((r,k)=>r.ventaId!==v.id&&!(desdeLP&&desdeLP.vid===veh.id&&desdeLP.idx===k));
-      const otrasPend=ventas.some(o=>o.vehiculoId===v.vehiculoId&&o.estado==='Pendiente'&&o.id!==v.id);
-      if(!veh.reservas.length){veh.vendedorreserva=null;veh.clientereserva=null;if(!otrasPend&&veh.estado==='Reservado')veh.estado='Disponible';}
-      else{veh.vendedorreserva=veh.reservas[0].vendedor;veh.clientereserva=veh.reservas[0].cliente;}
-      if(esConsig)await saveOne('contable',{id:'main',...contData});else await saveOne('vehiculos',veh);
-    }
+    await _liberarVehiculoDeReserva(v,desdeLP);
     closeOv('ov-cajadiaria');
     if(desdeLP){try{renderListaPrecios();verReservadoLP(desdeLP.vid,desdeLP.origen);}catch(e){}}
     alert(`✅ Reserva cancelada.\n\nDevolución registrada el ${fecha}: ${detalle}\n\n• Cash in Hand: el ingreso del ${v.fecha} se mantiene y la salida aparece el ${fecha}.\n• Lo que salió por banco aparece en la hoja Bancos.\n• El vehículo ya no está reservado.`);
@@ -17981,7 +18014,9 @@ function cdLineasAuto(fecha){
       const pago=v.pago||'Efectivo';
       const colR=v.bancoIngresoCol||(pago==='Efectivo'?'cajafuerte':pago==='CxC Tercero'?'cxc':(CD_BANCO_COL[v.banco]||'sinbanco'));
       const bancoTxt=v.bancoIngresoCol&&v.bancoIngresoCol!=='cajafuerte'&&v.bancoIngresoCol!=='cxc'?' '+((CD_COLS.find(c=>c.k===v.bancoIngresoCol)||{}).t||''):'';
-      lineas.push({...base,key:'R_'+v.id,forma:'Reserva — '+pago+(pago==='CxC Tercero'&&v.terceroReserva?' ('+v.terceroReserva+')':bancoTxt),tipoLinea:'Reserva',
+      const dvR=v.devolucionReserva;
+      const notaDev=dvR?` · ↩️ Devuelto ${dvR.fecha}${dvR.externa?' por '+dvR.externa.quien:''}`:'';
+      lineas.push({...base,key:'R_'+v.id,forma:'Reserva — '+pago+(pago==='CxC Tercero'&&v.terceroReserva?' ('+v.terceroReserva+')':bancoTxt)+notaDev,tipoLinea:'Reserva',
         col:colR,monto:Number(v.anticipo)});
     }
   });
@@ -18205,11 +18240,26 @@ function cdHojaHTML(h,enPantalla){
     <tr><td style="font-weight:800;font-size:14px;padding-top:8px">SALDO FINAL CAJA</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cajafuerte)}</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cashjulio)} <span style="font-weight:400;font-size:10px">en caja Don Julio</span></td></tr>
-  </table>${cdSalidasBancariasHTML(h.fecha)}`;
+  </table>${cdSalidasBancariasHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
 }
 // Solo informativo (NO afecta los saldos de la caja): salidas de las cuentas bancarias de
 // Gerencia de ese día — compras de vehículos pagadas por transferencia y salidas registradas a
 // mano en la hoja Bancos — para que Gerencia vea en el reporte qué salió de cada banco.
+// Devoluciones que pagó otra persona desde SU cuenta (ej. Norvin desde Banpro): solo informativo,
+// no restan de la caja ni de Bancos de NICAUTO.
+function cdSalidasTercerosHTML(fecha){
+  const lista=(ventas||[]).filter(v=>v.devolucionReserva&&v.devolucionReserva.externa&&v.devolucionReserva.fecha===fecha);
+  if(!lista.length)return'';
+  const th='background:#E67700;color:#fff;padding:5px 6px;border:1px solid #D9480F;font-size:11px';
+  const td='padding:4px 6px;border:1px solid #DEE2E6';
+  const tot=lista.reduce((s,v)=>s+Number(v.devolucionReserva.monto||0),0);
+  return`<div style="margin-top:14px;font-weight:800;font-size:13px;color:#D9480F">SALIDAS PAGADAS DESDE CUENTAS DE TERCEROS <span style="font-weight:400;font-size:10px;color:#868E96">(solo informativo — no salieron de la caja ni de los bancos de NICAUTO)</span></div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">
+    <thead><tr><th style="${th};text-align:left">Concepto</th><th style="${th}">Recibo reserva</th><th style="${th};text-align:left">Pagado por / cuenta</th><th style="${th};text-align:right">Monto</th></tr></thead>
+    <tbody>${lista.map(v=>`<tr><td style="${td}">Devolución de anticipo de reserva — ${cdVehiculoTxt(v.vehiculoId)}${v.nombreFactura?' — '+v.nombreFactura:''}</td><td style="${td};text-align:center">${v.recibo||'—'}</td><td style="${td}">${v.devolucionReserva.externa.quien}</td><td style="${td};text-align:right">${fmtD(v.devolucionReserva.monto)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr style="background:#FFF4E6;font-weight:800"><td style="${td}" colspan="3">TOTAL PAGADO POR TERCEROS</td><td style="${td};text-align:right">${fmtD(tot)}</td></tr></tfoot>
+  </table>`;
+}
 function cdSalidasBancariasHTML(fecha){
   let movs=[];
   try{
