@@ -566,6 +566,7 @@ body.no-delete .confirmDelete{display:none!important}
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" class="inv-fest-check" value="En Alistamiento" onchange="actualizarInvFestDesdeChecks()"> En Alistamiento</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" class="inv-fest-check" value="Prestado" onchange="actualizarInvFestDesdeChecks()"> Prestado</label>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" class="inv-fest-check" value="Gerencia" onchange="actualizarInvFestDesdeChecks()"> Gerencia</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" class="inv-fest-check" value="En espera" onchange="actualizarInvFestDesdeChecks()"> En espera</label>
         </div>
       </div>
     </div>
@@ -1801,7 +1802,7 @@ body.no-delete .confirmDelete{display:none!important}
       <div class="form-group"><label>Transmisión</label><select id="mv-trans"><option value="Mecánico">Mecánico</option><option value="Automático">Automático</option></select></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Estado</label><select id="mv-estado" onchange="toggleReservaField()"><option>Disponible</option><option>Reservado</option><option>Vendido</option><option>Taller</option><option>Taller Externo</option><option>En Pintura</option><option>En Alistamiento</option><option>Prestado</option><option>Gerencia</option></select></div>
+      <div class="form-group"><label>Estado</label><select id="mv-estado" onchange="toggleReservaField()"><option>Disponible</option><option>Reservado</option><option>Vendido</option><option>Taller</option><option>Taller Externo</option><option>En Pintura</option><option>En Alistamiento</option><option>Prestado</option><option>Gerencia</option><option>En espera</option></select></div>
       <div class="form-group"><label>Fecha de compra</label><input id="mv-fechacompra" type="date"></div>
     </div>
     <div class="form-row" id="mv-reserva-row" style="display:none">
@@ -4681,7 +4682,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-22-1310';
+const APP_VERSION='2026-10-23-1535';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -4767,7 +4768,7 @@ function badge(txt,tipo){
     'Disponible':'green','Completada':'green','vendedor':'blue',
     'Vendido':'blue','Pendiente':'amber','Anulada':'red',
     'Reservado':'amber','comprador':'purple',
-    'Taller':'purple','Prestado':'gray','Gerencia':'amber',
+    'Taller':'purple','Prestado':'gray','Gerencia':'amber','En espera':'amber',
     'Venta':'green','Compra':'purple','Nota':'amber','Llamada':'blue','Reunión':'gray'
   };
   return`<span class="badge badge-${map[txt]||'gray'}">${txt}</span>`;
@@ -5778,8 +5779,43 @@ function renderCcSubBar(){
   const porLlamar=controlPiso.filter(ctrlVisible).filter(pisoRequiereLlamada).length;
   const tabs=[['resumen','📊 Resumen'+(porLlamar?` <span class="badge badge-red" style="font-size:10px">${porLlamar}</span>`:'')],['prospectos','📋 Prospectos'],['piso','🏢 Control de Piso'+(porLlamar?` <span class="badge badge-red" style="font-size:10px">📞 ${porLlamar}</span>`:'')]];
   if(esGerenciaCtrl())tabs.push(['carros','🚗 Carros Buscados']);
-  bar.innerHTML=tabs.map(([k,l])=>`<button class="tab ${k===t?'active':''}" onclick="ccSubIr('${k}')">${l}</button>`).join('');
+  bar.innerHTML=tabs.map(([k,l])=>`<button class="tab ${k===t?'active':''}" onclick="ccSubIr('${k}')">${l}</button>`).join('')
+    +`<button class="btn btn-sm" onclick="imprimirCcSub()" title="Imprimir lo que se ve en esta pestaña" style="margin-left:auto;align-self:center;color:var(--blue);border-color:var(--blue)"><i class="ti ti-printer"></i> Imprimir</button>`;
   ['resumen','prospectos','piso','carros'].forEach(k=>{const el=document.getElementById('ccsub-'+k);if(el)el.style.display=k===t?'block':'none';});
+}
+// Imprime la pestaña activa de Control de Clientes (Resumen, Prospectos, Control de Piso o
+// Carros Buscados) tal como se ve en pantalla — con los filtros y meses que estén abiertos —
+// sin botones, casillas ni filas ocultas.
+function imprimirCcSub(){
+  const t=ccSubActual();
+  const nombres={resumen:'Control de Clientes — Resumen',prospectos:'Control de Clientes — Prospectos',piso:'Control de Piso',carros:'Carros Buscados'};
+  const el=document.getElementById('ccsub-'+t);
+  if(!el){alert('No hay nada para imprimir en esta pestaña.');return;}
+  // Marcar en el original lo que NO se ve, para quitarlo de la copia
+  const todos=[...el.querySelectorAll('*')];
+  todos.forEach((n,i)=>{n.setAttribute('data-ccp',i);if(n.offsetParent===null&&getComputedStyle(n).position!=='fixed')n.setAttribute('data-ccp-oculto','1');});
+  const valores=new Map();
+  el.querySelectorAll('select').forEach(sl=>valores.set(sl.getAttribute('data-ccp'),sl.options[sl.selectedIndex]?.text||''));
+  el.querySelectorAll('input').forEach(inp=>valores.set(inp.getAttribute('data-ccp'),inp.type==='checkbox'?(inp.checked?'☑':'☐'):(inp.value||'')));
+  const copia=el.cloneNode(true);
+  todos.forEach(n=>{n.removeAttribute('data-ccp');n.removeAttribute('data-ccp-oculto');});
+  copia.querySelectorAll('[data-ccp-oculto]').forEach(n=>n.remove());
+  copia.querySelectorAll('select,input').forEach(n=>{
+    const txt=valores.get(n.getAttribute('data-ccp'))||'';
+    if(n.type==='checkbox'||txt){const sp=document.createElement('span');sp.textContent=txt;n.replaceWith(sp);}else n.remove();
+  });
+  copia.querySelectorAll('button,.tbl-actions,textarea').forEach(n=>n.remove());
+  copia.querySelectorAll('[onclick]').forEach(n=>n.removeAttribute('onclick'));
+  copia.querySelectorAll('[style]').forEach(n=>{n.style.maxHeight='';n.style.overflow='';n.style.overflowY='';n.style.overflowX='';});
+  const estilos=[...document.querySelectorAll('style')].map(x=>x.innerHTML).join('\n');
+  const quien=esGerenciaCtrl()?'':` — ${getNombreUsuario()}`;
+  const html=encabezadoNicautoHTML(nombres[t]||'Control de Clientes',`Impreso el ${new Date().toLocaleString('es-NI')}${quien}`)+copia.innerHTML;
+  const win=window.open('','_blank','width=1000,height=1100');
+  if(!win){alert('Permití las ventanas emergentes en el navegador para poder imprimir.');return;}
+  win.document.open();
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nombres[t]||'Control de Clientes'}</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css"><style>${estilos}</style><style>body{background:#fff!important;color:#212529;margin:0;padding:1rem;font-family:Arial,sans-serif;zoom:85%}table{width:100%;border-collapse:collapse}th,td{border:1px solid #DEE2E6;padding:4px 6px;font-size:11px}a{color:inherit;text-decoration:none}.card{box-shadow:none!important;border:1px solid #DEE2E6;margin-bottom:12px;page-break-inside:avoid}@page{size:auto;margin:8mm}@media print{body{margin:0}}</style></head><body>${html}</body></html>`);
+  win.document.close();
+  setTimeout(()=>{try{win.focus();win.print();}catch(e){}},600);
 }
 function renderCtrlClientesLP(){
   renderCcSubBar();
@@ -6230,7 +6266,7 @@ function renderInvTotals(data){
     const conteo={};
     const estadoInv=v=>((v.chequeoFisico||{}).tallerExterno||v.estado==='Taller Externo')?'Taller Externo':(v.estado||'Sin estado');
     data.forEach(v=>{const e=estadoInv(v);conteo[e]=(conteo[e]||0)+1;});
-    const orden=['Disponible','Reservado','Taller','Taller Externo','En Pintura','En Alistamiento','Prestado','Gerencia'];
+    const orden=['Disponible','Reservado','Taller','Taller Externo','En Pintura','En Alistamiento','Prestado','Gerencia','En espera'];
     const estados=Object.keys(conteo).sort((a,b)=>{
       const ia=orden.indexOf(a),ib=orden.indexOf(b);
       if(ia===-1&&ib===-1)return a.localeCompare(b);
@@ -6238,7 +6274,7 @@ function renderInvTotals(data){
       if(ib===-1)return -1;
       return ia-ib;
     });
-    const colorEstado=e=>({'Disponible':'var(--green)','Reservado':'var(--amber)','Taller':'var(--red)','Taller Externo':'var(--red)','En Pintura':'var(--purple)','En Alistamiento':'var(--blue)','Prestado':'var(--text2)','Gerencia':'var(--blue)'}[e]||'var(--text2)');
+    const colorEstado=e=>({'Disponible':'var(--green)','Reservado':'var(--amber)','Taller':'var(--red)','Taller Externo':'var(--red)','En Pintura':'var(--purple)','En Alistamiento':'var(--blue)','Prestado':'var(--text2)','Gerencia':'var(--blue)','En espera':'#E67700'}[e]||'var(--text2)');
     resumenEl.innerHTML=`
     <div class="card">
       <div class="card-head"><h3><i class="ti ti-chart-pie"></i> Resumen por Estado</h3>
@@ -6388,7 +6424,7 @@ function actualizarInvFestDesdeChecks(){
   renderInv();
 }
 function aplicarAtajoInvFest(atajo){
-  const todos=['Disponible','Reservado','Taller','En Pintura','En Alistamiento','Prestado','Gerencia'];
+  const todos=['Disponible','Reservado','Taller','En Pintura','En Alistamiento','Prestado','Gerencia','En espera'];
   const marcar=atajo==='todos'?todos:atajo==='no-disponible'?todos.filter(e=>e!=='Disponible'):[];
   document.querySelectorAll('.inv-fest-check').forEach(c=>{c.checked=marcar.includes(c.value);});
   actualizarInvFestDesdeChecks();
@@ -6505,7 +6541,7 @@ function imprimirDetalleInventarioPorEstado(){
     const ia=ordenTipo.indexOf(a.tipo||'Otro'),ib=ordenTipo.indexOf(b.tipo||'Otro');
     return(ia===-1?99:ia)-(ib===-1?99:ib);
   };
-  const colorEstadoPrint=e=>({'Disponible':'#2F9E44','Reservado':'#E8590C','Taller':'#C92A2A','Taller Externo':'#C92A2A','En Pintura':'#7048E8','En Alistamiento':'#1971C2','Prestado':'#495057','Gerencia':'#1971C2','Retirado por el dueño':'#495057'}[e]||'#495057');
+  const colorEstadoPrint=e=>({'Disponible':'#2F9E44','Reservado':'#E8590C','Taller':'#C92A2A','Taller Externo':'#C92A2A','En Pintura':'#7048E8','En Alistamiento':'#1971C2','Prestado':'#495057','Gerencia':'#1971C2','En espera':'#E67700','Retirado por el dueño':'#495057'}[e]||'#495057');
   const filaVeh=v=>`<tr>
       <td>${v.marca||''}</td><td>${v.modelo||''}</td><td>${v.anio||'—'}</td><td>${v.placa||'—'}</td>
       <td>${v.color||'—'}</td><td>${v.tipo||'—'}</td>
