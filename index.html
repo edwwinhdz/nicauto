@@ -4682,7 +4682,7 @@ function seed(){
 // Versión de esta copia del sistema — se compara periódicamente contra el archivo publicado
 // en línea para avisarle a todos cuando haya una actualización nueva, sin que tengan que
 // acordarse de recargar por su cuenta.
-const APP_VERSION='2026-10-23-1535';
+const APP_VERSION='2026-10-23-1600';
 const uid=()=>'id'+Date.now()+Math.random().toString(36).slice(2,5);
 // Número de control ÚNICO y correlativo (empieza en 1, sube de a uno) para CADA documento que
 // se crea en el sistema — venta, compra, gasto, recibo — sin importar el módulo. Es totalmente
@@ -8310,14 +8310,14 @@ const RESR_BANCOS_ING=[{k:'bac',t:'BAC (D. Julio)'},{k:'bacgisselle',t:'BAC Giss
 // Va de la mano con la Forma de pago (si elegís un banco con "Efectivo", pasa a Transferencia).
 function resrLlenarDestinos(){
   const sel=document.getElementById('resr-bancoing');if(!sel||sel.options.length)return;
-  sel.innerHTML='<option value="cajafuerte">💵 Caja fuerte (efectivo)</option><optgroup label="🏦 Bancos">'+RESR_BANCOS_ING.map(b=>`<option value="${b.k}">${b.t}</option>`).join('')+'</optgroup><option value="cxc">📄 CxC Tercero (lo tiene otra persona)</option>';
+  sel.innerHTML='<option value="cajafuerte">💵 Caja fuerte (efectivo)</option><option value="cashjulio">💵 Efectivo — Fondo JM (lo recibió Don Julio)</option><optgroup label="🏦 Bancos">'+RESR_BANCOS_ING.map(b=>`<option value="${b.k}">${b.t}</option>`).join('')+'</optgroup><option value="cxc">📄 CxC Tercero (lo tiene otra persona)</option>';
 }
 function resrDestinoCambio(){
   resrLlenarDestinos();
   const d=document.getElementById('resr-bancoing').value;
   const pagoEl=document.getElementById('resr-pago');
   if(d==='cxc')pagoEl.value='CxC Tercero';
-  else if(d==='cajafuerte'){if(pagoEl.value!=='Efectivo')pagoEl.value='Efectivo';}
+  else if(d==='cajafuerte'||d==='cashjulio'){if(pagoEl.value!=='Efectivo')pagoEl.value='Efectivo';}
   else if(pagoEl.value==='Efectivo'||pagoEl.value==='CxC Tercero')pagoEl.value='Transferencia';
   document.getElementById('resr-tercero-wrap').style.display=d==='cxc'?'block':'none';
 }
@@ -8325,9 +8325,9 @@ function resrPagoCambio(){
   resrLlenarDestinos();
   const pago=document.getElementById('resr-pago')?.value||'Efectivo';
   const sel=document.getElementById('resr-bancoing');
-  if(pago==='Efectivo')sel.value='cajafuerte';
+  if(pago==='Efectivo'){if(sel.value!=='cashjulio')sel.value='cajafuerte';}
   else if(pago==='CxC Tercero')sel.value='cxc';
-  else if(sel.value==='cajafuerte'||sel.value==='cxc')sel.value=RESR_BANCOS_ING[0].k;
+  else if(sel.value==='cajafuerte'||sel.value==='cxc'||sel.value==='cashjulio')sel.value=RESR_BANCOS_ING[0].k;
   document.getElementById('resr-tercero-wrap').style.display=sel.value==='cxc'?'block':'none';
 }
 async function guardarReservaRapida(){
@@ -11551,7 +11551,7 @@ function puedeEditarFondoPersonal(clave){
   return false;
 }
 function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
-  const filas=[...ensureFondoPersonal(clave),...(clave==='fondosJM'?fondosJMMovsCompras():[])];
+  const filas=[...ensureFondoPersonal(clave),...(clave==='fondosJM'?fondosJMMovsAuto():[])];
   const puedeEditar=puedeEditarFondoPersonal(clave);
   const simbolo=clave==='fondosJM'?'$':'C$'; // Fondos JM se lleva en dólares; Fondos GO sigue en córdobas
   let saldo=0;
@@ -11581,17 +11581,17 @@ function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
     <tbody>${conSaldo.length?conSaldo.map(f=>`<tr>
       <td>${f.fechaIngreso||'—'}</td><td>${f.fechaPago||'—'}</td>
       <td><span class="badge ${f.tipo==='Ingreso'?'badge-green':'badge-red'}">${f.tipo}</span></td>
-      <td>${f.detalle||'—'}${f.auto?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':''}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
+      <td>${f.detalle||'—'}${f.auto?` <span class="badge badge-amber" style="font-size:9px">${f.autoTipo==='cobro'?'Automático — Cobro CxC':f.autoTipo==='reserva'?'Automático — Reserva':'Compra de vehículo'}</span>`:''}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
       <td style="color:${f.tipo==='Ingreso'?'var(--green)':'var(--red)'};font-weight:700">${f.tipo==='Ingreso'?'+':'-'}${simbolo} ${fmtNio(f.monto)}</td>
       <td style="font-weight:700">${simbolo} ${fmtNio(f.saldoCorrido)}</td>
-      ${puedeEditar?f.auto?`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
+      ${puedeEditar?f.auto?(f.autoTipo==='cobro'?`<td><button class="btn btn-sm" onclick="showContTab('cuentas')" title="Viene del cobro de la Cuenta por Cobrar — se corrige en Cuentas"><i class="ti ti-file-invoice"></i></button></td>`:f.autoTipo==='reserva'?`<td><button class="btn btn-sm" onclick="editVenta('${f.ventaId}')" title="Viene de la reserva — se corrige en la reserva (Ventas)"><i class="ti ti-receipt"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`):`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
     </tr>`).join(''):`<tr><td colspan="${puedeEditar?10:9}" style="text-align:center;color:var(--text3);padding:1.5rem">Sin movimientos registrados todavía</td></tr>`}</tbody>
   </table>`;
 }
 async function exportExcelFondoPersonal(clave){
   const simbolo=clave==='fondosJM'?'US$':'C$';
   const rows=[['Fecha Ingreso','Fecha Pago','Tipo','Detalle','Clasificación','Placa','Forma de Pago',`Monto (${simbolo})`,'Registrado por']];
-  [...ensureFondoPersonal(clave),...(clave==='fondosJM'?fondosJMMovsCompras():[])].forEach(f=>rows.push([f.fechaIngreso||'',f.fechaPago||'',f.tipo||'',f.detalle||'',f.clasificacion||'',f.placa||'',f.formaPago||'',f.monto||0,f.registradoPor||'']));
+  [...ensureFondoPersonal(clave),...(clave==='fondosJM'?fondosJMMovsAuto():[])].forEach(f=>rows.push([f.fechaIngreso||'',f.fechaPago||'',f.tipo||'',f.detalle||'',f.clasificacion||'',f.placa||'',f.formaPago||'',f.monto||0,f.registradoPor||'']));
   await exportarExcelConFormato(rows,(clave==='fondosJM'?'fondos_jm':'fondos_go')+'_nicauto',clave==='fondosJM'?'Fondos JM':'Fondos GO');
 }
 // Reinicia una hoja de Fondo Personal (JM o GO) para empezar una cuenta nueva — archiva TODOS
@@ -12671,8 +12671,42 @@ function fondosJMMovsCompras(){
   });
   return res;
 }
+// Ingresos automáticos en Fondos JM por dinero que recibió Don Julio en efectivo (Cash Julio M):
+//  • Cobros de Cuentas por Cobrar cuyo "¿Cómo se pagó?" fue Cash Julio M
+//  • Anticipos de reserva cuyo "¿Dónde entró el dinero?" fue Cash Julio M
+// No se guardan aparte: se calculan del registro original, así que si se corrige o borra el
+// cobro o la reserva, Fondos JM se actualiza solo.
+function fondosJMMovsIngresosAuto(){
+  const hist=contData.fondosJMHistorial||[];
+  const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
+  const res=[];
+  (contData.cuentas||[]).forEach(c=>{
+    if(!String(c.tipo||'').startsWith('CxC'))return;
+    (Array.isArray(c.historialPagos)?c.historialPagos:[]).forEach((p,ix)=>{
+      (Array.isArray(p.formas)?p.formas:[]).forEach((f,j)=>{
+        if(f.dest!=='cashjulio'||!(Number(f.monto)>0))return;
+        const fe=p.fecha||'';if(desde&&fe&&fe<=desde)return;
+        const vh=c.vehId?buscarVehiculoOConsig(c.vehId):null;
+        res.push({id:'FJX_'+c.id+'_'+ix+'_'+j,auto:true,autoTipo:'cobro',cuentaId:c.id,tipo:'Ingreso',monto:Number(f.monto),fechaIngreso:fe,fechaPago:fe,
+          detalle:`Cobro ${(NOMBRE_TIPO_CUENTA[c.tipo]||c.tipo)}${c.banco?' ('+c.banco+')':''} — ${c.persona||''}${vh?' — '+[vh.marca,vh.modelo,vh.anio].filter(Boolean).join(' '):''}${p.recibo?' | Recibo '+p.recibo:''}`,
+          clasificacion:'Cobro CxC',placa:vh?.placa||'',formaPago:'Cash',registradoPor:'Automático (Cuentas)'});
+      });
+    });
+  });
+  (ventas||[]).forEach(v=>{
+    if(v.bancoIngresoCol!=='cashjulio'||!(Number(v.anticipo)>0))return;
+    if(v.estado==='Anulada'&&!v.devolucionReserva)return; // reserva anulada por error: no cuenta
+    const fe=v.fecha||'';if(desde&&fe&&fe<=desde)return;
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    res.push({id:'FJR_'+v.id,auto:true,autoTipo:'reserva',ventaId:v.id,tipo:'Ingreso',monto:Number(v.anticipo),fechaIngreso:fe,fechaPago:fe,
+      detalle:`Reserva ${vh?[vh.marca,vh.modelo,vh.anio].filter(Boolean).join(' '):''}${v.nombreFactura?' — '+v.nombreFactura:''}${v.recibo?' | Recibo '+v.recibo:''}`,
+      clasificacion:'Reserva (anticipo)',placa:vh?.placa||'',formaPago:'Cash',registradoPor:'Automático (Reserva)'});
+  });
+  return res;
+}
+function fondosJMMovsAuto(){return[...fondosJMMovsCompras(),...fondosJMMovsIngresosAuto()];}
 function cajaFuerte2Saldo(hasta){
-  return[...(contData.fondosJM||[]),...fondosJMMovsCompras()].filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
+  return[...(contData.fondosJM||[]),...fondosJMMovsAuto()].filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
 }
 function bancosTotal(hasta){return BANCOS_CTAS.reduce((s,b)=>s+bancoSaldo(b.k,hasta),0);}
 function renderBancos(){
