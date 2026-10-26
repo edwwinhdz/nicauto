@@ -18840,7 +18840,7 @@ function cdHojaHTML(h,enPantalla){
     <tr><td style="font-weight:800;font-size:14px;padding-top:8px">SALDO FINAL CAJA</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cajafuerte)}</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cashjulio)} <span style="font-weight:400;font-size:10px">${cjNuevo?'del día → Fondos JM (auxiliar Don Julio)':'en caja Don Julio'}</span></td></tr>
-  </table>${cdSalidasBancariasHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
+  </table>${cdSalidasBancariasHTML(h.fecha)}${cdSalidasFondosJMHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
 }
 // Solo informativo (NO afecta los saldos de la caja): salidas de las cuentas bancarias de
 // Gerencia de ese día — compras de vehículos pagadas por transferencia y salidas registradas a
@@ -18860,10 +18860,30 @@ function cdSalidasTercerosHTML(fecha){
     <tfoot><tr style="background:#FFF4E6;font-weight:800"><td style="${td}" colspan="3">TOTAL PAGADO POR TERCEROS</td><td style="${td};text-align:right">${fmtD(tot)}</td></tr></tfoot>
   </table>`;
 }
+// Lo que Don Julio pagó ese día con su dinero en efectivo (Fondos JM): compras de vehículos,
+// reparaciones y demás egresos de su auxiliar. Solo informativo: no afecta la Caja fuerte.
+// (Los traslados con la caja ya aparecen arriba como movimientos de la caja, por eso no se repiten.)
+function cdSalidasFondosJMHTML(fecha){
+  let movs=[];
+  try{
+    movs=[...(contData.fondosJM||[]).filter(f=>!f.anulado&&!String(f.id||'').startsWith('FJM_')),...fondosJMMovsAuto()]
+      .filter(f=>f.tipo==='Egreso'&&(f.fechaPago||f.fechaIngreso)===fecha&&Number(f.monto||0)>0);
+  }catch(e){return'';}
+  if(!movs.length)return'';
+  const th='background:#7048E8;color:#fff;padding:5px 6px;border:1px solid #5F3DC4;font-size:11px';
+  const td='padding:4px 6px;border:1px solid #DEE2E6';
+  const etiqueta=f=>f.autoTipo==='reparacion'?'reparación':f.auto&&f.vehId?'compra de vehículo':(f.clasificacion||'');
+  return`<div style="margin-top:14px;font-weight:800;font-size:13px;color:#5F3DC4">SALIDAS PAGADAS POR DON JULIO — FONDOS JM <span style="font-weight:400;font-size:10px;color:#868E96">(solo informativo — ya están descontadas en Fondos JM, no afectan la caja)</span></div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">
+    <thead><tr><th style="${th};text-align:left">Concepto</th><th style="${th}">Placa</th><th style="${th};text-align:right">Monto</th></tr></thead>
+    <tbody>${movs.map(f=>`<tr><td style="${td}">${f.detalle||'—'}${etiqueta(f)?` <span style="font-size:9px;color:#7048E8">(${etiqueta(f)})</span>`:''}</td><td style="${td};text-align:center">${f.placa||'—'}</td><td style="${td};text-align:right">${fmtD(Number(f.monto))}</td></tr>`).join('')}</tbody>
+    <tfoot><tr style="background:#F3F0FF;font-weight:800"><td style="${td}" colspan="2">TOTAL PAGADO POR DON JULIO (FONDOS JM)</td><td style="${td};text-align:right">${fmtD(movs.reduce((s,f)=>s+Number(f.monto||0),0))}</td></tr></tfoot>
+  </table>`;
+}
 function cdSalidasBancariasHTML(fecha){
   let movs=[];
   try{
-    movs=[...bancosMovsAutoVisibles().filter(m=>m.autoCompra||String(m.id).startsWith('CJE_')),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
+    movs=[...bancosMovsAutoVisibles().filter(m=>m.autoCompra||m.autoRep||String(m.id).startsWith('CJE_')),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
       .filter(m=>m.fecha===fecha&&m.tipo!=='ingreso'&&Number(m.monto||0)>0);
   }catch(e){return'';}
   if(!movs.length)return'';
@@ -18874,7 +18894,7 @@ function cdSalidasBancariasHTML(fecha){
   return`<div style="margin-top:14px;font-weight:800;font-size:13px;color:#1864AB">SALIDAS BANCARIAS DE GERENCIA <span style="font-weight:400;font-size:10px;color:#868E96">(solo informativo — ya están descontadas en la hoja Bancos, no afectan la caja)</span></div>
   <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">
     <thead><tr><th style="${th};text-align:left">Concepto</th><th style="${th}">Ref. / Recibo</th>${bancos.map(b=>`<th style="${th};text-align:right">${b.t}</th>`).join('')}</tr></thead>
-    <tbody>${movs.map(m=>`<tr><td style="${td}">${m.desc||'—'}${m.autoCompra?' <span style="font-size:9px;color:#E67700">(compra de vehículo)</span>':''}</td><td style="${td};text-align:center">${m.ref||'—'}</td>${bancos.map(b=>`<td style="${td};text-align:right">${m.cuenta===b.k?fmtD(Number(m.monto)):''}</td>`).join('')}</tr>`).join('')}</tbody>
+    <tbody>${movs.map(m=>`<tr><td style="${td}">${m.desc||'—'}${m.autoCompra?' <span style="font-size:9px;color:#E67700">(compra de vehículo)</span>':m.autoRep?' <span style="font-size:9px;color:#E67700">(reparación)</span>':''}</td><td style="${td};text-align:center">${m.ref||'—'}</td>${bancos.map(b=>`<td style="${td};text-align:right">${m.cuenta===b.k?fmtD(Number(m.monto)):''}</td>`).join('')}</tr>`).join('')}</tbody>
     <tfoot><tr style="background:#E7F5FF;font-weight:800"><td style="${td}" colspan="2">TOTAL SALIDAS BANCARIAS — ${fmtD(movs.reduce((s,m)=>s+Number(m.monto||0),0))}</td>${bancos.map(b=>`<td style="${td};text-align:right">${fmtD(tot(b.k))}</td>`).join('')}</tr></tfoot>
   </table>`;
 }
