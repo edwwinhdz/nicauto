@@ -14207,7 +14207,7 @@ function vozCandidatos(){
   ((contData&&contData.consignacion)||[]).filter(c=>c&&c.estado!=='Vendido'&&c.estado!=='Retirado por el dueño').forEach(c=>res.push({v:c,precio:Number(c.precioA||0),origen:'consignación'}));
   return res;
 }
-const VOZ_IGNORAR=new Set(['comision','ganancia','margen','dolares','precio','precios','de','del','la','el','los','las','un','una','cuanto','cuesta','vale','valor','lista','placa','carro','camioneta','vehiculo','auto','dame','dime','decime','me','por','favor','que','tiene','tienen','esta','en','y','a','al','con','año','ano','modelo']);
+const VOZ_IGNORAR=new Set(['ficha','auxiliar','costos','costo','gastos','desglose','opcion','muestrame','mostrame','ensename','ver','todos','sus','agregados','adicionales','total','completa','comision','ganancia','margen','dolares','precio','precios','de','del','la','el','los','las','un','una','cuanto','cuesta','vale','valor','lista','placa','carro','camioneta','vehiculo','auto','dame','dime','decime','me','por','favor','que','tiene','tienen','esta','en','y','a','al','con','año','ano','modelo']);
 // "…comisión de 200" → 200 (se quita de la frase antes de buscar el vehículo)
 function vozComision(frase){const m=vozNorm(frase).match(/comision(?:es)?\s+(?:de\s+)?(\d+(?:\s?\d{3})?)/);return m?Number(m[1].replace(/\s/g,'')):null;}
 // Precio que se dice para simular: "a 17500", "en 17 500", "precio de 22 mil", "si lo vendo en 18 mil 500"
@@ -14312,11 +14312,57 @@ function vozPanel(html){
     <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-sm btn-primary" onclick="precioPorVoz()"><i class="ti ti-microphone"></i>Otra consulta</button>${_vozUltimo?'<button class="btn btn-sm" onclick="vozHablar(_vozUltimo)"><i class="ti ti-volume"></i>Repetir</button>':''}<button class="btn btn-sm" onclick="vozEscribir()"><i class="ti ti-keyboard"></i>Escribir</button></div>`;
 }
 function vozCerrar(){try{_vozRec&&_vozRec.abort();}catch(e){}try{speechSynthesis.cancel();}catch(e){}const p=document.getElementById('voz-panel');if(p)p.remove();}
+// "Ficha auxiliar" por voz: "ficha de la Hilux 2018", "costos del Yaris", "auxiliar placa 393819"
+// → muestra el costo de compra (o costo inicial en consignación), cada costo agregado y el total.
+function vozPideFicha(frase){return /\b(ficha|auxiliar|costos|gastos|desglose)\b/.test(vozNorm(frase));}
+function vozFichaDatos(x){
+  const v=x.v,items=[];
+  if(x.origen){
+    if(Number(v.costoInicial||0)>0)items.push({fecha:v.fecha||'',desc:'Costo inicial (informativo)',monto:Number(v.costoInicial)});
+  }else if(Number(v.costo||0)>0)items.push({fecha:v.fechacompra||'',desc:'Compra del vehículo'+(v.nombrecomprador?' (a '+v.nombrecomprador+')':''),monto:Number(v.costo)});
+  const reps=(Array.isArray(v.reparaciones)?v.reparaciones:[]).filter(r=>r&&Number(r.costo)>0).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  reps.forEach(r=>items.push({fecha:r.fecha||'',desc:String(r.desc||r.tipo||'Costo adicional').replace(/^\[Rendición Operaciones\]\s*/,''),monto:Number(r.costo),rend:!!r.rendicionMovId}));
+  const totRep=reps.reduce((s,r)=>s+Number(r.costo),0);
+  const base=x.origen?Number(v.costoInicial||0):Number(v.costo||0);
+  return{items,nRep:reps.length,totRep,base,total:base+totRep};
+}
+function vozMostrarFicha(x,oido){
+  const v=x.v,f=vozFichaDatos(x),d=n=>Math.round(n)+' dólares';
+  const tc=t=>{t=String(t||'').trim();return t===t.toUpperCase()&&t.length>3?t.toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()):t;};
+  const nombre=`${tc(v.marca)} ${tc(v.modelo)} ${v.anio||''}`.replace(/\s+/g,' ').trim();
+  vozHablar(`Ficha de ${nombre}${x.origen?', de consignación':''}. `+(f.base?`${x.origen?'Costo inicial':'Costo de compra'}: ${d(f.base)}. `:'')
+    +(f.nRep?`${f.nRep} costo${f.nRep===1?'':'s'} agregado${f.nRep===1?'':'s'} por ${d(f.totRep)}. `:'Sin costos agregados. ')+`Costo total: ${d(f.total)}.`
+    +(x.precio?` Precio lista A: ${d(x.precio)}.`:'')+(x.origen&&Number(v.preciopactado||0)?` Precio pactado con el dueño: ${d(Number(v.preciopactado))}.`:''));
+  const vid=x.origen?'CONSIG_'+v.id:v.id;
+  const p=document.getElementById('voz-panel');
+  vozPanel(oido+`<div style="font-weight:800;font-size:14px">${nombre} <span style="font-weight:400;font-size:11px;color:var(--text3,#868E96)">${v.placa||''}${x.origen?' · Consignación · '+(v.duenio||''):''}</span></div>
+    <div style="max-height:46vh;overflow-y:auto;margin-top:6px;border:1px solid var(--border,#DEE2E6);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+        ${f.items.map(i=>`<tr style="border-bottom:1px solid var(--border,#DEE2E6)"><td style="padding:4px 6px;white-space:nowrap;color:var(--text3,#868E96)">${i.fecha||''}</td><td style="padding:4px 6px">${String(i.desc).replace(/[<>&]/g,'')}${i.rend?' <span style="font-size:9px;color:var(--text3,#868E96)">(Rendición)</span>':''}</td><td style="padding:4px 6px;text-align:right;font-weight:600;white-space:nowrap">${fmtD(i.monto)}</td></tr>`).join('')||'<tr><td style="padding:8px;color:var(--text3,#868E96)">Sin costos registrados</td></tr>'}
+      </table></div>
+    <div style="margin-top:6px;font-size:12px">
+      ${f.base?`<div style="display:flex;justify-content:space-between"><span>${x.origen?'Costo inicial':'Costo de compra'}</span><b>${fmtD(f.base)}</b></div>`:''}
+      <div style="display:flex;justify-content:space-between"><span>Costos agregados (${f.nRep})</span><b style="color:var(--amber,#E67700)">${fmtD(f.totRep)}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px;border-top:1.5px solid var(--border,#DEE2E6);margin-top:3px;padding-top:3px"><span><b>COSTO TOTAL</b></span><b style="color:var(--red,#C92A2A)">${fmtD(f.total)}</b></div>
+      ${x.precio?`<div style="display:flex;justify-content:space-between;color:var(--text2,#495057)"><span>Precio lista A</span><span>${fmtD(x.precio)}</span></div>`:''}
+      ${x.origen&&Number(v.preciopactado||0)?`<div style="display:flex;justify-content:space-between;color:var(--text2,#495057)"><span>Pactado con dueño</span><span>${fmtD(v.preciopactado)}</span></div>`:''}
+    </div>
+    <button class="btn btn-sm" style="margin-top:6px;color:var(--amber,#E67700);border-color:#FFDEAB" onclick="abrirReparaciones('${vid}')"><i class="ti ti-tool"></i> Abrir reparaciones</button>`);
+}
+function vozFichaDeLista(i){const x=(window._vozUltimosEncontrados||[])[i];if(x)vozMostrarFicha(x,'');}
 function vozResponder(frases){
   frases=(Array.isArray(frases)?frases:[frases]).filter(Boolean);
   let encontrados=[],usada=frases[0]||'';
   for(const f of frases){const r=vozBuscar(f);if(r.length){encontrados=r;usada=f;break;}}
   const oido=`<div style="font-size:11px;color:var(--text3,#868E96);margin-bottom:6px">Escuché: «${String(usada).replace(/[<>&]/g,'')}»</div>`;
+  if(encontrados.length&&vozPideFicha(usada)){
+    if(!vozVeMargen()){vozHablar('Tu usuario no tiene permiso para ver los costos.');vozPanel(oido+'<div style="color:var(--red,#C92A2A)">Tu usuario no tiene permiso para ver los costos.</div>');return;}
+    if(encontrados.length===1){vozMostrarFicha(encontrados[0],oido);return;}
+    window._vozUltimosEncontrados=encontrados.slice(0,8);
+    vozHablar(`Encontré ${encontrados.length}. Elegí en la pantalla cuál ficha querés ver, o decí también el año o la placa.`);
+    vozPanel(oido+window._vozUltimosEncontrados.map((x,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border,#DEE2E6);padding:6px 0"><span><b>${String(x.v.marca||'').trim()} ${String(x.v.modelo||'').trim()} ${x.v.anio||''}</b> <span style="font-size:11px;color:var(--text3,#868E96)">${x.v.placa||''}${x.origen?' · Consig.':''}</span></span><button class="btn btn-sm btn-primary" onclick="vozFichaDeLista(${i})">Ver ficha</button></div>`).join(''));
+    return;
+  }
   if(!encontrados.length){
     _vozUltimo='';
     vozHablar('No encontré ese vehículo. Probá con la marca, el modelo y el año, o con la placa.');
@@ -14358,7 +14404,7 @@ function precioPorVoz(){
   const rec=new SR();_vozRec=rec;
   rec.lang='es-NI';rec.interimResults=false;rec.maxAlternatives=4;rec.continuous=false;
   let respondio=false;
-  vozPanel(`<div style="text-align:center;padding:10px 0"><div style="font-size:28px;color:var(--red,#C92A2A)">🎤</div><b>Te escucho…</b><div style="font-size:11px;color:var(--text3,#868E96);margin-top:4px">Decí marca, modelo y año (ej. «Hilux 2018») o la placa${vozVeMargen()?'. Podés agregar «comisión 200» y «a 17500» para calcular la ganancia con ese precio.':''}</div></div>`);
+  vozPanel(`<div style="text-align:center;padding:10px 0"><div style="font-size:28px;color:var(--red,#C92A2A)">🎤</div><b>Te escucho…</b><div style="font-size:11px;color:var(--text3,#868E96);margin-top:4px">Decí marca, modelo y año (ej. «Hilux 2018») o la placa${vozVeMargen()?'. Podés agregar «comisión 200» y «a 17500» para calcular la ganancia, o decir «ficha de…» para ver todos sus costos.':''}</div></div>`);
   rec.onresult=e=>{respondio=true;const r=e.results[0];const alts=[];for(let i=0;i<r.length;i++)alts.push(r[i].transcript);vozResponder(alts);};
   rec.onerror=e=>{respondio=true;
     const msg=e.error==='not-allowed'||e.error==='service-not-allowed'?'El navegador no tiene permiso para usar el micrófono. Permitilo en el candado de la barra de direcciones y probá otra vez.'
