@@ -2120,7 +2120,9 @@ body.no-delete .confirmDelete{display:none!important}
         <div class="form-group"><label>Valor del canje (USD $)</label><input class="calc-input" id="mvt-canje-valor" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Cash recibido (USD $)</label><input class="calc-input" id="mvt-cash" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()"></div>
+        <div class="form-group"><label>Cash recibido (USD $)</label><div style="display:flex;gap:6px"><input class="calc-input" id="mvt-cash" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()" style="flex:1;min-width:90px">
+          <select id="mvt-cash-dest" title="¿Dónde entró el efectivo?" style="flex:1;min-width:150px"><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash JM (lo recibió Don Julio)</option></select></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px"><b>Caja fuerte</b> → Reporte de Caja · <b>Cash JM</b> → columna Cash Julio M y entra como Ingreso en Fondos JM</div></div>
         <div class="form-group"><label>No. Recibo principal</label><input id="mvt-recibo" placeholder="REC-001…"></div>
       </div>
       <!-- Mini calculadora liquidación -->
@@ -10440,7 +10442,7 @@ async function guardarCorreccionVendedor(){
 }
 // Firma estable de un registro (independiente del orden de las claves) para detectar si otra
 // persona lo modificó mientras uno lo tenía abierto.
-const CAMPOS_FIRMA_VENTA=['precio','costo','estado','fecha','anticipo','bancario','bancarioTipo','banco','cash','canjeValor','canjeDesc','depositos','comision','recibo','reciboBanco','vehiculoId','compradorId','vendedorId','nombreFactura'];
+const CAMPOS_FIRMA_VENTA=['precio','costo','estado','fecha','anticipo','bancario','bancarioTipo','banco','cash','cashDest','canjeValor','canjeDesc','depositos','comision','recibo','reciboBanco','vehiculoId','compradorId','vendedorId','nombreFactura'];
 function firmaVenta(v){const o={};CAMPOS_FIRMA_VENTA.forEach(k=>{let x=v?v[k]:undefined;if(k==='depositos')x=Array.isArray(x)?x:[];else if(x===undefined||x===null)x='';else if(!isNaN(parseFloat(x))&&/^[\d.\-]+$/.test(String(x)))x=Number(x).toFixed(2);o[k]=x;});return firmaEstable(o);}
 function firmaEstable(o){
   const norm=x=>Array.isArray(x)?x.map(norm):(x&&typeof x==='object')?Object.keys(x).sort().reduce((a,k)=>{a[k]=norm(x[k]);return a;},{}):(typeof x==='number'?String(x):x);
@@ -10490,6 +10492,7 @@ function abrirModalVenta(id){
     const elCanjeDesc=document.getElementById('mvt-canje-desc');if(elCanjeDesc)elCanjeDesc.value=v.canjeDesc||'';
     const elCanjeValor=document.getElementById('mvt-canje-valor');if(elCanjeValor)elCanjeValor.value=parseFloat(v.canjeValor||0).toFixed(2);
     const elCash=document.getElementById('mvt-cash');if(elCash)elCash.value=parseFloat(v.cash||0).toFixed(2);
+    const elCashDest=document.getElementById('mvt-cash-dest');if(elCashDest)elCashDest.value=v.cashDest==='cashjulio'?'cashjulio':'cajafuerte';
     mvtCargarDepositos(v);
     const elNombreFact=document.getElementById('mvt-nombre-factura');if(elNombreFact)elNombreFact.value=v.nombreFactura||'';
     const elCedulaFact=document.getElementById('mvt-cedula-factura');if(elCedulaFact)elCedulaFact.value=v.cedulaFactura||'';
@@ -10501,6 +10504,7 @@ function abrirModalVenta(id){
     document.getElementById('mvt-estado').value='Completada';
     if(document.getElementById('mvt-contacto'))document.getElementById('mvt-contacto').value='';
     ['anticipo','bancario','canje-valor','cash','comision'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
+    if(document.getElementById('mvt-cash-dest'))document.getElementById('mvt-cash-dest').value='cajafuerte';
     if(document.getElementById('mvt-banco'))document.getElementById('mvt-banco').value='';
     if(document.getElementById('mvt-bancario-tipo'))document.getElementById('mvt-bancario-tipo').value='financiamiento';
     mvtCargarDepositos(null);
@@ -11003,9 +11007,12 @@ async function guardarVenta(){
     bancario:bancario.toFixed(2),bancarioTipo,reciboBanco,banco,
     depositos:depositos.map(d=>({banco:d.banco,monto:Number(d.monto.toFixed(2)),ref:d.ref})),
     canjeDesc,canjeValor:canjeValor.toFixed(2),
-    cash:cash.toFixed(2),
+    cash:cash.toFixed(2),cashDest:(document.getElementById('mvt-cash-dest')?.value==='cashjulio'?'cashjulio':'cajafuerte'),
     nombreFactura,cedulaFactura,tel1,tel2,
     costoTotal:costoTotal.toFixed(2),ganancia:ganancia.toFixed(2),ventaConfirmada,numeroControl};
+  // Datos de la reserva que no están en este formulario (dónde entró el anticipo, tercero, devolución):
+  // se conservan al editar/completar — antes se perdían y el anticipo en Cash JM salía de Fondos JM.
+  if(ventaExistente)['bancoIngresoCol','terceroReserva','devolucionReserva'].forEach(k=>{if(ventaExistente[k]!==undefined&&obj[k]===undefined)obj[k]=ventaExistente[k];});
   marcarEdicion(obj);
   await sincronizarCxCBancoDesdeVenta(obj);
 
@@ -11587,10 +11594,10 @@ function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
     <tbody>${conSaldo.length?conSaldo.map(f=>`<tr>
       <td>${f.fechaIngreso||'—'}</td><td>${f.fechaPago||'—'}</td>
       <td><span class="badge ${f.tipo==='Ingreso'?'badge-green':'badge-red'}">${f.tipo}</span></td>
-      <td>${f.detalle||'—'}${f.auto?` <span class="badge badge-amber" style="font-size:9px">${f.autoTipo==='cobro'?'Automático — Cobro CxC':f.autoTipo==='reserva'?'Automático — Reserva':'Compra de vehículo'}</span>`:''}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
+      <td>${f.detalle||'—'}${f.auto?` <span class="badge badge-amber" style="font-size:9px">${f.autoTipo==='cobro'?'Automático — Cobro CxC':f.autoTipo==='reserva'?'Automático — Reserva':f.autoTipo==='venta'?'Automático — Venta':'Compra de vehículo'}</span>`:''}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
       <td style="color:${f.tipo==='Ingreso'?'var(--green)':'var(--red)'};font-weight:700">${f.tipo==='Ingreso'?'+':'-'}${simbolo} ${fmtNio(f.monto)}</td>
       <td style="font-weight:700">${simbolo} ${fmtNio(f.saldoCorrido)}</td>
-      ${puedeEditar?f.auto?(f.autoTipo==='cobro'?`<td><button class="btn btn-sm" onclick="showContTab('cuentas')" title="Viene del cobro de la Cuenta por Cobrar — se corrige en Cuentas"><i class="ti ti-file-invoice"></i></button></td>`:f.autoTipo==='reserva'?`<td><button class="btn btn-sm" onclick="editVenta('${f.ventaId}')" title="Viene de la reserva — se corrige en la reserva (Ventas)"><i class="ti ti-receipt"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`):`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
+      ${puedeEditar?f.auto?(f.autoTipo==='cobro'?`<td><button class="btn btn-sm" onclick="showContTab('cuentas')" title="Viene del cobro de la Cuenta por Cobrar — se corrige en Cuentas"><i class="ti ti-file-invoice"></i></button></td>`:(f.autoTipo==='reserva'||f.autoTipo==='venta')?`<td><button class="btn btn-sm" onclick="editVenta('${f.ventaId}')" title="Viene de ${f.autoTipo==='venta'?'la venta':'la reserva'} — se corrige en Ventas"><i class="ti ti-receipt"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`):`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
     </tr>`).join(''):`<tr><td colspan="${puedeEditar?10:9}" style="text-align:center;color:var(--text3);padding:1.5rem">Sin movimientos registrados todavía</td></tr>`}</tbody>
   </table>`;
 }
@@ -12698,6 +12705,15 @@ function fondosJMMovsIngresosAuto(){
           clasificacion:'Cobro CxC',placa:vh?.placa||'',formaPago:'Cash',registradoPor:'Automático (Cuentas)'});
       });
     });
+  });
+  // Ventas completadas cuyo "Cash recibido" entró en Cash JM (lo recibió Don Julio)
+  (ventas||[]).forEach(v=>{
+    if(v.estado!=='Completada'||v.cashDest!=='cashjulio'||!(Number(v.cash)>0))return;
+    const fe=v.fecha||'';if(desde&&fe&&fe<=desde)return;
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    res.push({id:'FJV_'+v.id,auto:true,autoTipo:'venta',ventaId:v.id,tipo:'Ingreso',monto:Number(v.cash),fechaIngreso:fe,fechaPago:fe,
+      detalle:`Venta ${vh?[vh.marca,vh.modelo,vh.anio].filter(Boolean).join(' '):''}${v.nombreFactura?' — '+v.nombreFactura:''}${v.recibo?' | Recibo '+v.recibo:''}`,
+      clasificacion:'Venta (cash)',placa:vh?.placa||'',formaPago:'Cash',registradoPor:'Automático (Venta)'});
   });
   (ventas||[]).forEach(v=>{
     if(v.bancoIngresoCol!=='cashjulio'||!(Number(v.anticipo)>0))return;
@@ -18253,7 +18269,7 @@ function cdLineasAuto(fecha){
       vehiculo:cdVehiculoTxt(v.vehiculoId),recibo:v.recibo||'',auto:true,ventaId:v.id};
     if(v.estado==='Completada'){
       const cash=Number(v.cash||0),banc=Number(v.bancario||0),canje=Number(v.canjeValor||0);
-      if(cash>0)lineas.push({...base,key:'V_'+v.id+'_cash',forma:'Efectivo',col:'cajafuerte',monto:cash,tipoLinea:'Venta'});
+      if(cash>0)lineas.push({...base,key:'V_'+v.id+'_cash',forma:v.cashDest==='cashjulio'?'Efectivo — Cash Julio M':'Efectivo',col:v.cashDest==='cashjulio'?'cashjulio':'cajafuerte',monto:cash,tipoLinea:'Venta'});
       if(banc>0){
         const financiado=v.bancarioTipo!=='transferencia';
         lineas.push({...base,key:'V_'+v.id+'_banco',recibo:v.reciboBanco||v.recibo||'',
