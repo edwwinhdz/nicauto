@@ -433,6 +433,7 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="ai-toggle" id="btn-entrar-como" onclick="abrirEntrarComoUsuario()" style="display:none" title="Entrar como otro usuario para hacer pruebas (con código maestro)"><i class="ti ti-user-shield"></i>Entrar como</button>
     <button class="ai-toggle" id="btn-bloqueo-sistema" onclick="toggleBloqueoSistema()" style="display:none" title="Bloquear el acceso de todos menos vos (para hacer cambios delicados)"><i class="ti ti-lock-open"></i>Bloquear sistema</button>
     <button class="ai-toggle" onclick="imprimirModulo()" title="Imprimir este módulo"><i class="ti ti-printer"></i>Imprimir</button>
+    <button class="ai-toggle" id="btn-precio-voz" onclick="precioPorVoz()" title="Decí el vehículo (ej. «Hilux 2018» o la placa) y el sistema te dice el Precio Lista A en voz alta"><i class="ti ti-microphone"></i>Precio por voz</button>
     <button class="ai-toggle" id="ai-toggle-btn" onclick="toggleAI()"><i class="ti ti-sparkles"></i>Copilot IA</button>
     <button class="ai-toggle" onclick="cerrarSesion()" style="border-color:rgba(255,255,255,.3)"><i class="ti ti-logout"></i>Salir</button>
   </div>
@@ -14144,6 +14145,162 @@ function renderFlujo(){
 }
 
 function renderContable(){showContTab(contTab);}
+
+// ======================== PRECIO POR VOZ ========================
+// Se toca el botón 🎤, se dice el vehículo ("Hilux 2018", "Yaris", "placa 393819") y el sistema
+// busca en Inventario y Consignación (no vendidos) y responde en voz alta con el Precio Lista A.
+// Usa el reconocimiento y la voz que trae el navegador (Chrome / Edge / Safari): no usa IA ni
+// tiene costo, y no guarda nada.
+let _vozRec=null,_vozUltimo='';
+function vozNorm(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();}
+function vozCandidatos(){
+  const res=[];
+  (vehiculos||[]).filter(v=>v&&v.estado!=='Vendido').forEach(v=>res.push({v,precio:Number(v.precio||0),origen:''}));
+  ((contData&&contData.consignacion)||[]).filter(c=>c&&c.estado!=='Vendido'&&c.estado!=='Retirado por el dueño').forEach(c=>res.push({v:c,precio:Number(c.precioA||0),origen:'consignación'}));
+  return res;
+}
+const VOZ_IGNORAR=new Set(['comision','ganancia','margen','dolares','precio','precios','de','del','la','el','los','las','un','una','cuanto','cuesta','vale','valor','lista','placa','carro','camioneta','vehiculo','auto','dame','dime','decime','me','por','favor','que','tiene','tienen','esta','en','y','a','al','con','año','ano','modelo']);
+// "…comisión de 200" → 200 (se quita de la frase antes de buscar el vehículo)
+function vozComision(frase){const m=vozNorm(frase).match(/comision(?:es)?\s+(?:de\s+)?(\d+(?:\s?\d{3})?)/);return m?Number(m[1].replace(/\s/g,'')):null;}
+function vozSinComision(frase){return vozNorm(frase).replace(/comision(?:es)?\s+(?:de\s+)?\d+(?:\s?\d{3})?(\s+dolares)?/g,' ');}
+// Margen y ganancia: solo Administración / Gerencia (mismo cálculo que el formulario del vehículo:
+// costo de compra + reparaciones; en consignación, el precio pactado con el dueño).
+function vozVeMargen(){return['admin','gerente1','gerente2','jefecomercial'].includes(MODO);}
+function vozMargen(x,comisionDicha){
+  const v=x.v;
+  const comision=comisionDicha!=null?comisionDicha:Number(v.comisionLP||v.comisionEstimada||0);
+  let costo;
+  if(x.origen){costo=Number(v.preciopactado||0);if(!costo)return null;}
+  else costo=costoInventarioVeh(v);
+  if(!(costo>0))return null;
+  const calc=p=>{p=Number(p||0);if(!(p>0))return null;const g=p-costo-comision;return{precio:p,gan:g,pct:Math.round(g/p*1000)/10};};
+  return{costo,comision,A:calc(x.precio),B:calc(v.precioB)};
+}
+function vozBuscar(frase){
+  const t=vozSinComision(frase);
+  // Números dichos separados ("2 0 1 8") se juntan; los de 4+ dígitos pueden ser año o placa
+  const toks=t.split(' ').filter(w=>w&&!VOZ_IGNORAR.has(w));
+  if(!toks.length)return[];
+  const digitos=t.replace(/[^0-9]/g,'');
+  const lista=vozCandidatos().map(x=>{
+    const v=x.v;
+    const hay=vozNorm([v.marca,v.modelo,v.anio,v.color,v.tipo].join(' '));
+    const hayJunto=hay.replace(/ /g,'');
+    const placaDig=String(v.placa||'').replace(/[^0-9]/g,'');
+    let score=0,anioOk=false;
+    toks.forEach(w=>{
+      if(/^\d{4}$/.test(w)&&String(v.anio||'').trim()===w){score+=2;anioOk=true;return;}
+      if(/^\d+$/.test(w)&&w.length>=4&&placaDig&&placaDig.includes(w)){score+=3;return;}
+      if(w.length>=2&&(hay.split(' ').includes(w)||(w.length>=3&&hayJunto.includes(w))))score+=1;
+    });
+    if(digitos.length>=5&&placaDig&&placaDig===digitos)score+=3;
+    return{...x,score,anioOk};
+  }).filter(x=>x.score>0);
+  if(!lista.length)return[];
+  const max=Math.max(...lista.map(x=>x.score));
+  return lista.filter(x=>x.score===max).sort((a,b)=>Number(b.v.anio||0)-Number(a.v.anio||0));
+}
+function vozTextoVehiculo(x,comisionDicha,conPlaca){
+  const v=x.v,km=Number(v.km||0);
+  let extra='';
+  if(vozVeMargen()){
+    const m=vozMargen(x,comisionDicha);
+    if(m){
+      const d=n=>Math.round(n)+' dólares';
+      const pct=n=>String(n).replace('.',' punto ')+' por ciento';
+      extra=(x.origen?` Precio pactado con el dueño: ${d(m.costo)}.`:'')+` Con comisión de ${d(m.comision)}:`
+        +(m.A?` con precio A, ganancia ${d(m.A.gan)}, margen ${pct(m.A.pct)}.`:'')
+        +(m.B?` Con precio B de ${d(m.B.precio)}, ganancia ${d(m.B.gan)}, margen ${pct(m.B.pct)}.`:' No tiene precio B.');
+    }
+  }
+  const kmTxt=km?(km>=1000?Math.round(km/1000)+' mil kilómetros':km+' kilómetros'):'';
+  const tc=t=>{t=String(t||'').trim();return t===t.toUpperCase()&&t.length>3?t.toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()):t;}; // "TOYOTA" se lee mejor como "Toyota"
+  return `${tc(v.marca)} ${tc(v.modelo)} ${v.anio||''}`.replace(/\s+/g,' ').trim()+(conPlaca&&v.placa?', placa '+v.placa:'')
+    +(v.color?', '+String(v.color).trim().toLowerCase():'')+(v.trans?', '+String(v.trans).toLowerCase():'')+(kmTxt?', '+kmTxt:'')
+    +`. Precio lista A: ${x.precio?Math.round(x.precio)+' dólares':'sin precio registrado'}.`
+    +(v.estado&&v.estado!=='Disponible'?' Estado: '+v.estado+'.':'')+(x.origen?' Es de consignación.':'')+extra;
+}
+function vozHablar(texto){
+  _vozUltimo=texto;
+  try{
+    if(!window.speechSynthesis)return;
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(texto);
+    u.lang='es-ES';u.rate=1;
+    const voces=speechSynthesis.getVoices()||[];
+    const voz=voces.find(x=>/^es[-_](NI|MX|US|419|CR|HN|GT|SV|CO)/i.test(x.lang))||voces.find(x=>/^es/i.test(x.lang));
+    if(voz){u.voice=voz;u.lang=voz.lang;}
+    speechSynthesis.speak(u);
+  }catch(e){console.warn('voz',e);}
+}
+function vozPanel(html){
+  let p=document.getElementById('voz-panel');
+  if(!p){
+    p=document.createElement('div');p.id='voz-panel';
+    p.style.cssText='position:fixed;right:16px;bottom:16px;z-index:9998;width:min(380px,calc(100vw - 32px));background:var(--surface,#fff);color:var(--text,#212529);border:1.5px solid var(--blue,#1971C2);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:14px;font-size:13px';
+    document.body.appendChild(p);
+  }
+  p.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="color:var(--blue,#1971C2)"><i class="ti ti-microphone"></i> Precio por voz</b><button class="btn btn-sm" onclick="vozCerrar()" title="Cerrar"><i class="ti ti-x"></i></button></div>${html}
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-sm btn-primary" onclick="precioPorVoz()"><i class="ti ti-microphone"></i>Otra consulta</button>${_vozUltimo?'<button class="btn btn-sm" onclick="vozHablar(_vozUltimo)"><i class="ti ti-volume"></i>Repetir</button>':''}<button class="btn btn-sm" onclick="vozEscribir()"><i class="ti ti-keyboard"></i>Escribir</button></div>`;
+}
+function vozCerrar(){try{_vozRec&&_vozRec.abort();}catch(e){}try{speechSynthesis.cancel();}catch(e){}const p=document.getElementById('voz-panel');if(p)p.remove();}
+function vozResponder(frases){
+  frases=(Array.isArray(frases)?frases:[frases]).filter(Boolean);
+  let encontrados=[],usada=frases[0]||'';
+  for(const f of frases){const r=vozBuscar(f);if(r.length){encontrados=r;usada=f;break;}}
+  const oido=`<div style="font-size:11px;color:var(--text3,#868E96);margin-bottom:6px">Escuché: «${String(usada).replace(/[<>&]/g,'')}»</div>`;
+  if(!encontrados.length){
+    _vozUltimo='';
+    vozHablar('No encontré ese vehículo. Probá con la marca, el modelo y el año, o con la placa.');
+    vozPanel(oido+'<div style="color:var(--red,#C92A2A);font-weight:600">No encontré ese vehículo.</div><div style="font-size:12px;margin-top:4px">Probá con marca + modelo + año (ej. «Toyota Hilux 2018») o con los números de la placa.</div>');
+    return;
+  }
+  const mostrar=encontrados.slice(0,5);
+  const comDicha=vozComision(usada);
+  let voz=encontrados.length===1?vozTextoVehiculo(encontrados[0],comDicha):`Encontré ${encontrados.length}. `+mostrar.map((x,i)=>`${i+1}: `+vozTextoVehiculo(x,comDicha,true)).join(' ');
+  const margenHTML=x=>{
+    if(!vozVeMargen())return'';
+    const m=vozMargen(x,comDicha);
+    if(!m)return`<div style="font-size:11px;color:var(--text3,#868E96);margin-top:3px">Sin ${x.origen?'precio pactado':'costo'} registrado para calcular el margen.</div>`;
+    const fila=(lbl,r)=>r?`<div style="display:flex;justify-content:space-between"><span>${lbl} ${fmtD(r.precio)}</span><span style="font-weight:700;color:${r.gan>=0?'var(--green,#2F9E44)':'var(--red,#C92A2A)'}">${fmtD(r.gan)} · ${r.pct}%</span></div>`:`<div style="color:var(--text3,#868E96)">${lbl}: sin precio</div>`;
+    return`<div style="margin-top:5px;background:var(--surface2,#F8F9FA);border-radius:8px;padding:6px 8px;font-size:11.5px">
+      <div style="color:var(--text2,#495057);margin-bottom:2px">${x.origen?'Pactado con dueño':'Costo (compra + reparaciones)'}: <b>${fmtD(m.costo)}</b> · Comisión: <b>${fmtD(m.comision)}</b></div>
+      ${fila('Precio A',m.A)}${fila('Precio B',m.B)}</div>`;
+  };
+  if(encontrados.length>5)voz+=` Y ${encontrados.length-5} más. Decí también el año o la placa para afinar.`;
+  vozHablar(voz);
+  vozPanel(oido+mostrar.map(x=>{const v=x.v;return`<div style="border-top:1px solid var(--border,#DEE2E6);padding:7px 0">
+      <div style="font-weight:700">${String(v.marca||'').trim()} ${String(v.modelo||'').trim()} ${v.anio||''} <span style="font-weight:400;color:var(--text3,#868E96);font-size:11px">${v.placa||''}${x.origen?' · Consignación':''}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px"><span style="font-size:11px;color:var(--text2,#495057)">${[v.color,v.trans,v.km?Number(v.km).toLocaleString('en-US')+' km':''].filter(Boolean).join(' · ')}${v.estado&&v.estado!=='Disponible'?' · <b>'+v.estado+'</b>':''}</span>
+      <b style="color:var(--green,#2F9E44);font-size:16px">${x.precio?fmtD(x.precio):'—'}</b></div>${margenHTML(x)}</div>`;}).join('')
+    +(encontrados.length>5?`<div style="font-size:11px;color:var(--text3,#868E96)">…y ${encontrados.length-5} más. Agregá el año o la placa.</div>`:''));
+}
+function vozEscribir(){
+  const t=prompt('Escribí el vehículo (ej. Hilux 2018, o la placa):','');
+  if(t&&t.trim())vozResponder(t.trim());
+}
+function precioPorVoz(){
+  try{speechSynthesis&&speechSynthesis.cancel();}catch(e){}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    vozPanel('<div style="font-size:12px">Este navegador no permite dictar por voz (usá Chrome o Edge). Podés <b>escribir</b> el vehículo y te digo el precio en voz alta.</div>');
+    return;
+  }
+  try{_vozRec&&_vozRec.abort();}catch(e){}
+  const rec=new SR();_vozRec=rec;
+  rec.lang='es-NI';rec.interimResults=false;rec.maxAlternatives=4;rec.continuous=false;
+  let respondio=false;
+  vozPanel(`<div style="text-align:center;padding:10px 0"><div style="font-size:28px;color:var(--red,#C92A2A)">🎤</div><b>Te escucho…</b><div style="font-size:11px;color:var(--text3,#868E96);margin-top:4px">Decí marca, modelo y año (ej. «Hilux 2018») o la placa${vozVeMargen()?'. Podés agregar «comisión 200» para calcular la ganancia.':''}</div></div>`);
+  rec.onresult=e=>{respondio=true;const r=e.results[0];const alts=[];for(let i=0;i<r.length;i++)alts.push(r[i].transcript);vozResponder(alts);};
+  rec.onerror=e=>{respondio=true;
+    const msg=e.error==='not-allowed'||e.error==='service-not-allowed'?'El navegador no tiene permiso para usar el micrófono. Permitilo en el candado de la barra de direcciones y probá otra vez.'
+      :e.error==='no-speech'?'No escuché nada. Tocá «Otra consulta» y hablá cerca del micrófono.'
+      :'No se pudo usar el micrófono ('+e.error+'). Podés escribir el vehículo.';
+    vozPanel('<div style="font-size:12px">'+msg+'</div>');};
+  rec.onend=()=>{if(!respondio)vozPanel('<div style="font-size:12px">No escuché nada. Tocá «Otra consulta» y hablá cerca del micrófono.</div>');};
+  try{rec.start();}catch(e){vozPanel('<div style="font-size:12px">No se pudo iniciar el micrófono. Podés escribir el vehículo.</div>');}
+}
+try{if(window.speechSynthesis)speechSynthesis.getVoices();}catch(e){}
 
 // ======================== AI COPILOT ========================
 let aiOpen=false;
