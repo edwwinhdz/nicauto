@@ -2880,6 +2880,16 @@ body.no-delete .confirmDelete{display:none!important}
         </div>
         <div class="form-group"><label>Factura / comprobante</label><input id="mrep-factura" placeholder="FAC-001…"></div>
       </div>
+      <div class="form-group" style="background:#E7F5FF;border:1px dashed #74C0FC;border-radius:8px;padding:.6rem .75rem">
+        <label style="color:var(--blue)"><i class="ti ti-wallet"></i> ¿De dónde salió el dinero?</label>
+        <select id="mrep-fuente">
+          <option value="">— No registrar salida (ya se pagó por Rendición u otra vía) —</option>
+          <option value="cajafuerte">💵 Cash — Caja fuerte</option>
+          <option value="fondojm">💼 Cash JM (Fondos JM)</option>
+          <optgroup label="🏦 Bancos"><option value="banco:BACJM">BAC JM</option><option value="banco:BACGO">BAC GO</option><option value="banco:LAFISE">La Fise</option><option value="banco:FICOHSA">Ficohsa</option></optgroup>
+        </select>
+        <div style="font-size:10px;color:var(--text2);margin-top:4px"><b>Caja fuerte</b> → Egreso en el Reporte de Caja · <b>Cash JM</b> → Egreso en Fondos JM · <b>Banco</b> → Salida en la hoja Bancos. Con la fecha de la reparación. Si después se corrige o se borra la reparación, la salida se corrige sola.</div>
+      </div>
       <div class="form-group" id="mrep-cxc-group" style="display:none;background:#FFF4E0;border-radius:8px;padding:.6rem .75rem">
         <label>Costo adicional — ¿a quién se le cobra? (crea una Cuenta por Cobrar)</label>
         <select id="mrep-cxc-tipo">
@@ -9600,6 +9610,20 @@ let repVehId=null;
 // Reparaciones ahora funciona tanto para el Inventario normal, Consignación (prefijo
 // 'CONSIG_'), como para Gerencia/Taller (prefijo 'VGER_') — para que las reparaciones/
 // inversiones de esos vehículos también se sumen a su costo original.
+// Reparaciones con "¿De dónde salió el dinero?" (Inventario, Gerencia/Taller y Consignación).
+// Las que vienen de Rendición de Cuentas no cuentan: esas ya se pagaron con el fondo de la rendición.
+function reparacionesConPago(){
+  const res=[];
+  const nom=v=>`${(v.marca||'').trim()} ${(v.modelo||'').trim()} ${v.anio||''}${v.placa?' — '+v.placa:''}`.replace(/\s+/g,' ').trim();
+  const add=(v,origen)=>(Array.isArray(v&&v.reparaciones)?v.reparaciones:[]).forEach(r=>{
+    if(!r||r.rendicionMovId||!r.fuentePago||!(Number(r.costo)>0))return;
+    res.push({rep:r,veh:v,origen,desc:`Reparación ${nom(v)}: ${r.desc||r.tipo||''}${r.taller?' ('+r.taller+')':''}${origen?' ['+origen+']':''}`});
+  });
+  (vehiculos||[]).forEach(v=>add(v,''));
+  (typeof vehGerencia!=='undefined'&&vehGerencia||[]).forEach(v=>add(v,'Gerencia'));
+  ((contData&&contData.consignacion)||[]).forEach(v=>add(v,'Consignación'));
+  return res;
+}
 function _repObjeto(vid){
   if(vid&&vid.startsWith('CONSIG_')){
     const cid=vid.replace('CONSIG_','');
@@ -9697,6 +9721,7 @@ function editarReparacion(rid){
   document.getElementById('mrep-costo').value=rep.costo||'';
   document.getElementById('mrep-pago').value=rep.pago||'Caja (efectivo)';
   document.getElementById('mrep-factura').value=rep.factura||'';
+  {const fe=document.getElementById('mrep-fuente');if(fe)fe.value=rep.fuentePago?(rep.fuentePago==='banco'?'banco:'+(rep.bancoPago||''):rep.fuentePago):'';}
   const cxcTipoEl2=document.getElementById('mrep-cxc-tipo');if(cxcTipoEl2)cxcTipoEl2.value=rep.cxcTipo||'';
   document.getElementById('mrep-btn-guardar').innerHTML='<i class="ti ti-check"></i> Guardar corrección';
   document.getElementById('mrep-btn-cancelar').style.display='inline-flex';
@@ -9708,6 +9733,7 @@ function cancelarEdicionReparacion(){
   document.getElementById('mrep-fecha').value=hoyLocal();
   document.getElementById('mrep-tipo').value='Mecánica general';
   document.getElementById('mrep-pago').value='Caja (efectivo)';
+  {const fe=document.getElementById('mrep-fuente');if(fe)fe.value='';}
   const cxcTipoEl=document.getElementById('mrep-cxc-tipo');if(cxcTipoEl)cxcTipoEl.value='';
   document.getElementById('mrep-btn-guardar').innerHTML='<i class="ti ti-plus"></i> Agregar';
   document.getElementById('mrep-btn-cancelar').style.display='none';
@@ -9747,6 +9773,14 @@ async function guardarReparacion(){
     const ridEditando=document.getElementById('mrep-rid').value;
     const datos={fecha:document.getElementById('mrep-fecha').value,tipo:document.getElementById('mrep-tipo').value,desc:document.getElementById('mrep-desc').value,taller:document.getElementById('mrep-taller').value,costo:parseFloat(costo),pago:document.getElementById('mrep-pago').value,factura:document.getElementById('mrep-factura').value};
     if(r.esConsig)datos.cxcTipo=document.getElementById('mrep-cxc-tipo').value||null;
+    // De dónde salió el dinero → Caja fuerte (Reporte de Caja) / Fondos JM / Banco (hoja Bancos)
+    {
+      const fv=document.getElementById('mrep-fuente')?.value||'';
+      if(fv.startsWith('banco:')){datos.fuentePago='banco';datos.bancoPago=fv.slice(6);datos.pago='Banco (transferencia)';}
+      else if(fv){datos.fuentePago=fv;datos.bancoPago='';datos.pago='Caja (efectivo)';}
+      else{datos.fuentePago='';datos.bancoPago='';}
+      if(fv==='cajafuerte'&&datos.fecha){try{if(cdCierreDe(datos.fecha))alert(`⚠️ La caja del ${datos.fecha} ya está cerrada, así que esta salida NO va a aparecer en ese cierre.\n\nSi corresponde a ese día, el Administrador tiene que reabrir la caja del ${datos.fecha} y volver a cerrarla.`);}catch(e){}}
+    }
     // Alerta de posible duplicado: si ya existe una reparación con el MISMO concepto (misma
     // descripción) en este vehículo, se avisa antes de guardar — así evitamos registrar el
     // mismo gasto dos veces por error. Si es a propósito (ej. el mismo tipo de reparación
@@ -11610,10 +11644,10 @@ function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
     <tbody>${conSaldo.length?conSaldo.map(f=>`<tr>
       <td>${f.fechaIngreso||'—'}</td><td>${f.fechaPago||'—'}</td>
       <td><span class="badge ${f.tipo==='Ingreso'?'badge-green':'badge-red'}">${f.tipo}</span></td>
-      <td>${f.detalle||'—'}${f.auto?` <span class="badge badge-amber" style="font-size:9px">${f.autoTipo==='cobro'?'Automático — Cobro CxC':f.autoTipo==='reserva'?'Automático — Reserva':f.autoTipo==='venta'?'Automático — Venta':'Compra de vehículo'}</span>`:''}</td><td>${f.clasificacion||'—'}${f.bancoDestino?`<div style="font-size:10px;color:var(--blue);font-weight:600">${f.tipo==='Egreso'?'→':'←'} ${(BANCOS_CTAS.find(b=>b.k===f.bancoDestino)||{}).t||f.bancoDestino}</div>`:''}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
+      <td>${f.detalle||'—'}${f.auto?` <span class="badge badge-amber" style="font-size:9px">${f.autoTipo==='cobro'?'Automático — Cobro CxC':f.autoTipo==='reserva'?'Automático — Reserva':f.autoTipo==='venta'?'Automático — Venta':f.autoTipo==='reparacion'?'Automático — Reparación':'Compra de vehículo'}</span>`:''}</td><td>${f.clasificacion||'—'}${f.bancoDestino?`<div style="font-size:10px;color:var(--blue);font-weight:600">${f.tipo==='Egreso'?'→':'←'} ${(BANCOS_CTAS.find(b=>b.k===f.bancoDestino)||{}).t||f.bancoDestino}</div>`:''}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
       <td style="color:${f.tipo==='Ingreso'?'var(--green)':'var(--red)'};font-weight:700">${f.tipo==='Ingreso'?'+':'-'}${simbolo} ${fmtNio(f.monto)}</td>
       <td style="font-weight:700">${simbolo} ${fmtNio(f.saldoCorrido)}</td>
-      ${puedeEditar?f.auto?(f.autoTipo==='cobro'?`<td><button class="btn btn-sm" onclick="showContTab('cuentas')" title="Viene del cobro de la Cuenta por Cobrar — se corrige en Cuentas"><i class="ti ti-file-invoice"></i></button></td>`:(f.autoTipo==='reserva'||f.autoTipo==='venta')?`<td><button class="btn btn-sm" onclick="editVenta('${f.ventaId}')" title="Viene de ${f.autoTipo==='venta'?'la venta':'la reserva'} — se corrige en Ventas"><i class="ti ti-receipt"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`):`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
+      ${puedeEditar?f.auto?(f.autoTipo==='cobro'?`<td><button class="btn btn-sm" onclick="showContTab('cuentas')" title="Viene del cobro de la Cuenta por Cobrar — se corrige en Cuentas"><i class="ti ti-file-invoice"></i></button></td>`:f.autoTipo==='reparacion'?`<td><button class="btn btn-sm" onclick="abrirReparaciones('${f.repVid}')" title="Viene de una reparación — se corrige en Reparaciones (🔧)"><i class="ti ti-tool"></i></button></td>`:(f.autoTipo==='reserva'||f.autoTipo==='venta')?`<td><button class="btn btn-sm" onclick="editVenta('${f.ventaId}')" title="Viene de ${f.autoTipo==='venta'?'la venta':'la reserva'} — se corrige en Ventas"><i class="ti ti-receipt"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`):`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
     </tr>`).join(''):`<tr><td colspan="${puedeEditar?10:9}" style="text-align:center;color:var(--text3);padding:1.5rem">Sin movimientos registrados todavía</td></tr>`}</tbody>
   </table>`;
 }
@@ -12654,6 +12688,12 @@ function bancosMovsDesdeCompras(){
   });
   return res;
 }
+// Salidas automáticas por reparaciones pagadas con transferencia (banco elegido en la reparación)
+function bancosMovsDesdeReparaciones(){
+  return reparacionesConPago().filter(x=>x.rep.fuentePago==='banco'&&BANCOS_CTAS.some(b=>b.k===x.rep.bancoPago)).map(x=>({
+    id:'VR_'+x.rep.id,cuenta:x.rep.bancoPago,fecha:x.rep.fecha||'',tipo:'egreso',monto:Number(x.rep.costo),auto:true,autoRep:true,
+    repVid:x.origen==='Consignación'?'CONSIG_'+x.veh.id:x.origen==='Gerencia'?'VGER_'+x.veh.id:x.veh.id,desc:x.desc,ref:x.rep.factura||''}));
+}
 // Traslados de Fondos JM a/desde una cuenta bancaria propia (se elige la cuenta en el movimiento de
 // Fondos JM): Egreso en Fondos JM = entrada al banco; Ingreso en Fondos JM = salida del banco.
 function bancosMovsDesdeFondosJM(){
@@ -12671,7 +12711,7 @@ function bancosMovsDesdeFondosJM(){
 function bancosOcultosSet(){return new Set((contData.bancosOcultos||[]).filter(x=>x&&!x.restaurado).map(x=>x.id));}
 function bancosMovsAutoVisibles(){
   const oc=bancosOcultosSet();
-  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...bancosMovsDesdeFondosJM()].filter(m=>!oc.has(m.id));
+  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...bancosMovsDesdeFondosJM(),...bancosMovsDesdeReparaciones()].filter(m=>!oc.has(m.id));
 }
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
@@ -12776,7 +12816,15 @@ function fondosJMMovsIngresosAuto(){
   });
   return res;
 }
-function fondosJMMovsAuto(){return[...fondosJMMovsCompras(),...fondosJMMovsIngresosAuto()];}
+// Egresos automáticos en Fondos JM por reparaciones pagadas con Cash JM
+function fondosJMMovsReparaciones(){
+  const hist=contData.fondosJMHistorial||[];
+  const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
+  return reparacionesConPago().filter(x=>x.rep.fuentePago==='fondojm').filter(x=>!(desde&&x.rep.fecha&&x.rep.fecha<=desde)).map(x=>({
+    id:'FJP_'+x.rep.id,auto:true,autoTipo:'reparacion',vehId:x.veh.id,repVid:x.origen==='Consignación'?'CONSIG_'+x.veh.id:x.origen==='Gerencia'?'VGER_'+x.veh.id:x.veh.id,
+    tipo:'Egreso',monto:Number(x.rep.costo),fechaIngreso:x.rep.fecha||'',fechaPago:x.rep.fecha||'',detalle:x.desc,clasificacion:'Inversión Vehículo',placa:x.veh.placa||'',formaPago:'Cash',registradoPor:'Automático (Reparación)'}));
+}
+function fondosJMMovsAuto(){return[...fondosJMMovsCompras(),...fondosJMMovsIngresosAuto(),...fondosJMMovsReparaciones()];}
 function cajaFuerte2Saldo(hasta){
   return[...(contData.fondosJM||[]),...fondosJMMovsAuto()].filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
 }
@@ -12809,12 +12857,12 @@ function renderBancos(){
         <thead><tr><th>Fecha</th><th>Descripción</th><th>Ref. / Recibo</th><th style="text-align:right">Ingreso</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th><th></th></tr></thead>
         <tbody>${filas.length?filas.map(m=>`<tr>
           <td style="white-space:nowrap">${m.fecha||'—'}</td>
-          <td>${m.desc||''}${m.autoCompra?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':m.autoFJ?' <span class="badge badge-purple" style="font-size:9px">Desde Fondos JM</span>':m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
+          <td>${m.desc||''}${m.autoCompra?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':m.autoFJ?' <span class="badge badge-purple" style="font-size:9px">Desde Fondos JM</span>':m.autoRep?' <span class="badge badge-amber" style="font-size:9px">Reparación</span>':m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
           <td>${m.ref||'—'}</td>
           <td style="text-align:right;color:var(--green)">${m.tipo==='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;color:var(--red)">${m.tipo!=='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;font-weight:700">${fmtD(m.saldo)}</td>
-          <td style="white-space:nowrap">${m.auto&&puede?`${m.autoFJ?`<button class="btn btn-sm" onclick="abrirModalFondoPersonal('fondosJM','${m.fjId}')" title="Modificar: corregir el traslado en Fondos JM"><i class="ti ti-edit"></i></button>`:m.autoCompra?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Modificar: corregir banco o monto en la compra del vehículo"><i class="ti ti-edit"></i></button>`:`<button class="btn btn-sm" onclick="cdFecha='${m.fecha}';showContTab('auxiliares')" title="Modificar: abrir el Cash in Hand del ${m.fecha}, de donde viene este movimiento"><i class="ti ti-edit"></i></button>`} <button class="btn btn-sm btn-danger" onclick="bancoOcultarAuto('${m.id}')" title="Quitar este movimiento de la hoja Bancos"><i class="ti ti-trash"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
+          <td style="white-space:nowrap">${m.auto&&puede?`${m.autoRep?`<button class="btn btn-sm" onclick="abrirReparaciones('${m.repVid}')" title="Modificar: corregir en Reparaciones (🔧) del vehículo"><i class="ti ti-edit"></i></button>`:m.autoFJ?`<button class="btn btn-sm" onclick="abrirModalFondoPersonal('fondosJM','${m.fjId}')" title="Modificar: corregir el traslado en Fondos JM"><i class="ti ti-edit"></i></button>`:m.autoCompra?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Modificar: corregir banco o monto en la compra del vehículo"><i class="ti ti-edit"></i></button>`:`<button class="btn btn-sm" onclick="cdFecha='${m.fecha}';showContTab('auxiliares')" title="Modificar: abrir el Cash in Hand del ${m.fecha}, de donde viene este movimiento"><i class="ti ti-edit"></i></button>`} <button class="btn btn-sm btn-danger" onclick="bancoOcultarAuto('${m.id}')" title="Quitar este movimiento de la hoja Bancos"><i class="ti ti-trash"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
         </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Sin movimientos</td></tr>'}</tbody>
       </table></div>`:''}
     </div>`;
@@ -12866,7 +12914,7 @@ function bancoMovModal(k,tipo,editId){
 async function bancoOcultarAuto(id){
   if(!puedeMoverBancos())return;
   const m=bancosMovsAutoVisibles().find(x=>x.id===id);if(!m)return;
-  if(!confirm(`¿Quitar de Bancos este movimiento de ${fmtD(m.monto)}?\n\n${m.fecha} — ${m.desc||''}\n\nViene ${m.autoCompra?'de la compra del vehículo':m.autoFJ?'de un traslado en Fondos JM':'del Cash in Hand'}: allá NO se borra, solo deja de contar en Bancos. Se puede restaurar con "Quitados".`))return;
+  if(!confirm(`¿Quitar de Bancos este movimiento de ${fmtD(m.monto)}?\n\n${m.fecha} — ${m.desc||''}\n\nViene ${m.autoCompra?'de la compra del vehículo':m.autoFJ?'de un traslado en Fondos JM':m.autoRep?'de una reparación':'del Cash in Hand'}: allá NO se borra, solo deja de contar en Bancos. Se puede restaurar con "Quitados".`))return;
   contData.bancosOcultos=contData.bancosOcultos||[];
   contData.bancosOcultos.push({id,monto:m.monto,cuenta:m.cuenta,fecha:m.fecha,desc:m.desc||'',por:getNombreUsuario(),fechaQuitado:hoyLocal()});
   await saveOne('contable',{id:'main',...contData});renderBancos();
@@ -18532,6 +18580,12 @@ function cdEgresosAuto(fecha){
       nuevas.push(a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,nota:a.nota||'',oculta:!!a.oculta}:l);
     });
   });
+  // Reparaciones pagadas con Cash — Caja fuerte
+  reparacionesConPago().filter(x=>x.rep.fuentePago==='cajafuerte'&&x.rep.fecha===fecha).forEach(x=>{
+    const l={key:'RP_'+x.rep.id,fecha,auto:true,tipoLinea:'Reparación',col:'cajafuerte',monto:Number(x.rep.costo),recibo:x.rep.factura||'',desc:x.desc};
+    const a=cdAjuste(l.key);
+    nuevas.push(a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,nota:a.nota||'',oculta:!!a.oculta}:l);
+  });
   return nuevas.concat((vehiculos||[]).filter(v=>!Array.isArray(v.pagosCompra)&&(v.pagacaja==='cajafuerte'||v.pagacaja==='cashjulio')&&Number(v.costo||0)>0&&(v.fechacompra||v.fechaPagoCaja)===fecha)
     .map(v=>{
       const l={key:'C_'+v.id,fecha,auto:true,tipoLinea:'Compra',col:v.pagacaja,monto:Number(v.costo),recibo:v.recibo||'',
@@ -18558,6 +18612,7 @@ function cdDiasPendientes(fecha){
   const dias=new Set();
   (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
   (vehiculos||[]).forEach(v=>{if(pagosCompraDe(v).some(p=>(p.fuente==='cajafuerte'||p.fuente==='cashjulio')&&Number(p.monto)>0))dias.add(v.fechacompra||v.fechaPagoCaja);});
+  reparacionesConPago().forEach(x=>{if(x.rep.fuentePago==='cajafuerte'&&x.rep.fecha)dias.add(x.rep.fecha);});
   (ventas||[]).forEach(v=>{if(v.fecha&&(v.estado==='Completada'||((v.estado==='Pendiente'||(v.estado==='Anulada'&&v.devolucionReserva))&&Number(v.anticipo||0)>0)))dias.add(v.fecha);});
   diasCobrosCxC().forEach(d=>dias.add(d));
   return[...dias].filter(d=>d&&d>=ini&&d<fecha&&!cerrados.has(d)).sort();
