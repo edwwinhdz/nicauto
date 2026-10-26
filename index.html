@@ -4085,6 +4085,15 @@ function mergeContableArrays(remoto,local,base3v){
       resultado[clave]=valLocal;
       return;
     }
+    // Listas cortas cuyos elementos NO tienen id (formas de pago de la compra "pagosCompra",
+    // depósitos de una venta, pagoBancos…): la unión por id las dejaba VACÍAS al editar un
+    // registro ya guardado (así se perdió la forma de pago del Yaris al cambiarla a Fondo JM).
+    // Para estas manda la versión local, que es la que se acaba de editar en el formulario.
+    if(Array.isArray(valRemoto)&&Array.isArray(valLocal)){
+      const sinId=x=>!x||typeof x!=='object'||x.id==null;
+      const todos=[...valLocal,...valRemoto];
+      if(todos.length&&todos.every(sinId)){resultado[clave]=valLocal;return;}
+    }
     if(Array.isArray(valRemoto)&&Array.isArray(valLocal)){
       // Para TODO lo demás (planilla, gastos, recibos, compras, rendiciones cerradas, etc.)
       // nunca se debe asumir que una lista vacía es intencional — eso fue justo lo que causó
