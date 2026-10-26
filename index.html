@@ -788,6 +788,7 @@ body.no-delete .confirmDelete{display:none!important}
       <span id="lp-modo-ops-badge" style="display:none;background:var(--purple-light);color:var(--purple);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:600"><i class="ti ti-tool"></i> Modo Operaciones</span>
       <button class="btn" onclick="abrirComparadorVehiculos()" style="color:var(--purple);border-color:var(--purple)"><i class="ti ti-arrows-left-right"></i>Comparar</button>
       <button class="btn" onclick="abrirImprimirLP()" style="color:var(--blue);border-color:var(--blue)"><i class="ti ti-printer"></i>Imprimir</button>
+      <button class="btn" onclick="generarCatalogoLP()" style="color:#0B6E6E;border-color:#0B6E6E"><i class="ti ti-book"></i>Catálogo</button>
       <button class="btn" onclick="exportExcelListaPrecios()"><i class="ti ti-download"></i>Excel</button>
       <button class="btn" onclick="renderListaPrecios()"><i class="ti ti-refresh"></i>Actualizar</button>
     </div>
@@ -844,6 +845,7 @@ body.no-delete .confirmDelete{display:none!important}
     <div class="section-header" style="margin-top:.5rem">
       <h3 style="font-size:15px;font-weight:600"><i class="ti ti-key"></i> Vehículos en Consignación</h3>
       <div style="display:flex;gap:8px">
+        <button class="btn" onclick="generarCatalogoLP('consig')" style="color:#0B6E6E;border-color:#0B6E6E"><i class="ti ti-book"></i>Catálogo</button>
         <button class="btn" onclick="exportExcelConsig()"><i class="ti ti-download"></i>Excel</button>
         <button class="btn btn-primary" onclick="abrirModalConsig()"><i class="ti ti-plus"></i>Agregar</button>
       </div>
@@ -3401,6 +3403,10 @@ body.no-delete .confirmDelete{display:none!important}
     <div class="form-row">
       <div class="form-group"><label>Color</label><input id="mconsig-color" placeholder="Blanco…"></div>
       <div class="form-group"><label>Transmisión</label><select id="mconsig-trans"><option>Mecánico</option><option>Automático</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Tipo de vehículo</label><select id="mconsig-tipo"><option value="">— Elegir —</option><option>Sedán</option><option>SUV</option><option>Pickup</option><option>Van</option><option>Hatchback</option><option>Otro</option></select></div>
+      <div class="form-group"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Motor</label><input id="mconsig-motor" placeholder="2.0L…"></div>
@@ -14578,6 +14584,135 @@ async function lpEjecutar(accion){
   win.document.open();win.document.write(html);win.document.close();
   closeOv('ov-imprimir-lp');
 }
+// ======================== CATÁLOGO PARA VENDEDORES (Lista de Precios) ========================
+// Genera el catálogo visual (5 tarjetas por hoja carta) con los carros para venta, ordenados por
+// tipo de vehículo. Respeta los filtros de Lista de Precios (Estado, Tipo, Color, Precio, etc.).
+// Si no se marcó ningún Estado, usa los de venta: Disponible, Reservado, En Alistamiento y En espera.
+// No guarda nada en la base de datos: solo lee el inventario y abre la ventana para imprimir / PDF.
+const CAT_ESTADOS=[
+  {e:'Disponible',      txt:'disponibles',     num:'#1B6B45', bg:'#E3F4EA', fg:'#1B6B45'},
+  {e:'Reservado',       txt:'reservados',      num:'#8A4B08', bg:'#FDEBD3', fg:'#8A4B08'},
+  {e:'En Alistamiento', txt:'en alistamiento', num:'#1D5A9C', bg:'#E3EEFB', fg:'#1D5A9C'},
+  {e:'En espera',       txt:'en espera',       num:'#6A3F9C', bg:'#EEE6F8', fg:'#6A3F9C'}
+];
+// Consignación no tenía "Tipo de vehículo": si el carro no lo tiene guardado, se deduce del modelo.
+const TIPO_POR_MODELO={
+  Pickup:['hilux','frontier','np300','navara','l200','triton','ranger','f150','f-150','silverado','colorado','s10','tacoma','tundra','dmax','d-max','bt50','bt-50','amarok','ram','gladiator','t60','hunter','poer','alaskan','maverick','cheyenne'],
+  SUV:['corollacross','landcruiser','prado','fortuner','rav4','rush','raize','4runner','highlander','tucson','santafe','creta','kona','venue','palisade','sportage','sorento','seltos','sonet','cx3','cx-3','cx30','cx-30','cx5','cx-5','cx9','cx-9','cx50','hrv','hr-v','crv','cr-v','pilot','xl7','ertiga','vitara','grandvitara','jimny','sx4','outlander','montero','pajero','asx','eclipsecross','explorer','escape','ecosport','bronco','edge','expedition','territory','trax','tahoe','equinox','traverse','captiva','trailblazer','tracker','xtrail','x-trail','kicks','pathfinder','qashqai','murano','juke','x1','x3','x4','x5','x6','x7','q3','q5','q7','glc','gle','gla','tiguan','touareg','compass','cherokee','grandcherokee','wrangler','renegade','duster','koleos','forester','outback','xv','crosstrek','tiggo','haval','jolion','h6'],
+  Van:['hiace','h1','h-1','staria','carnival','sienna','odyssey','urvan','caravan','noah','alphard','starex'],
+  Hatchback:['agya','swift','i10','grandi10','picanto','march','fit','spark','baleno','celerio','wigo','etios','mirage','kwid','polo','ignis','alto','s-presso','spresso'],
+  'Sedán':['yaris','corolla','camry','vios','civic','accord','city','sentra','versa','altima','tiida','almera','elantra','accent','sonata','i20','i30','rio','cerato','forte','k3','k5','optima','dzire','ciaz','cruze','sail','aveo','onix','spark gt','mazda2','mazda3','mazda6','figo','fiesta','focus','fusion','jetta','lancer','attrage','logan','sandero']
+};
+function tipoDeducidoConsig(v){
+  const m=String(v&&v.modelo||'').toLowerCase().replace(/[^a-z0-9\s-]/g,' ').trim();
+  if(!m)return'';
+  const junto=m.replace(/[\s-]+/g,''), palabras=m.split(/[\s]+/).map(x=>x.replace(/-/g,''));
+  const marcaM=String(v&&v.marca||'').toLowerCase().trim();
+  for(const tipo of ['Pickup','SUV','Van','Hatchback','Sedán']){
+    for(const k0 of TIPO_POR_MODELO[tipo]){
+      const k=k0.replace(/[\s-]+/g,'');
+      if(junto.startsWith(k)||palabras.includes(k)||(marcaM==='mazda'&&('mazda'+junto)===k))return tipo;
+    }
+  }
+  return'';
+}
+function tipoConsig(v){return (v&&v.tipo)||tipoDeducidoConsig(v)||'Otro';}
+function generarCatalogoLP(origen){
+  const esc=x=>String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const norm=x=>String(x||'').trim().toLowerCase();
+  const OTRO={num:'#5B6B80',bg:'#E9EDF2',fg:'#46556A'};
+  const estInfo=v=>CAT_ESTADOS.find(c=>norm(c.e)===norm(v.estado))||Object.assign({e:v.estado||'Sin estado',txt:norm(v.estado||'sin estado')},OTRO);
+  const esConsig=origen==='consig';
+  let veh;
+  if(esConsig){
+    // Consignación: carros a la venta (Disponible / Reservado…), respetando la búsqueda de la pestaña.
+    const q=(document.getElementById('consig-q')?.value||'').toLowerCase();
+    veh=(contData.consignacion||[])
+      .filter(c=>c.estado!=='Vendido'&&CAT_ESTADOS.some(e=>norm(e.e)===norm(c.estado)))
+      .filter(c=>!q||`${c.duenio||''} ${c.marca||''} ${c.modelo||''} ${c.placa||''}`.toLowerCase().includes(q))
+      .map(c=>({...c,precio:c.precioA,tipo:tipoConsig(c)}));
+  }else{
+    veh=lpVehiculosFiltrados();
+    if(!lpEstadosSel.length)veh=veh.filter(v=>CAT_ESTADOS.some(c=>norm(c.e)===norm(v.estado)));
+  }
+  veh=sortByTipo(veh);
+  if(!veh.length){alert('No hay vehículos para el catálogo con los filtros actuales.');return;}
+  const meses=['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+  const hoy=new Date();
+  const fechaTxt=`${hoy.getDate()} ${meses[hoy.getMonth()]} ${hoy.getFullYear()}`;
+  const cuentaEst={};veh.forEach(v=>{const k=estInfo(v).e;cuentaEst[k]=(cuentaEst[k]||0)+1;});
+  const ordenEst=Object.keys(cuentaEst).sort((a,b)=>{const ia=CAT_ESTADOS.findIndex(c=>c.e===a),ib=CAT_ESTADOS.findIndex(c=>c.e===b);return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b);});
+  const resumen=[`${veh.length} vehículo${veh.length===1?'':'s'}`].concat(
+    ordenEst.map(k=>{const c=CAT_ESTADOS.find(x=>x.e===k);return `${cuentaEst[k]} ${esc(c?(cuentaEst[k]===1?c.txt.replace(/s$/,''):c.txt):k.toLowerCase())}`;})
+  ).join(' &nbsp;·&nbsp; ');
+  const pad=n=>String(n).padStart(2,'0');
+  const usd=n=>'US$ '+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+  const tarjeta=(v,i)=>{
+    const c=estInfo(v);
+    return `<div class="card">
+      <div class="top">
+        <div class="izq"><span class="num" style="background:${c.num}">${pad(i+1)}</span>
+          <div><div class="nom">${esc(String(v.marca||'').trim())} ${esc(String(v.modelo||'').trim())}</div><div class="sub">${esc(v.anio)}${v.tipo?' &nbsp;·&nbsp; '+esc(v.tipo):''}</div></div></div>
+        <div class="der"><div class="plbl">PRECIO LISTA A</div><div class="precio">${v.precio?usd(v.precio):'—'}</div>
+          <span class="est" style="background:${c.bg};color:${c.fg}">${esc(v.estado)}</span></div>
+      </div>
+      <div class="det">
+        <div><span class="k">PLACA</span><b>${esc(v.placa||'—')}</b></div>
+        <div><span class="k">KM</span><b>${v.km?Number(v.km).toLocaleString('en-US')+' km':'—'}</b></div>
+        <div><span class="k">CAJA</span>${esc(v.trans||'—')}</div>
+        <div><span class="k">COLOR</span>${esc(String(v.color||'—').trim().toLowerCase().replace(/(^|\s)\S/g,x=>x.toUpperCase()))}</div>
+      </div></div>`;
+  };
+  const POR_HOJA=5, paginas=Math.ceil(veh.length/POR_HOJA);
+  let hojas='';
+  for(let p=0;p<paginas;p++){
+    const ini=p*POR_HOJA, grupo=veh.slice(ini,ini+POR_HOJA);
+    hojas+=`<section class="hoja">
+      <header><div><div class="marca">NICAUTO</div><div class="tit">CATÁLOGO PARA VENDEDORES${esConsig?' · CONSIGNACIÓN':''}</div></div>
+        <div class="dr"><div class="fecha">${fechaTxt}</div><div class="lista">LISTA A / USD</div></div></header>
+      <div class="res">${resumen}</div>
+      <div class="cards">${grupo.map((v,k)=>tarjeta(v,ini+k)).join('')}</div>
+      <footer><div class="f1"><span>Referencias ${pad(ini+1)} a ${pad(ini+grupo.length)}</span><span>Página ${p+1} de ${paginas}</span></div>
+        <div class="f2">Uso comercial interno. Vehículos ordenados por tipo de vehículo.</div></footer>
+    </section>`;
+  }
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Catalogo_${esConsig?'Consignacion':'Visual_Vendedores'}_NICAUTO_${hoy.toISOString().slice(0,10)}</title>
+  <style>
+    @page{size:letter portrait;margin:0}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#EEF2F7;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font-family:"Segoe UI","DejaVu Sans",Arial,sans-serif;color:#14294B}
+    .hoja{width:8.5in;height:11in;padding:.42in .5in .32in;display:flex;flex-direction:column;background:#EEF2F7;page-break-after:always;break-after:page;overflow:hidden;margin:0 auto}
+    .hoja:last-child{page-break-after:auto;break-after:auto}
+    header{display:flex;justify-content:space-between;align-items:flex-start}
+    .marca{font-size:28px;font-weight:800;letter-spacing:.01em;color:#14294B;line-height:1.1}
+    .tit{font-size:12.5px;font-weight:700;color:#5B6B80;letter-spacing:.04em;margin-top:6px}
+    .dr{text-align:right}.fecha{font-size:12.5px;color:#5B6B80;margin-top:6px}
+    .lista{font-size:12.5px;font-weight:800;color:#0B6E6E;letter-spacing:.04em;margin-top:9px}
+    .res{font-size:11.5px;color:#5B6B80;margin:12px 0 14px}
+    .cards{display:flex;flex-direction:column;gap:13px;flex:1}
+    .card{background:#fff;border:1px solid #DCE3EC;border-radius:12px;padding:12px 16px 10px;height:1.57in;display:flex;flex-direction:column;justify-content:space-between}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #DCE3EC;padding-bottom:7px}
+    .izq{display:flex;gap:11px;align-items:flex-start}
+    .num{display:inline-block;color:#fff;font-weight:800;font-size:12px;border-radius:5px;padding:4px 7px;margin-top:3px;min-width:30px;text-align:center}
+    .nom{font-size:19px;font-weight:800;color:#14294B}
+    .sub{font-size:13px;color:#5B6B80;margin-top:3px}
+    .der{text-align:right}
+    .plbl{font-size:10px;font-weight:800;color:#5B6B80;letter-spacing:.06em}
+    .precio{font-size:28px;font-weight:800;color:#0B6E6E;line-height:1.15}
+    .est{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;margin-top:2px}
+    .det{display:grid;grid-template-columns:1fr 1fr;row-gap:3px;font-size:13.5px;padding-top:7px}
+    .det .k{display:inline-block;width:52px;font-size:10.5px;color:#5B6B80;letter-spacing:.03em}
+    footer{margin-top:10px}
+    .f1{display:flex;justify-content:space-between;font-size:11.5px;color:#5B6B80}
+    .f2{font-size:10px;color:#5B6B80;margin-top:6px}
+    @media screen{body{padding:12px 0}.hoja{margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.12)}}
+  </style></head><body>${hojas}
+  <script>window.onload=function(){setTimeout(function(){window.focus();window.print();},250);};<\/script></body></html>`;
+  const win=window.open('','_blank');
+  if(!win){alert('Permitir ventanas emergentes para generar el catálogo.');return;}
+  win.document.open();win.document.write(html);win.document.close();
+}
 async function exportExcelListaPrecios(){
   const q=(document.getElementById('lp-q')?.value||'').toLowerCase();
   const ftipo=document.getElementById('lp-ftipo')?.value||'';
@@ -22966,8 +23101,10 @@ function cargarFotoGridExistenteGen(prefijo,fotos){
 function abrirModalConsig(id){
   const v=id?(contData.consignacion||[]).find(x=>x.id===id):null;
   document.getElementById('mconsig-id').value=id||'';
-  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','comision','estado','fecha','obs'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)el.value=v?v[f]||'':'';});
+  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','comision','estado','fecha','obs','tipo'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)el.value=v?v[f]||'':'';});
   if(!v)document.getElementById('mconsig-fecha').value=hoyLocal();
+  // Si el carro todavía no tiene Tipo guardado, se propone el que se deduce del modelo (se puede cambiar).
+  {const elT=document.getElementById('mconsig-tipo');if(elT&&v&&!v.tipo){const t=tipoDeducidoConsig(v);if(t)elT.value=t;}}
   cargarFotoGridExistenteGen('consig',v?.fotos);
   openOv('ov-consig');
 }
@@ -22984,7 +23121,7 @@ async function guardarConsig(){
   const prevC=(contData.consignacion||[]).find(x=>x.id===id)||null;
   // Se conservan los demás datos del carro (marketing, reservas, chequeo…) — antes se perdían al editar.
   const obj={...(prevC||{}),id};
-  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','preciopactado','comision','estado','fecha','obs'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)obj[f]=el.value;});
+  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','preciopactado','comision','estado','fecha','obs','tipo'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)obj[f]=el.value;});
   obj.fotos=fotoSlotsGen['consig']||[];
   if(obj.duenio)obj.duenio=String(obj.duenio).replace(/\s+/g,' ').trim();
   // vehiculoId if opened from LP
@@ -27198,6 +27335,7 @@ function abrirConsigDesdeLP(vid){
     document.getElementById('mconsig-placa').value=v.placa||'';
     document.getElementById('mconsig-color').value=v.color||'';
     document.getElementById('mconsig-trans').value=v.trans||'Mecánico';
+    {const elT=document.getElementById('mconsig-tipo');if(elT)elT.value=v.tipo||'';}
     document.getElementById('mconsig-motor').value=v.motor||'';
     document.getElementById('mconsig-km').value=v.km||0;
     document.getElementById('mconsig-precioA').value=v.precio||'';
