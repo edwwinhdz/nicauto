@@ -856,7 +856,7 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="card" style="overflow-x:auto">
       <table class="tbl" id="tbl-consig-table">
-        <thead><tr><th>#</th><th>Dueño</th><th>Vehículo</th><th>Placa</th><th>Km</th><th>Trans.</th><th>Color</th><th>Motor</th><th>Días</th><th>Lista A</th><th>Lista B</th><th>Estado</th><th>Comisión</th><th>Costos adicionales</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>#</th><th>Dueño</th><th>Vehículo</th><th>Placa</th><th>Km</th><th>Trans.</th><th>Color</th><th>Motor</th><th>Días</th><th>Lista A</th><th>Lista B</th><th>Estado</th><th>Comisión</th><th>Costos adicionales</th><th title="Solo informativo — no conecta a Contabilidad ni Caja">Costo inicial</th><th>Costo total</th><th>Acciones</th></tr></thead>
         <tbody id="tbl-consig"></tbody>
         <tfoot id="tfoot-consig" style="background:var(--surface2);font-weight:700"></tfoot>
       </table>
@@ -867,7 +867,7 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="card" style="overflow-x:auto">
       <table class="tbl" id="tbl-consig-vendidos-table">
-        <thead><tr><th>#</th><th>Dueño</th><th>Vehículo</th><th>Placa</th><th>Km</th><th>Trans.</th><th>Color</th><th>Motor</th><th>Días</th><th>Lista A</th><th>Lista B</th><th>Estado</th><th>Comisión</th><th>Costos adicionales</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>#</th><th>Dueño</th><th>Vehículo</th><th>Placa</th><th>Km</th><th>Trans.</th><th>Color</th><th>Motor</th><th>Días</th><th>Lista A</th><th>Lista B</th><th>Estado</th><th>Comisión</th><th>Costos adicionales</th><th title="Solo informativo — no conecta a Contabilidad ni Caja">Costo inicial</th><th>Costo total</th><th>Acciones</th></tr></thead>
         <tbody id="tbl-consig-vendidos"></tbody>
         <tfoot id="tfoot-consig-vendidos" style="background:var(--surface2);font-weight:700"></tfoot>
       </table>
@@ -3406,7 +3406,7 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-row">
       <div class="form-group"><label>Tipo de vehículo</label><select id="mconsig-tipo"><option value="">— Elegir —</option><option>Sedán</option><option>SUV</option><option>Pickup</option><option>Van</option><option>Hatchback</option><option>Otro</option></select></div>
-      <div class="form-group"></div>
+      <div class="form-group"><label>Costo inicial (USD $) <span style="font-weight:400;font-size:10px;color:var(--text3)">— solo informativo</span></label><input class="calc-input" id="mconsig-costoInicial" type="text" inputmode="decimal" step="0.01" placeholder="0.00" title="Solo para información: NO se conecta a Contabilidad ni a Caja. Sirve para ver el costo total del carro."></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Motor</label><input id="mconsig-motor" placeholder="2.0L…"></div>
@@ -14219,7 +14219,7 @@ const PRINT_TABLE_CONFIGS={
   'tbl-inv-table':{nombre:'Inventario',cols:['#','Vehículo','Año','Placa','Km','F. Compra','Días','Color','Tipo','Trans.','P. Compra','Reparac.','Costo Total','Lista A','Margen A','Lista B','Margen B%','Estado','Acciones']},
   'tbl-inv-vendidos-table':{nombre:'Vehículos Vendidos',cols:['#','Vehículo','Año','Placa','Km','F. Compra','Días','Color','Tipo','Trans.','P. Compra','Reparac.','Costo Total','Lista A','Margen A','Lista B','Margen B%','Estado','Vendedor','Acciones']},
   'lp-tbl':{nombre:'Lista de Precios',cols:['#','Vehículo','Foto','Placa','Km','Trans.','Color','Motor','Días','Lista A','Lista B','Comisión','Estado','Precio Gerencia','Reserva','Proforma','Recibo','Factura','Cierre Venta']},
-  'tbl-consig-table':{nombre:'Consignación',cols:['#','Dueño','Vehículo','Placa','Km','Trans.','Color','Motor','Días','Lista A','Lista B','Estado','Comisión','Acciones']}
+  'tbl-consig-table':{nombre:'Consignación',cols:['#','Dueño','Vehículo','Placa','Km','Trans.','Color','Motor','Días','Lista A','Lista B','Estado','Comisión','Costos adicionales','Costo inicial','Costo total','Acciones']}
 };
 // Cuando una página tiene más de una tabla imprimible (ej. Inventario Activos + Vendidos),
 // al imprimir una se oculta la(s) tarjeta(s) de la otra para que salgan en hojas separadas.
@@ -22944,6 +22944,11 @@ async function restaurarConsigEliminada(idxPapelera){
   renderConsig();
   alert('✅ Consignación restaurada.');
 }
+// Costo total de un carro en consignación = Costo inicial (manual, solo informativo — no conecta
+// a Contabilidad ni Caja) + Costos adicionales (reparaciones conectadas desde Rendición / manuales).
+function costoTotalConsig(v){
+  return Number(v&&v.costoInicial||0)+(v&&v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0);
+}
 function renderConsig(){
   const todos=contData.consignacion||[];
   const q=(document.getElementById('consig-q')?.value||'').toLowerCase();
@@ -22986,6 +22991,8 @@ function renderConsig(){
   const totPrecioB=data.reduce((s,v)=>s+Number(v.precioB||0),0);
   const totComision=data.reduce((s,v)=>s+Number(v.comision||0),0);
   const totCostosAdic=data.reduce((s,v)=>s+(v.reparaciones||[]).reduce((s2,r)=>s2+Number(r.costo||0),0),0);
+  const totCostoIni=data.reduce((s,v)=>s+Number(v.costoInicial||0),0);
+  const totCostoTot=data.reduce((s,v)=>s+costoTotalConsig(v),0);
   const filaConsig=(v,i)=>{
     const dias=diasDesde(v.fecha);
     return`<tr${(MODO==='admin'||MODO==='coordinador')&&v.ultimaEdicionPor?` title="${tooltipAuditoria(v)}"`:''}>
@@ -23002,6 +23009,8 @@ function renderConsig(){
       <td onclick="event.stopPropagation();verReservaConsig('${v.id}')" style="${v.estado==='Reservado'?'cursor:pointer':''}">${badge(v.estado||'Disponible','')}</td>
       <td style="font-weight:600;color:var(--text2)">${v.comision?fmtD(v.comision):'—'}</td>
       <td style="text-align:center">${(()=>{const t=(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0);return t?`<span style="cursor:pointer;font-weight:600;color:var(--amber)" onclick="event.stopPropagation();abrirReparaciones('CONSIG_${v.id}')" title="Ver / agregar costos">${fmtD(t)}</span>`:`<span style="color:var(--text3);cursor:pointer" onclick="event.stopPropagation();abrirReparaciones('CONSIG_${v.id}')" title="Agregar costo">—</span>`;})()}</td>
+      <td style="font-weight:600;color:var(--text2)">${Number(v.costoInicial||0)?fmtD(v.costoInicial):'—'}</td>
+      <td>${(()=>{const t=costoTotalConsig(v);return t?`<b style="color:var(--red)">${fmtD(t)}</b>`:'—';})()}</td>
       <td><div class="tbl-actions">
         <button class="btn btn-sm" onclick="abrirModalConsig('${v.id}')"><i class="ti ti-edit"></i></button>
         ${v.estado!=='Vendido'?`<button class="btn btn-sm btn-success" onclick="event.stopPropagation();abrirReservaRapida('CONSIG_${v.id}',true)" title="Registrar una reserva (anticipo)" style="font-size:11px;padding:3px 8px"><i class="ti ti-calendar-plus"></i>Reserva</button>`:''}
@@ -23015,7 +23024,7 @@ function renderConsig(){
       </div></td>
     </tr>`;
   };
-  tbody.innerHTML=data.length?data.map(filaConsig).join(''):`<tr><td colspan="15"><div class="empty"><i class="ti ti-key"></i><p>Sin vehículos disponibles en consignación</p></div></td></tr>`;
+  tbody.innerHTML=data.length?data.map(filaConsig).join(''):`<tr><td colspan="17"><div class="empty"><i class="ti ti-key"></i><p>Sin vehículos disponibles en consignación</p></div></td></tr>`;
   // Totals footer
   const tfoot=document.getElementById('tfoot-consig');
   if(tfoot&&data.length){
@@ -23026,6 +23035,8 @@ function renderConsig(){
       <td style="padding:10px"></td>
       <td style="padding:10px;color:var(--purple)">${fmtD(totComision)}</td>
       <td style="padding:10px;color:var(--amber)">${fmtD(totCostosAdic)}</td>
+      <td style="padding:10px;color:var(--text2)">${fmtD(totCostoIni)}</td>
+      <td style="padding:10px;color:var(--red)">${fmtD(totCostoTot)}</td>
       <td></td>
     </tr>`;
   } else if(tfoot) tfoot.innerHTML='';
@@ -23033,13 +23044,15 @@ function renderConsig(){
   // Vendidos, separados abajo para ver con claridad lo disponible arriba
   const tbodyV=document.getElementById('tbl-consig-vendidos');
   if(tbodyV){
-    tbodyV.innerHTML=dataVendidos.length?dataVendidos.map(filaConsig).join(''):`<tr><td colspan="15"><div class="empty"><i class="ti ti-key"></i><p>Sin vehículos vendidos en consignación</p></div></td></tr>`;
+    tbodyV.innerHTML=dataVendidos.length?dataVendidos.map(filaConsig).join(''):`<tr><td colspan="17"><div class="empty"><i class="ti ti-key"></i><p>Sin vehículos vendidos en consignación</p></div></td></tr>`;
     const tfootV=document.getElementById('tfoot-consig-vendidos');
     if(tfootV&&dataVendidos.length){
       const totPrecioAv=dataVendidos.reduce((s,v)=>s+Number(v.precioA||0),0);
       const totPrecioBv=dataVendidos.reduce((s,v)=>s+Number(v.precioB||0),0);
       const totComisionV=dataVendidos.reduce((s,v)=>s+Number(v.comision||0),0);
       const totCostosAdicV=dataVendidos.reduce((s,v)=>s+(v.reparaciones||[]).reduce((s2,r)=>s2+Number(r.costo||0),0),0);
+      const totCostoIniV=dataVendidos.reduce((s,v)=>s+Number(v.costoInicial||0),0);
+      const totCostoTotV=dataVendidos.reduce((s,v)=>s+costoTotalConsig(v),0);
       tfootV.innerHTML=`<tr style="background:var(--surface2);font-weight:800;font-size:13px">
         <td colspan="9" style="padding:10px;text-align:right">TOTALES (${dataVendidos.length} veh. vendidos):</td>
         <td style="padding:10px;color:var(--green)">${fmtD(totPrecioAv)}</td>
@@ -23047,6 +23060,8 @@ function renderConsig(){
         <td style="padding:10px"></td>
         <td style="padding:10px;color:var(--purple)">${fmtD(totComisionV)}</td>
         <td style="padding:10px;color:var(--amber)">${fmtD(totCostosAdicV)}</td>
+        <td style="padding:10px;color:var(--text2)">${fmtD(totCostoIniV)}</td>
+        <td style="padding:10px;color:var(--red)">${fmtD(totCostoTotV)}</td>
         <td></td>
       </tr>`;
     } else if(tfootV) tfootV.innerHTML='';
@@ -23149,7 +23164,7 @@ function cargarFotoGridExistenteGen(prefijo,fotos){
 function abrirModalConsig(id){
   const v=id?(contData.consignacion||[]).find(x=>x.id===id):null;
   document.getElementById('mconsig-id').value=id||'';
-  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','comision','estado','fecha','obs','tipo'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)el.value=v?v[f]||'':'';});
+  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','preciopactado','comision','estado','fecha','obs','tipo','costoInicial'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)el.value=v?v[f]||'':'';});
   if(!v)document.getElementById('mconsig-fecha').value=hoyLocal();
   // Si el carro todavía no tiene Tipo guardado, se propone el que se deduce del modelo (se puede cambiar).
   {const elT=document.getElementById('mconsig-tipo');if(elT&&v&&!v.tipo){const t=tipoDeducidoConsig(v);if(t)elT.value=t;}}
@@ -23169,7 +23184,7 @@ async function guardarConsig(){
   const prevC=(contData.consignacion||[]).find(x=>x.id===id)||null;
   // Se conservan los demás datos del carro (marketing, reservas, chequeo…) — antes se perdían al editar.
   const obj={...(prevC||{}),id};
-  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','preciopactado','comision','estado','fecha','obs','tipo'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)obj[f]=el.value;});
+  ['duenio','marca','modelo','anio','placa','color','trans','motor','km','precioA','precioB','preciopactado','comision','estado','fecha','obs','tipo','costoInicial'].forEach(f=>{const el=document.getElementById('mconsig-'+f);if(el)obj[f]=el.value;});
   obj.fotos=fotoSlotsGen['consig']||[];
   if(obj.duenio)obj.duenio=String(obj.duenio).replace(/\s+/g,' ').trim();
   // vehiculoId if opened from LP
@@ -23198,8 +23213,8 @@ async function delConsig(id){
   await saveOne('contable',{id:'main',...contData});renderConsig();
 }
 function exportExcelConsig(){
-  const rows=[['#','Dueño','Marca','Modelo','Año','Placa','Color','Trans.','Motor','Km','Lista A','Lista B','Comisión%','Estado','F.Ingreso']];
-  (contData.consignacion||[]).forEach((v,i)=>rows.push([i+1,v.duenio||'',v.marca,v.modelo,v.anio,v.placa||'',v.color||'',v.trans||'',v.motor||'',v.km||0,v.precioA||0,v.precioB||0,v.comision||'',v.estado||'',v.fecha||'']));
+  const rows=[['#','Dueño','Marca','Modelo','Año','Placa','Color','Trans.','Motor','Km','Lista A','Lista B','Comisión%','Estado','F.Ingreso','Costo inicial','Costos adicionales','Costo total']];
+  (contData.consignacion||[]).forEach((v,i)=>rows.push([i+1,v.duenio||'',v.marca,v.modelo,v.anio,v.placa||'',v.color||'',v.trans||'',v.motor||'',v.km||0,v.precioA||0,v.precioB||0,v.comision||'',v.estado||'',v.fecha||'',Number(v.costoInicial||0),(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0),costoTotalConsig(v)]));
   exportarExcelConFormato(rows,'consignacion_nicauto','Consignación');
 }
 
