@@ -18663,7 +18663,10 @@ function cdDiasPendientes(fecha){
   diasCobrosCxC().forEach(d=>dias.add(d));
   return[...dias].filter(d=>d&&d>=ini&&d<fecha&&!cerrados.has(d)).sort();
 }
-function cdSaldoAnterior(fecha){
+// Cash Julio M ya NO arrastra saldo de un día a otro: lo que entra ahí se lleva en el auxiliar de
+// Don Julio (Fondos JM). En el Reporte de Caja solo se ve el movimiento del día.
+function cdSaldoAnterior(fecha){const b=cdSaldoAnteriorBase(fecha);return{...b,cashjulio:0};}
+function cdSaldoAnteriorBase(fecha){
   const prev=cdCierres().filter(c=>c.fecha<fecha).pop();
   let base;
   if(prev)base={cajafuerte:prev.saldoFinal.cajafuerte,cashjulio:prev.saldoFinal.cashjulio,desde:'Cierre del '+prev.fecha};
@@ -18782,6 +18785,7 @@ function cdAjustable(root,interactivo){
   });
 }
 function cdHojaHTML(h,enPantalla){
+  const cjNuevo=!h.cerrado||!!h.cjSinSaldo; // Cash Julio M sin saldo arrastrado (va a Fondos JM)
   const cols=cdColsVisibles(h);
   const nCash=cols.filter(c=>c.g==='cash').length,nBanco=cols.filter(c=>c.g==='banco').length,nCxc=cols.filter(c=>c.g==='cxc').length;
   const f=n=>n?fmtD(n):'—';
@@ -18819,7 +18823,7 @@ function cdHojaHTML(h,enPantalla){
   <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:14px">
     <tr><td style="width:60%;font-weight:700">TOTAL INGRESOS DE HOY + SALDO ANTERIOR</td>
       <td style="${amarillo};text-align:right;padding:4px 8px">Caja fuerte: ${fmtD(h.disponible.cajafuerte)}</td>
-      <td style="${amarillo};text-align:right;padding:4px 8px">Cash Julio M: ${fmtD(h.disponible.cashjulio)}</td></tr>
+      <td style="${amarillo};text-align:right;padding:4px 8px">${cjNuevo?'Cash Julio M del día':'Cash Julio M'}: ${fmtD(h.disponible.cashjulio)}</td></tr>
   </table>
   <div style="margin-top:16px;font-weight:800;background:#E9ECEF;display:inline-block;padding:4px 12px">EGRESOS / SALIDAS</div>
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
@@ -18835,7 +18839,7 @@ function cdHojaHTML(h,enPantalla){
       <td style="${amarillo};text-align:right;padding:4px 8px">Salida de Gerencia: ${fmtD(h.salidas.cashjulio)}</td></tr>
     <tr><td style="font-weight:800;font-size:14px;padding-top:8px">SALDO FINAL CAJA</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cajafuerte)}</td>
-      <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cashjulio)} <span style="font-weight:400;font-size:10px">en caja Don Julio</span></td></tr>
+      <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cashjulio)} <span style="font-weight:400;font-size:10px">${cjNuevo?'del día → Fondos JM (auxiliar Don Julio)':'en caja Don Julio'}</span></td></tr>
   </table>${cdSalidasBancariasHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
 }
 // Solo informativo (NO afecta los saldos de la caja): salidas de las cuentas bancarias de
@@ -18909,7 +18913,7 @@ function renderAuxiliares(){
     <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;font-size:13px">
       <b>Saldo anterior</b>
       <span style="background:#FFF3BF;padding:4px 10px;font-weight:700">Caja fuerte: ${fmtD(sa.cajafuerte)}</span>
-      <span style="background:#FFF3BF;padding:4px 10px;font-weight:700">Cash Julio M: ${fmtD(sa.cashjulio)}</span>
+      ${h.cerrado&&!h.cjSinSaldo?`<span style="background:#FFF3BF;padding:4px 10px;font-weight:700">Cash Julio M: ${fmtD(sa.cashjulio)}</span>`:`<span style="font-size:11px;color:var(--text2)">Cash Julio M: se lleva en Fondos JM</span>`}
       <span style="font-size:11px;color:var(--text2)">(${sa.desde||''})</span>
       ${sa.editable&&!h.cerrado&&MODO==='admin'?`<button class="btn btn-sm" onclick="cdEditarSaldoInicial()"><i class="ti ti-edit"></i>Saldo inicial</button>`:''}
     </div>
@@ -19191,11 +19195,11 @@ async function cdCerrarDia(){
   const pend=cdDiasPendientes(cdFecha);
   if(pend.length){alert(`⚠️ Antes de cerrar el ${cdFecha} hay que cerrar: ${pend.join(', ')}.\n\nLos cierres van en orden, para que cada día arranque con el saldo final del anterior.`);cdFecha=pend[0];renderAuxiliares();return;}
   const h=cdCalcular(cdFecha);
-  if(!confirm(`¿Cerrar la caja del ${cdFecha}?\n\nSaldo final Caja fuerte: ${fmtD(h.saldoFinal.cajafuerte)}\nSaldo final Cash Julio M: ${fmtD(h.saldoFinal.cashjulio)}\n\nQueda guardado en el historial y ya no se puede modificar (solo el Administrador puede reabrirlo).`))return;
+  if(!confirm(`¿Cerrar la caja del ${cdFecha}?\n\nSaldo final Caja fuerte: ${fmtD(h.saldoFinal.cajafuerte)}\nCash Julio M del día (pasa a Fondos JM): ${fmtD(h.saldoFinal.cashjulio)}\n\nQueda guardado en el historial y ya no se puede modificar (solo el Administrador puede reabrirlo).`))return;
   const ahora=new Date();
   const cierre={id:'CIERRE_'+cdFecha,fecha:cdFecha,saldoAnterior:h.saldoAnterior,ingresos:h.ingresos,egresos:h.egresos,tot:h.tot,
     totalIngresos:h.totalIngresos,salidas:h.salidas,disponible:h.disponible,saldoFinal:h.saldoFinal,
-    cerradoPor:getNombreUsuario(),cerradoHora:ahora.toLocaleString('es-NI'),anulado:false};
+    cerradoPor:getNombreUsuario(),cerradoHora:ahora.toLocaleString('es-NI'),anulado:false,cjSinSaldo:true};
   contData.cajaDiariaCierres=(contData.cajaDiariaCierres||[]).filter(c=>c.id!==cierre.id);
   contData.cajaDiariaCierres.push(cierre);
   await saveOne('contable',{id:'main',...contData});
@@ -19222,7 +19226,7 @@ function cdImprimir(fecha){
     ${encabezadoNicautoHTML('CAJA','Día '+fecha+(h.cerrado?' — CERRADO por '+(h.cerradoPor||''):' — (día abierto, sin cierre)'))}
     <div style="font-size:12px;margin-bottom:10px"><b>Saldo anterior:</b>
       <span style="background:#FFF3BF;padding:3px 8px;font-weight:700;margin-left:8px">Caja fuerte: ${fmtD(sa.cajafuerte)}</span>
-      <span style="background:#FFF3BF;padding:3px 8px;font-weight:700;margin-left:8px">Cash Julio M: ${fmtD(sa.cashjulio)}</span></div>
+      ${h.cerrado&&!h.cjSinSaldo?`<span style="background:#FFF3BF;padding:3px 8px;font-weight:700;margin-left:8px">Cash Julio M: ${fmtD(sa.cashjulio)}</span>`:''}</div>
     <div class="cd-hoja">${cdHojaHTML(h,false)}</div>
     <div style="display:flex;justify-content:space-around;margin-top:50px;font-size:11px">
       <div style="text-align:center;border-top:1px solid #000;width:200px;padding-top:4px">Elaborado por</div>
