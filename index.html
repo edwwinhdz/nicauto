@@ -1236,13 +1236,14 @@ body.no-delete .confirmDelete{display:none!important}
 
 <!-- Modal Comparador de Vehículos -->
 <div class="overlay" id="ov-comparador">
-<div class="modal" style="max-width:800px">
+<div class="modal" style="max-width:1000px">
   <div class="modal-head"><h3><i class="ti ti-arrows-left-right"></i> Comparador de Vehículos</h3><button class="btn-ghost btn" onclick="closeOv('ov-comparador')"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
-    <div class="form-row" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="form-row" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
       <div class="form-group"><label>Vehículo 1</label><select id="comp-veh-0" onchange="renderComparador()"><option value="">-- Ninguno --</option></select></div>
       <div class="form-group"><label>Vehículo 2</label><select id="comp-veh-1" onchange="renderComparador()"><option value="">-- Ninguno --</option></select></div>
       <div class="form-group"><label>Vehículo 3 (opcional)</label><select id="comp-veh-2" onchange="renderComparador()"><option value="">-- Ninguno --</option></select></div>
+      <div class="form-group"><label>Vehículo 4 (opcional)</label><select id="comp-veh-3" onchange="renderComparador()"><option value="">-- Ninguno --</option></select></div>
     </div>
     <div id="comp-resultado" style="overflow-x:auto;margin-top:.5rem"></div>
   </div>
@@ -1380,8 +1381,8 @@ body.no-delete .confirmDelete{display:none!important}
     <input type="hidden" id="mfp-clave"><input type="hidden" id="mfp-id">
     <div class="form-row">
       <div class="form-group"><label>Tipo</label>
-        <select id="mfp-tipo"><option value="Ingreso">Ingreso</option><option value="Egreso">Egreso</option></select></div>
-      <div class="form-group"><label>Monto (C$)</label><input id="mfp-monto" type="number" step="0.01"></div>
+        <select id="mfp-tipo" onchange="mfpToggleBanco()"><option value="Ingreso">Ingreso</option><option value="Egreso">Egreso</option></select></div>
+      <div class="form-group"><label id="mfp-monto-lbl">Monto (C$)</label><input id="mfp-monto" type="number" step="0.01"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Fecha de Ingreso</label><input id="mfp-fechaingreso" type="date"></div>
@@ -1390,8 +1391,13 @@ body.no-delete .confirmDelete{display:none!important}
     <div class="form-group"><label>Detalle de pago</label><input id="mfp-detalle" type="text" placeholder="Descripción del movimiento"></div>
     <div class="form-row">
       <div class="form-group"><label>Clasificación</label>
-        <select id="mfp-clasif"><option value="Inversión Vehículo">Inversión Vehículo</option><option value="Gastos Casa Don Julio">Gastos Casa Don Julio</option><option value="Gastos Operativos Autolote">Gastos Operativos Autolote</option><option value="Compra de vehículo">Compra de vehículo</option><option value="Traslado de fondos">Traslado de fondos</option><option value="Otro">Otro</option></select></div>
+        <select id="mfp-clasif" onchange="mfpToggleBanco()"><option value="Inversión Vehículo">Inversión Vehículo</option><option value="Gastos Casa Don Julio">Gastos Casa Don Julio</option><option value="Gastos Operativos Autolote">Gastos Operativos Autolote</option><option value="Compra de vehículo">Compra de vehículo</option><option value="Venta de vehículo">Venta de vehículo</option><option value="Traslado de fondos">Traslado de fondos</option><option value="Otro">Otro</option></select></div>
       <div class="form-group"><label>Placa (si aplica)</label><input id="mfp-placa" type="text"></div>
+    </div>
+    <div class="form-group" id="mfp-banco-box" style="display:none;background:var(--blue-light);border:1px solid #74C0FC;border-radius:var(--radius);padding:.6rem .75rem">
+      <label id="mfp-banco-lbl" style="color:var(--blue)">¿A qué cuenta bancaria se depositó?</label>
+      <select id="mfp-banco"><option value="">— Sin cuenta bancaria (no afecta Bancos) —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+      <div id="mfp-banco-nota" style="font-size:10px;color:var(--text2);margin-top:4px">Aparece solo en la hoja Bancos como entrada en esa cuenta, con la fecha de pago (o de ingreso).</div>
     </div>
     <div class="form-group"><label>Forma de pago</label>
       <select id="mfp-formapago">
@@ -11603,7 +11609,7 @@ function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
     <tbody>${conSaldo.length?conSaldo.map(f=>`<tr>
       <td>${f.fechaIngreso||'—'}</td><td>${f.fechaPago||'—'}</td>
       <td><span class="badge ${f.tipo==='Ingreso'?'badge-green':'badge-red'}">${f.tipo}</span></td>
-      <td>${f.detalle||'—'}${f.auto?` <span class="badge badge-amber" style="font-size:9px">${f.autoTipo==='cobro'?'Automático — Cobro CxC':f.autoTipo==='reserva'?'Automático — Reserva':f.autoTipo==='venta'?'Automático — Venta':'Compra de vehículo'}</span>`:''}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
+      <td>${f.detalle||'—'}${f.auto?` <span class="badge badge-amber" style="font-size:9px">${f.autoTipo==='cobro'?'Automático — Cobro CxC':f.autoTipo==='reserva'?'Automático — Reserva':f.autoTipo==='venta'?'Automático — Venta':'Compra de vehículo'}</span>`:''}</td><td>${f.clasificacion||'—'}${f.bancoDestino?`<div style="font-size:10px;color:var(--blue);font-weight:600">${f.tipo==='Egreso'?'→':'←'} ${(BANCOS_CTAS.find(b=>b.k===f.bancoDestino)||{}).t||f.bancoDestino}</div>`:''}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
       <td style="color:${f.tipo==='Ingreso'?'var(--green)':'var(--red)'};font-weight:700">${f.tipo==='Ingreso'?'+':'-'}${simbolo} ${fmtNio(f.monto)}</td>
       <td style="font-weight:700">${simbolo} ${fmtNio(f.saldoCorrido)}</td>
       ${puedeEditar?f.auto?(f.autoTipo==='cobro'?`<td><button class="btn btn-sm" onclick="showContTab('cuentas')" title="Viene del cobro de la Cuenta por Cobrar — se corrige en Cuentas"><i class="ti ti-file-invoice"></i></button></td>`:(f.autoTipo==='reserva'||f.autoTipo==='venta')?`<td><button class="btn btn-sm" onclick="editVenta('${f.ventaId}')" title="Viene de ${f.autoTipo==='venta'?'la venta':'la reserva'} — se corrige en Ventas"><i class="ti ti-receipt"></i></button></td>`:`<td><button class="btn btn-sm" onclick="abrirModalVehiculo('${f.vehId}')" title="Viene de la compra del vehículo — se corrige en Inventario"><i class="ti ti-car"></i></button></td>`):`<td><button class="btn btn-sm" onclick="abrirModalFondoPersonal('${clave}','${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn btn-sm btn-danger" onclick="eliminarFondoPersonal('${clave}','${f.id}')"><i class="ti ti-trash"></i></button></td>`:''}
@@ -11662,13 +11668,29 @@ function abrirModalFondoPersonal(clave,id){
   document.getElementById('mfp-id').value=f?f.id:'';
   document.getElementById('mfp-tipo').value=f?f.tipo:'Ingreso';
   document.getElementById('mfp-monto').value=f?f.monto:'';
+  {const lbl=document.getElementById('mfp-monto-lbl');if(lbl)lbl.textContent=clave==='fondosJM'?'Monto (US$)':'Monto (C$)';} // Fondos JM se lleva en dólares; Fondos GO en córdobas
   document.getElementById('mfp-fechaingreso').value=f?f.fechaIngreso:hoyLocal();
   document.getElementById('mfp-fechapago').value=f?f.fechaPago||'':'';
   document.getElementById('mfp-detalle').value=f?f.detalle||'':'';
   document.getElementById('mfp-clasif').value=f?f.clasificacion||'':'Inversión Vehículo';
   document.getElementById('mfp-placa').value=f?f.placa||'':'';
   document.getElementById('mfp-formapago').value=f?f.formaPago||'':'Cash';
+  {const sb=document.getElementById('mfp-banco');if(sb)sb.value=f&&f.bancoDestino?f.bancoDestino:'';}
+  mfpToggleBanco();
   openOv('ov-fondo-personal');
+}
+// Muestra el selector de cuenta bancaria solo en Fondos JM cuando la clasificación es Traslado de fondos.
+// Egreso (sale de Fondos JM) → se depositó EN esa cuenta; Ingreso (entra a Fondos JM) → salió DE esa cuenta.
+function mfpToggleBanco(){
+  const box=document.getElementById('mfp-banco-box');if(!box)return;
+  const clave=document.getElementById('mfp-clave')?.value;
+  const esTraslado=document.getElementById('mfp-clasif')?.value==='Traslado de fondos';
+  const ver=clave==='fondosJM'&&esTraslado;
+  box.style.display=ver?'':'none';
+  if(!ver){const sb=document.getElementById('mfp-banco');if(sb)sb.value='';return;}
+  const egreso=document.getElementById('mfp-tipo')?.value==='Egreso';
+  document.getElementById('mfp-banco-lbl').textContent=egreso?'¿A qué cuenta bancaria se depositó?':'¿De qué cuenta bancaria salió el dinero?';
+  document.getElementById('mfp-banco-nota').textContent=egreso?'Aparece solo en la hoja Bancos como ENTRADA en esa cuenta, con la fecha de pago (o de ingreso).':'Aparece solo en la hoja Bancos como SALIDA de esa cuenta, con la fecha de pago (o de ingreso).';
 }
 async function guardarFondoPersonal(){
   const clave=document.getElementById('mfp-clave').value;
@@ -11688,6 +11710,11 @@ async function guardarFondoPersonal(){
     formaPago:document.getElementById('mfp-formapago').value,
     registradoPor:getNombreUsuario()
   };
+  // Traslado de Fondos JM a/desde una cuenta bancaria propia → también se refleja en la hoja Bancos
+  if(clave==='fondosJM'&&obj.clasificacion==='Traslado de fondos'){
+    const bd=document.getElementById('mfp-banco')?.value||'';
+    if(bd)obj.bancoDestino=bd;
+  }
   const lista=ensureFondoPersonal(clave);
   const idx=lista.findIndex(x=>x.id===obj.id);
   if(idx>=0)lista[idx]=obj;else lista.push(obj);
@@ -12626,11 +12653,24 @@ function bancosMovsDesdeCompras(){
   });
   return res;
 }
+// Traslados de Fondos JM a/desde una cuenta bancaria propia (se elige la cuenta en el movimiento de
+// Fondos JM): Egreso en Fondos JM = entrada al banco; Ingreso en Fondos JM = salida del banco.
+function bancosMovsDesdeFondosJM(){
+  const res=[];
+  (contData.fondosJM||[]).forEach(f=>{
+    if(!f||f.anulado||f.clasificacion!=='Traslado de fondos'||!f.bancoDestino||!(Number(f.monto)>0))return;
+    if(!BANCOS_CTAS.some(b=>b.k===f.bancoDestino))return;
+    const fecha=f.fechaPago||f.fechaIngreso||'';
+    res.push({id:'FJB_'+f.id,cuenta:f.bancoDestino,fecha,tipo:f.tipo==='Egreso'?'ingreso':'egreso',monto:Number(f.monto),auto:true,autoFJ:true,fjId:f.id,
+      desc:`${f.tipo==='Egreso'?'Depósito desde':'Traslado hacia'} Fondos JM${f.detalle?' — '+f.detalle:''}`,ref:''});
+  });
+  return res;
+}
 // Movimientos automáticos (de Caja o de Compras) que se quitaron a mano de la hoja Bancos
 function bancosOcultosSet(){return new Set((contData.bancosOcultos||[]).filter(x=>x&&!x.restaurado).map(x=>x.id));}
 function bancosMovsAutoVisibles(){
   const oc=bancosOcultosSet();
-  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos()].filter(m=>!oc.has(m.id));
+  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...bancosMovsDesdeFondosJM()].filter(m=>!oc.has(m.id));
 }
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
@@ -12768,12 +12808,12 @@ function renderBancos(){
         <thead><tr><th>Fecha</th><th>Descripción</th><th>Ref. / Recibo</th><th style="text-align:right">Ingreso</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th><th></th></tr></thead>
         <tbody>${filas.length?filas.map(m=>`<tr>
           <td style="white-space:nowrap">${m.fecha||'—'}</td>
-          <td>${m.desc||''}${m.autoCompra?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
+          <td>${m.desc||''}${m.autoCompra?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':m.autoFJ?' <span class="badge badge-purple" style="font-size:9px">Desde Fondos JM</span>':m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
           <td>${m.ref||'—'}</td>
           <td style="text-align:right;color:var(--green)">${m.tipo==='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;color:var(--red)">${m.tipo!=='ingreso'?fmtD(m.monto):''}</td>
           <td style="text-align:right;font-weight:700">${fmtD(m.saldo)}</td>
-          <td style="white-space:nowrap">${m.auto&&puede?`${m.autoCompra?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Modificar: corregir banco o monto en la compra del vehículo"><i class="ti ti-edit"></i></button>`:`<button class="btn btn-sm" onclick="cdFecha='${m.fecha}';showContTab('auxiliares')" title="Modificar: abrir el Cash in Hand del ${m.fecha}, de donde viene este movimiento"><i class="ti ti-edit"></i></button>`} <button class="btn btn-sm btn-danger" onclick="bancoOcultarAuto('${m.id}')" title="Quitar este movimiento de la hoja Bancos"><i class="ti ti-trash"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
+          <td style="white-space:nowrap">${m.auto&&puede?`${m.autoFJ?`<button class="btn btn-sm" onclick="abrirModalFondoPersonal('fondosJM','${m.fjId}')" title="Modificar: corregir el traslado en Fondos JM"><i class="ti ti-edit"></i></button>`:m.autoCompra?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Modificar: corregir banco o monto en la compra del vehículo"><i class="ti ti-edit"></i></button>`:`<button class="btn btn-sm" onclick="cdFecha='${m.fecha}';showContTab('auxiliares')" title="Modificar: abrir el Cash in Hand del ${m.fecha}, de donde viene este movimiento"><i class="ti ti-edit"></i></button>`} <button class="btn btn-sm btn-danger" onclick="bancoOcultarAuto('${m.id}')" title="Quitar este movimiento de la hoja Bancos"><i class="ti ti-trash"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
         </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Sin movimientos</td></tr>'}</tbody>
       </table></div>`:''}
     </div>`;
@@ -12825,7 +12865,7 @@ function bancoMovModal(k,tipo,editId){
 async function bancoOcultarAuto(id){
   if(!puedeMoverBancos())return;
   const m=bancosMovsAutoVisibles().find(x=>x.id===id);if(!m)return;
-  if(!confirm(`¿Quitar de Bancos este movimiento de ${fmtD(m.monto)}?\n\n${m.fecha} — ${m.desc||''}\n\nViene ${m.autoCompra?'de la compra del vehículo':'del Cash in Hand'}: allá NO se borra, solo deja de contar en Bancos. Se puede restaurar con "Quitados".`))return;
+  if(!confirm(`¿Quitar de Bancos este movimiento de ${fmtD(m.monto)}?\n\n${m.fecha} — ${m.desc||''}\n\nViene ${m.autoCompra?'de la compra del vehículo':m.autoFJ?'de un traslado en Fondos JM':'del Cash in Hand'}: allá NO se borra, solo deja de contar en Bancos. Se puede restaurar con "Quitados".`))return;
   contData.bancosOcultos=contData.bancosOcultos||[];
   contData.bancosOcultos.push({id,monto:m.monto,cuenta:m.cuenta,fecha:m.fecha,desc:m.desc||'',por:getNombreUsuario(),fechaQuitado:hoyLocal()});
   await saveOne('contable',{id:'main',...contData});renderBancos();
@@ -22072,12 +22112,12 @@ async function cargarFichaPublicaDatos(vid){
 function abrirComparadorVehiculos(){
   const disponibles=vehiculos.filter(v=>v.estado!=='Vendido');
   const opts='<option value="">-- Ninguno --</option>'+disponibles.map(v=>`<option value="${v.id}">${v.marca} ${v.modelo} ${v.anio} — ${v.placa}</option>`).join('');
-  [0,1,2].forEach(i=>document.getElementById('comp-veh-'+i).innerHTML=opts);
+  [0,1,2,3].forEach(i=>document.getElementById('comp-veh-'+i).innerHTML=opts);
   document.getElementById('comp-resultado').innerHTML='<p style="color:var(--text3);text-align:center;padding:2rem">Elegí al menos 2 vehículos para comparar</p>';
   openOv('ov-comparador');
 }
 function renderComparador(){
-  const ids=[0,1,2].map(i=>document.getElementById('comp-veh-'+i).value).filter(Boolean);
+  const ids=[0,1,2,3].map(i=>document.getElementById('comp-veh-'+i)?.value).filter(Boolean);
   const cont=document.getElementById('comp-resultado');
   if(ids.length<2){cont.innerHTML='<p style="color:var(--text3);text-align:center;padding:2rem">Elegí al menos 2 vehículos para comparar</p>';return;}
   const vehs=ids.map(id=>vehiculos.find(v=>v.id===id)).filter(Boolean);
