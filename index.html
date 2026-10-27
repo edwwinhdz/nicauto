@@ -433,7 +433,7 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="ai-toggle" id="btn-entrar-como" onclick="abrirEntrarComoUsuario()" style="display:none" title="Entrar como otro usuario para hacer pruebas (con código maestro)"><i class="ti ti-user-shield"></i>Entrar como</button>
     <button class="ai-toggle" id="btn-bloqueo-sistema" onclick="toggleBloqueoSistema()" style="display:none" title="Bloquear el acceso de todos menos vos (para hacer cambios delicados)"><i class="ti ti-lock-open"></i>Bloquear sistema</button>
     <button class="ai-toggle" onclick="imprimirModulo()" title="Imprimir este módulo"><i class="ti ti-printer"></i>Imprimir</button>
-    <button class="ai-toggle" id="btn-precio-voz" onclick="precioPorVoz()" title="Decí el vehículo (ej. «Hilux 2018» o la placa) y el sistema te dice el Precio Lista A en voz alta"><i class="ti ti-microphone"></i>Precio por voz</button>
+    <button class="ai-toggle" id="btn-precio-voz" style="display:none" onclick="precioPorVoz()" title="Decí el vehículo (ej. «Hilux 2018» o la placa) y el sistema te dice el Precio Lista A en voz alta"><i class="ti ti-microphone"></i>Precio por voz</button>
     <button class="ai-toggle" id="ai-toggle-btn" onclick="toggleAI()"><i class="ti ti-sparkles"></i>Copilot IA</button>
     <button class="ai-toggle" onclick="cerrarSesion()" style="border-color:rgba(255,255,255,.3)"><i class="ti ti-logout"></i>Salir</button>
   </div>
@@ -5333,6 +5333,8 @@ function aplicarModoAcceso(){
   if(btnUsuarios)btnUsuarios.style.display=MODO==='admin'?'inline-flex':'none';
   const btnEntrarComo=document.getElementById('btn-entrar-como');
   if(btnEntrarComo)btnEntrarComo.style.display=MODO==='admin'?'inline-flex':'none';
+  const btnVoz=document.getElementById('btn-precio-voz');
+  if(btnVoz)btnVoz.style.display=vozAutorizado()?'inline-flex':'none';
 
   if(MODO==='vendedor'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
@@ -14393,7 +14395,11 @@ function vozEscribir(){
   const t=prompt('Escribí el vehículo (ej. Hilux 2018, o la placa):','');
   if(t&&t.trim())vozResponder(t.trim());
 }
+// Perfiles autorizados para usar "Precio por voz" (los decide el Administrador).
+// Para habilitar a alguien más, agregar su perfil aquí (ej. 'vendedor', 'operaciones2', 'compras').
+function vozAutorizado(){return['admin','gerente1','gerente2','jefecomercial'].includes(MODO);}
 function precioPorVoz(){
+  if(!vozAutorizado()){alert('⛔ Tu usuario no está autorizado para usar Precio por voz.');return;}
   try{speechSynthesis&&speechSynthesis.cancel();}catch(e){}
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){
