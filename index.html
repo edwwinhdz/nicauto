@@ -418,6 +418,7 @@ body.no-delete .confirmDelete{display:none!important}
     <button class="nav-btn" onclick="showPage('politicas')" id="nb-politicas"><i class="ti ti-books"></i><span>Políticas y Manuales</span></button>
     <button class="nav-btn" onclick="showPage('bitacora')" id="nb-bitacora"><i class="ti ti-notebook"></i><span>Bitácora</span></button>
     <button class="nav-btn" onclick="showPage('contable')" id="nb-contable"><i class="ti ti-calculator"></i><span>Contable</span></button>
+    <button class="nav-btn" onclick="showPage('inversores')" id="nb-inversores" style="display:none"><i class="ti ti-coin"></i><span>Inversores</span></button>
   </nav>
   <div class="topbar-right" style="display:flex;align-items:center;gap:8px">
     <span id="user-badge" style="font-size:11px;color:rgba(255,255,255,.8);white-space:nowrap"></span>
@@ -720,6 +721,15 @@ body.no-delete .confirmDelete{display:none!important}
 </div>
 
 <!-- ======================== CONTABLE ======================== -->
+<!-- ======================== INVERSORES (solo Edwin, Don Julio y Gisselle) ======================== -->
+<div class="page" id="page-inversores">
+  <div class="section-header">
+    <h2 class="section-title"><i class="ti ti-coin"></i> Inversores</h2>
+  </div>
+  <div id="inv-hojas-bar" class="tab-bar"></div>
+  <div id="inv-hoja-cont"></div>
+</div>
+
 <div class="page" id="page-contable">
   <div class="section-header">
     <h2 class="section-title">Módulo contable (base efectivo)</h2>
@@ -1375,6 +1385,29 @@ body.no-delete .confirmDelete{display:none!important}
 </div>
 </div>
 
+<div class="overlay" id="ov-inversor">
+<div class="modal" style="max-width:640px">
+  <div class="modal-head"><h3 id="minv-titulo"><i class="ti ti-coin"></i> Inversor</h3><button class="btn-ghost btn" onclick="closeOv('ov-inversor')"><i class="ti ti-x"></i></button></div>
+  <div class="modal-body">
+    <input type="hidden" id="minv-id">
+    <div class="form-group"><label>Nombre del inversor</label><input id="minv-nombre" placeholder="Ej. Humberto Gurdian C."></div>
+    <div class="form-row">
+      <div class="form-group"><label>Pago de intereses a (cuenta bancaria)</label><input id="minv-cuenta" placeholder="Ej. Cta Banpro No. 10012414396508"></div>
+      <div class="form-group"><label>Tasa mensual (%)</label><input class="calc-input" id="minv-tasa" type="text" inputmode="decimal" placeholder="1.10"></div>
+    </div>
+    <label style="font-size:12px;font-weight:700;color:var(--text2)">Monto invertido recibido (aportes)</label>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Para un retiro de capital, poné el monto en negativo.</div>
+    <div id="minv-aportes"></div>
+    <button class="btn btn-sm" onclick="invAgregarFilaAporte()" style="margin-top:6px"><i class="ti ti-plus"></i> Agregar aporte</button>
+    <div id="minv-total" style="margin-top:8px;font-weight:800;text-align:right"></div>
+    <div class="form-group" style="margin-top:8px"><label>Notas</label><input id="minv-notas" placeholder="Opcional"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeOv('ov-inversor')">Cancelar</button>
+    <button class="btn btn-primary" onclick="guardarInversor()"><i class="ti ti-check"></i> Guardar</button>
+  </div>
+</div>
+</div>
 <div class="overlay" id="ov-fondo-personal">
 <div class="modal" style="max-width:520px">
   <div class="modal-head"><h3 id="mfp-titulo"><i class="ti ti-wallet"></i> Movimiento</h3><button class="btn-ghost btn" onclick="closeOv('ov-fondo-personal')"><i class="ti ti-x"></i></button></div>
@@ -5397,6 +5430,8 @@ function aplicarModoAcceso(){
   // Dashboard: solo Edwin (admin), Don Julio (gerente1) y Gisselle (gerente2).
   const nbDash=document.getElementById('nb-dashboard');
   if(nbDash&&!puedeVerDashboard())nbDash.style.display='none';
+  const nbInversores=document.getElementById('nb-inversores');
+  if(nbInversores)nbInversores.style.display=puedeVerInversores()?'flex':'none';
   if(MODO!=='admin'&&MODO!=='coordinador'&&MODO!=='jefecomercial'){
     document.body.classList.add('no-delete');
     window._canDelete=false;
@@ -5743,7 +5778,353 @@ function mostrarNotificacionAprobado(n){
 
 // ======================== PAGES ========================
 function puedeVerDashboard(){return['admin','gerente1','gerente2'].includes(MODO);}
+// Inversores: solo Edwin (admin), Don Julio (gerente1) y Gisselle (gerente2).
+function puedeVerInversores(){return['admin','gerente1','gerente2'].includes(MODO);}
+// Hojas de la pestaña Inversores. Cada hoja nueva se agrega a esta lista con su función de dibujo.
+const INV_HOJAS=[];
+let invHojaActiva=null;
+// ---- Hoja 1: Intereses (estado mensual de pago de intereses por inversor) ----
+// Datos en contData.inversores: {id,nombre,cuenta,tasa(% mensual),aportes:[{id,fecha,roc,monto}],notas,anulado}
+// Interés del mes = (suma de aportes recibidos hasta el último día de ese mes) × tasa mensual.
+// Solo informativo: no genera movimientos en Caja, Bancos ni Contabilidad.
+let invMes=null;
+function invLista(){return(contData.inversores||[]).filter(i=>i&&!i.anulado);}
+function invFinDeMes(mes){const[y,m]=mes.split('-').map(Number);const d=new Date(y,m,0);return`${y}-${String(m).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function invAportesHasta(inv,mes){const fin=invFinDeMes(mes);return(inv.aportes||[]).filter(a=>a&&a.fecha&&a.fecha<=fin&&Number(a.monto));}
+function invTotalHasta(inv,mes){return invAportesHasta(inv,mes).reduce((s,a)=>s+Number(a.monto||0),0);}
+function invInteres(inv,mes){return Math.round(invTotalHasta(inv,mes)*Number(inv.tasa||0))/100;}
+function invFechaDMY(f){if(!f)return'';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;}
+function invMesTexto(mes){const n=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];const[y,m]=mes.split('-').map(Number);return`${n[m-1]} ${y}`;}
+function renderInvHojaIntereses(cont){
+  invMes=invMes||hoyLocal().slice(0,7);
+  const lista=invLista().slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  const cel='border:1px solid #CED4DA;padding:0';
+  const inp='width:100%;border:none;background:transparent;padding:5px 6px;font-size:12.5px;font-family:inherit;box-sizing:border-box';
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const bloque=i=>{
+    const ap=(i.aportes||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+    return`<div class="card" style="padding:12px;margin-bottom:12px;max-width:760px" id="invblk-${i.id}">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <tr><td style="${cel};width:42%;background:var(--surface2);font-weight:700;padding:5px 6px">Inversor</td><td style="${cel}" colspan="3"><input style="${inp};font-weight:800;text-transform:uppercase" value="${esc(i.nombre)}" onchange="invSet('${i.id}','nombre',this.value)"></td></tr>
+        <tr><td style="${cel};background:var(--surface2);font-weight:700;padding:5px 6px">Pago de intereses a</td><td style="${cel}" colspan="3"><input style="${inp}" placeholder="Cta bancaria…" value="${esc(i.cuenta)}" onchange="invSet('${i.id}','cuenta',this.value)"></td></tr>
+        <tr><td style="${cel};background:var(--surface2);font-weight:700;padding:5px 6px;color:#1F3864">Mensual %</td><td style="${cel};width:22%"><input style="${inp};text-align:right;color:#1F3864;font-weight:700" inputmode="decimal" value="${esc(i.tasa)}" onchange="invSet('${i.id}','tasa',this.value)"></td><td colspan="2" style="${cel};padding:5px 6px;font-size:11px;color:var(--text3)">${esc(i.notas||'')}</td></tr>
+      </table>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px">
+        <thead><tr style="background:#DDEBF7"><th style="${cel};padding:5px 6px;text-align:left">Monto invertido recibido el</th><th style="${cel};padding:5px 6px;text-align:left;width:22%">ROC #</th><th style="${cel};padding:5px 6px;text-align:right;width:24%">Monto US$</th><th style="${cel};width:34px"></th></tr></thead>
+        <tbody>${ap.map(a=>`<tr>
+          <td style="${cel}"><input type="date" style="${inp}" value="${esc(a.fecha)}" onchange="invSetAporte('${i.id}','${a.id}','fecha',this.value)"></td>
+          <td style="${cel}"><input style="${inp}" value="${esc(a.roc)}" onchange="invSetAporte('${i.id}','${a.id}','roc',this.value)"></td>
+          <td style="${cel}"><input style="${inp};text-align:right" inputmode="decimal" value="${esc(a.monto)}" onchange="invSetAporte('${i.id}','${a.id}','monto',this.value)"></td>
+          <td style="${cel};text-align:center"><button class="btn btn-sm" style="padding:1px 6px;color:var(--red);border-color:transparent" title="Quitar fila" onclick="invQuitarAporte('${i.id}','${a.id}')"><i class="ti ti-x"></i></button></td></tr>`).join('')}
+          <tr><td colspan="4" style="${cel};padding:3px 6px"><button class="btn btn-sm" onclick="invAgregarAporte('${i.id}')"><i class="ti ti-plus"></i> Agregar fila</button></td></tr>
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:800"><td colspan="2" style="${cel};padding:5px 6px">TOTAL FONDOS RECIBIDOS <span style="font-weight:400;font-size:10px;color:var(--text3)">(hasta fin de ${invMesTexto(invMes)})</span></td><td style="${cel};padding:5px 6px;text-align:right;background:#DDEBF7" id="invtot-${i.id}">${fmtD(invTotalHasta(i,invMes))}</td><td style="${cel}"></td></tr>
+          <tr style="font-weight:800"><td colspan="2" style="${cel};padding:5px 6px">TOTAL INTERESES ${invMesTexto(invMes).toUpperCase()}</td><td style="${cel};padding:5px 6px;text-align:right;background:#DDEBF7;color:var(--green)" id="invint-${i.id}">${fmtD(invInteres(i,invMes))}</td><td style="${cel}"></td></tr>
+        </tfoot>
+      </table>
+      <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
+        <button class="btn btn-sm" style="color:var(--blue);border-color:var(--blue)" onclick="imprimirInteresesInversor('${i.id}')"><i class="ti ti-printer"></i> Imprimir</button>
+        ${MODO==='admin'?`<button class="btn btn-sm btn-danger" onclick="eliminarInversor('${i.id}')"><i class="ti ti-trash"></i> Eliminar inversor</button>`:''}
+      </div>
+    </div>`;
+  };
+  const totF=lista.reduce((s,i)=>s+invTotalHasta(i,invMes),0),totI=lista.reduce((s,i)=>s+invInteres(i,invMes),0);
+  cont.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem">
+      <label style="font-size:12px;font-weight:600">Mes de intereses:</label>
+      <input type="month" value="${invMes}" onchange="invMes=this.value||invMes;renderInversores()" style="width:auto">
+      <span id="inv-guardando" style="font-size:11px;color:var(--text3)"></span>
+      <div style="flex:1"></div>
+      <span style="font-size:12px">Total fondos: <b id="inv-totF">${fmtD(totF)}</b> · Intereses ${invMesTexto(invMes)}: <b style="color:var(--green)" id="inv-totI">${fmtD(totI)}</b></span>
+      <button class="btn btn-primary" onclick="invNuevo()"><i class="ti ti-plus"></i>Nuevo inversor</button>
+    </div>
+    ${lista.map(bloque).join('')||'<div class="empty"><i class="ti ti-coin"></i><p>Todavía no hay inversores. Tocá «Nuevo inversor».</p></div>'}
+    <p style="font-size:11px;color:var(--text3);margin-top:6px">Se edita directo en las celdas y se guarda solo. Interés del mes = total de fondos recibidos hasta el último día del mes × tasa mensual. Solo informativo: no registra pagos en Caja, Bancos ni Contabilidad.</p>`;
+}
+// ---- Edición directa en celdas (tipo Excel), con guardado automático ----
+let _invSaveT=null;
+function invGuardarPronto(){
+  const el=document.getElementById('inv-guardando');if(el)el.textContent='💾 Guardando…';
+  clearTimeout(_invSaveT);
+  _invSaveT=setTimeout(async()=>{const ok=await saveOne('contable',{id:'main',...contData});const e2=document.getElementById('inv-guardando');if(e2)e2.textContent=ok===false?'⚠️ No se pudo guardar':'✓ Guardado';},700);
+}
+function invObj(id){return(contData.inversores||[]).find(x=>x.id===id);}
+function invRefrescarTotales(id){
+  const i=invObj(id);if(!i)return;
+  const t=document.getElementById('invtot-'+id),n=document.getElementById('invint-'+id);
+  if(t)t.textContent=fmtD(invTotalHasta(i,invMes));if(n)n.textContent=fmtD(invInteres(i,invMes));
+  const l=invLista(),tF=document.getElementById('inv-totF'),tI=document.getElementById('inv-totI');
+  if(tF)tF.textContent=fmtD(l.reduce((s,x)=>s+invTotalHasta(x,invMes),0));if(tI)tI.textContent=fmtD(l.reduce((s,x)=>s+invInteres(x,invMes),0));
+}
+function invNum(v){const n=parseFloat(String(v).replace(/[$,\s]/g,'').replace(/%$/,''));return isNaN(n)?0:n;}
+function invSet(id,campo,valor){
+  if(!puedeVerInversores())return;
+  const i=invObj(id);if(!i)return;
+  i[campo]=campo==='tasa'?invNum(valor):String(valor).trim();
+  marcarEdicion(i);invRefrescarTotales(id);invGuardarPronto();
+}
+function invSetAporte(id,aid,campo,valor){
+  if(!puedeVerInversores())return;
+  const i=invObj(id);if(!i)return;
+  const a=(i.aportes||[]).find(x=>x.id===aid);if(!a)return;
+  a[campo]=campo==='monto'?invNum(valor):String(valor).trim();
+  marcarEdicion(i);invRefrescarTotales(id);invGuardarPronto();
+}
+function invAgregarAporte(id){
+  const i=invObj(id);if(!i)return;
+  i.aportes=i.aportes||[];i.aportes.push({id:uid(),fecha:hoyLocal(),roc:'',monto:0});
+  marcarEdicion(i);invGuardarPronto();renderInversores();
+}
+function invQuitarAporte(id,aid){
+  const i=invObj(id);if(!i)return;
+  const a=(i.aportes||[]).find(x=>x.id===aid);
+  if(a&&Number(a.monto)&&!confirm(`¿Quitar el aporte del ${invFechaDMY(a.fecha)} por ${fmtD(a.monto)}?`))return;
+  i.aportes=(i.aportes||[]).filter(x=>x.id!==aid);
+  marcarEdicion(i);invGuardarPronto();renderInversores();
+}
+function invNuevo(){
+  if(!puedeVerInversores())return;
+  contData.inversores=contData.inversores||[];
+  const i={id:uid(),nombre:'NUEVO INVERSOR',cuenta:'',tasa:0,aportes:[{id:uid(),fecha:hoyLocal(),roc:'',monto:0}],notas:'',anulado:false};
+  marcarEdicion(i);contData.inversores.push(i);invGuardarPronto();renderInversores();
+  setTimeout(()=>{const b=document.getElementById('invblk-'+i.id);if(b){b.scrollIntoView({behavior:'smooth',block:'center'});const n=b.querySelector('input');if(n){n.focus();n.select();}}},100);
+}
+function invFilaAporteHTML(a){
+  a=a||{};
+  return`<div class="minv-fila" style="display:flex;gap:6px;margin-top:4px;align-items:center">
+    <input type="date" class="minv-fecha" value="${a.fecha||''}" style="width:150px">
+    <input class="minv-roc" placeholder="ROC #" value="${(a.roc||'').toString().replace(/"/g,'&quot;')}" style="width:110px">
+    <input class="minv-monto calc-input" type="text" inputmode="decimal" placeholder="Monto US$" value="${a.monto!=null&&a.monto!==''?a.monto:''}" oninput="invActualizarTotalModal()" style="flex:1;min-width:100px">
+    <input type="hidden" class="minv-aid" value="${a.id||''}">
+    <button class="btn btn-sm btn-danger" onclick="this.parentNode.remove();invActualizarTotalModal()" title="Quitar"><i class="ti ti-x"></i></button>
+  </div>`;
+}
+function invAgregarFilaAporte(){document.getElementById('minv-aportes').insertAdjacentHTML('beforeend',invFilaAporteHTML({fecha:hoyLocal()}));}
+function invLeerAportes(){
+  return[...document.querySelectorAll('#minv-aportes .minv-fila')].map(f=>({
+    id:f.querySelector('.minv-aid').value||uid(),fecha:f.querySelector('.minv-fecha').value,
+    roc:f.querySelector('.minv-roc').value.trim(),monto:parseFloat(String(f.querySelector('.minv-monto').value).replace(/,/g,''))
+  })).filter(a=>a.fecha&&!isNaN(a.monto)&&a.monto!==0);
+}
+function invActualizarTotalModal(){const t=invLeerAportes().reduce((s,a)=>s+a.monto,0);const el=document.getElementById('minv-total');if(el)el.textContent='TOTAL FONDOS RECIBIDOS: '+fmtD(t);}
+function abrirModalInversor(id){
+  if(!puedeVerInversores())return;
+  const i=id?invLista().find(x=>x.id===id):null;
+  document.getElementById('minv-titulo').innerHTML=`<i class="ti ti-coin"></i> ${i?'Editar inversor':'Nuevo inversor'}`;
+  document.getElementById('minv-id').value=i?i.id:'';
+  document.getElementById('minv-nombre').value=i?i.nombre||'':'';
+  document.getElementById('minv-cuenta').value=i?i.cuenta||'':'';
+  document.getElementById('minv-tasa').value=i?i.tasa||'':'';
+  document.getElementById('minv-notas').value=i?i.notas||'':'';
+  const ap=(i&&i.aportes||[]).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  document.getElementById('minv-aportes').innerHTML=(ap.length?ap:[{fecha:hoyLocal()}]).map(invFilaAporteHTML).join('');
+  invActualizarTotalModal();
+  openOv('ov-inversor');
+}
+async function guardarInversor(){
+  if(!puedeVerInversores()){alert('⛔ No tenés acceso a Inversores.');return;}
+  const nombre=document.getElementById('minv-nombre').value.trim();
+  if(!nombre){alert('Poné el nombre del inversor.');return;}
+  const tasa=parseFloat(String(document.getElementById('minv-tasa').value).replace(',','.'));
+  if(isNaN(tasa)||tasa<0){alert('Poné la tasa mensual en % (ej. 1.10).');return;}
+  const id=document.getElementById('minv-id').value||uid();
+  contData.inversores=contData.inversores||[];
+  const prev=contData.inversores.find(x=>x.id===id);
+  const obj={...(prev||{}),id,nombre,cuenta:document.getElementById('minv-cuenta').value.trim(),tasa,
+    aportes:invLeerAportes(),notas:document.getElementById('minv-notas').value.trim(),anulado:false};
+  marcarEdicion(obj);
+  const ix=contData.inversores.findIndex(x=>x.id===id);
+  if(ix>=0)contData.inversores[ix]=obj;else contData.inversores.push(obj);
+  await saveOne('contable',{id:'main',...contData});
+  closeOv('ov-inversor');renderInversores();
+}
+async function eliminarInversor(id){
+  if(MODO!=='admin'){alert('⛔ Solo el Administrador puede eliminar.');return;}
+  const i=(contData.inversores||[]).find(x=>x.id===id);if(!i)return;
+  if(!confirm(`¿Eliminar al inversor "${i.nombre}" y todos sus aportes de esta hoja?`))return;
+  i.anulado=true;marcarEdicion(i); // se marca (no se borra) para que no "reviva" al combinar sesiones
+  await saveOne('contable',{id:'main',...contData});renderInversores();
+}
+function imprimirInteresesInversor(id){
+  const i=invLista().find(x=>x.id===id);if(!i)return;
+  const mes=invMes||hoyLocal().slice(0,7);
+  const fechaDoc=prompt('Fecha del documento (dd/mm/aaaa):',invFechaDMY(hoyLocal()));if(fechaDoc===null)return;
+  const ap=invAportesHasta(i,mes).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const tot=invTotalHasta(i,mes),int=invInteres(i,mes),mt=invMesTexto(mes);
+  const n=x=>Number(x).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fila=(a,b,neg)=>`<tr><td style="padding:3px 0">${a}</td><td style="text-align:right;padding:3px 0;width:170px">${b}</td></tr>`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Intereses ${i.nombre} ${mt}</title>
+  <style>@page{size:letter portrait;margin:18mm}body{font-family:Arial,sans-serif;color:#212529;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  table{border-collapse:collapse;width:100%}.tot td{font-weight:800;border-top:1.5px solid #212529}.cel{background:#DDEBF7;font-weight:700}.firma{border-top:1px solid #000;width:210px;text-align:center;padding-top:4px;font-size:12px}
+  #hoja{max-width:600px;margin:0 auto}#caja{border:1px solid #212529;padding:12px 16px}</style></head><body><div id="hoja">
+  ${encabezadoNicautoHTML('Pago de intereses — '+mt.charAt(0).toUpperCase()+mt.slice(1),'')}
+  <div style="font-size:15px;font-weight:800;margin:6px 0 4px">${String(i.nombre).toUpperCase()}</div><div id="caja">
+  ${i.cuenta?`<div>Pago de intereses a:</div><div style="font-weight:600;margin-bottom:10px">${i.cuenta}</div>`:''}
+  <table><tr><td style="padding:3px 0;font-weight:700">Actual</td><td class="cel" style="text-align:right;padding:3px 6px;width:170px">${mes.slice(0,4)}</td></tr>
+    <tr><td style="padding:3px 0;font-weight:700;color:#1F3864">Mensual %</td><td style="text-align:right;padding:3px 6px;color:#1F3864;font-weight:700">${Number(i.tasa||0).toFixed(2)}%</td></tr></table>
+  <div style="font-weight:700;margin:14px 0 4px">Monto invertido recibido el</div>
+  <table>${ap.map(a=>fila(`${invFechaDMY(a.fecha)}${a.roc?' &nbsp;ROC# '+a.roc:''}`,`${Number(a.monto)<0?'(':''}${n(Math.abs(a.monto))}${Number(a.monto)<0?')':''}`)).join('')}
+    <tr class="tot"><td style="padding:5px 0">TOTAL FONDOS RECIBIDOS</td><td class="cel" style="text-align:right;padding:5px 6px">${n(tot)}</td></tr></table>
+  <table style="margin-top:22px">${fila('Pago de intereses de '+mt,n(int))}
+    <tr class="tot"><td style="padding:5px 0">TOTAL INTERESES ${mt.toUpperCase()}</td><td class="cel" style="text-align:right;padding:5px 6px;border-bottom:3px double #212529">${n(int)}</td></tr></table>
+  <div style="margin-top:18px"><span class="cel" style="padding:2px 8px">Managua ${fechaDoc}</span></div></div>
+  <div style="display:flex;justify-content:space-around;margin-top:60px"><div class="firma">Gerente General</div><div class="firma">Gerente Financiero</div></div>
+  <div style="display:flex;justify-content:center;margin-top:55px"><div class="firma" style="width:260px">Recibí conforme<br>${i.nombre}</div></div></div>
+  <script>window.onload=function(){
+    // Siempre en UNA sola hoja carta: si hay muchos aportes, se achica lo necesario.
+    var h=document.getElementById('hoja'),alto=11*96-2*68;
+    if(h.scrollHeight>alto)h.style.zoom=Math.max(.55,alto/h.scrollHeight);
+    setTimeout(function(){window.print();},200);};<\/script></body></html>`;
+  const w=window.open('','_blank');if(!w){alert('Permitir ventanas emergentes para imprimir.');return;}
+  w.document.open();w.document.write(html);w.document.close();
+}
+INV_HOJAS.push({k:'intereses',t:'💵 Intereses',render:renderInvHojaIntereses});
+// ---- Hoja 2: Intereses con pendientes (formato "Intereses Ricardo Mendoza") ----
+// Datos en contData.inversoresPend: {id,nombre,tasa,monto,menos:[{id,concepto,monto}],pendientes:[{id,concepto,saldo,abonado}],anulado}
+// Interés mensual = monto invertido × tasa. Neto del mes = interés − "Menos". Neto a pagar = neto del mes + pendientes.
+function ipLista(){return(contData.inversoresPend||[]).filter(i=>i&&!i.anulado);}
+function ipObj(id){return(contData.inversoresPend||[]).find(x=>x.id===id);}
+function ipCalc(i){
+  const interes=Math.round(Number(i.monto||0)*Number(i.tasa||0))/100;
+  const menos=(i.menos||[]).reduce((s,m)=>s+Number(m.monto||0),0);
+  const pend=(i.pendientes||[]).reduce((s,p)=>s+Number(p.saldo||0),0);
+  return{interes,menos,netoMes:interes-menos,pend,neto:interes-menos+pend};
+}
+function ipMesCorto(mes){const n=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sept','Oct','Nov','Dic'];return n[Number(mes.slice(5,7))-1];}
+function renderInvHojaPendientes(cont){
+  invMes=invMes||hoyLocal().slice(0,7);
+  const lista=ipLista().slice().sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||'')));
+  const cel='border:1px solid #CED4DA;padding:0';
+  const inp='width:100%;border:none;background:transparent;padding:5px 6px;font-size:12.5px;font-family:inherit;box-sizing:border-box';
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const lbl=(t,c)=>`<td style="${cel};background:var(--surface2);font-weight:700;padding:5px 6px;${c||''}">${t}</td>`;
+  const tot=(id,v,amarillo)=>`<td style="${cel};padding:5px 6px;text-align:right;font-weight:800;background:${amarillo?'#FFF200':'#DDEBF7'}" id="${id}">${fmtD(v)}</td>`;
+  const bloque=i=>{
+    const c=ipCalc(i);
+    const filas=(arr,tipo,campos)=>arr.map(r=>`<tr>${campos.map(([k,ph,num,w])=>`<td style="${cel}${w?';width:'+w:''}"><input style="${inp}${num?';text-align:right':''}" ${num?'inputmode="decimal"':''} placeholder="${ph}" value="${esc(r[k])}" onchange="ipSetFila('${i.id}','${tipo}','${r.id}','${k}',this.value)"></td>`).join('')}<td style="${cel};width:34px;text-align:center"><button class="btn btn-sm" style="padding:1px 6px;color:var(--red);border-color:transparent" title="Quitar fila" onclick="ipQuitarFila('${i.id}','${tipo}','${r.id}')"><i class="ti ti-x"></i></button></td></tr>`).join('');
+    return`<div class="card" style="padding:12px;margin-bottom:12px;max-width:760px" id="ipblk-${i.id}">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <tr>${lbl('INTERESES')}<td style="${cel}" colspan="2"><input style="${inp};font-weight:800;text-transform:uppercase" value="${esc(i.nombre)}" onchange="ipSet('${i.id}','nombre',this.value)"></td></tr>
+        <tr>${lbl('Actual')}<td style="${cel};padding:5px 6px;text-align:right;background:#DDEBF7;font-weight:700" colspan="2">${invMes.slice(0,4)}</td></tr>
+        <tr>${lbl('Mensual %','color:#1F3864')}<td style="${cel}" colspan="2"><input style="${inp};text-align:right;color:#1F3864;font-weight:700" inputmode="decimal" value="${esc(i.tasa)}" onchange="ipSet('${i.id}','tasa',this.value)"></td></tr>
+        <tr>${lbl('Monto invertido')}<td style="${cel}" colspan="2"><input style="${inp};text-align:right;font-weight:700" inputmode="decimal" value="${esc(i.monto)}" onchange="ipSet('${i.id}','monto',this.value)"></td></tr>
+        <tr>${lbl('Interés mensual')}${tot('ipint-'+i.id,c.interes)}<td style="${cel};width:34px"></td></tr>
+      </table>
+      <div style="font-weight:700;text-decoration:underline;margin:8px 0 2px;font-size:12.5px">Menos</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px"><tbody>
+        ${filas(i.menos||[],'menos',[['concepto','Concepto (ej. retención, adelanto)',false],['monto','Monto',true,'26%']])}
+        <tr><td colspan="3" style="${cel};padding:3px 6px"><button class="btn btn-sm" onclick="ipAgregarFila('${i.id}','menos')"><i class="ti ti-plus"></i> Agregar descuento</button></td></tr>
+        <tr><td style="${cel};padding:5px 6px;font-weight:800">Neto a pagar ${ipMesCorto(invMes)}</td>${tot('ipnetomes-'+i.id,c.netoMes,true)}<td style="${cel}"></td></tr>
+      </tbody></table>
+      <div style="font-weight:700;font-style:italic;text-decoration:underline;margin:10px 0 2px;font-size:12px">PAGO DE INTERESES PENDIENTES</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <thead><tr style="background:#DDEBF7"><th style="${cel};padding:5px 6px;text-align:left">Concepto</th><th style="${cel};padding:5px 6px;text-align:right;width:22%">Saldo pendiente</th><th style="${cel};padding:5px 6px;text-align:right;width:20%">Abonado (nota)</th><th style="${cel};width:34px"></th></tr></thead>
+        <tbody>${filas(i.pendientes||[],'pendientes',[['concepto','Ej. Intereses mes de abril 2026',false],['saldo','Saldo',true],['abonado','Abonado',true]])}
+          <tr><td colspan="4" style="${cel};padding:3px 6px"><button class="btn btn-sm" onclick="ipAgregarFila('${i.id}','pendientes')"><i class="ti ti-plus"></i> Agregar mes pendiente</button></td></tr>
+          <tr><td style="${cel};padding:5px 6px;font-weight:700">Total intereses pendientes</td>${tot('ippend-'+i.id,c.pend,true)}<td colspan="2" style="${cel}"></td></tr>
+          <tr><td style="${cel};padding:6px;font-weight:800;font-size:13.5px">NETO A PAGAR</td>${tot('ipneto-'+i.id,c.neto,true)}<td colspan="2" style="${cel}"></td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
+        <button class="btn btn-sm" style="color:var(--blue);border-color:var(--blue)" onclick="imprimirInteresesPend('${i.id}')"><i class="ti ti-printer"></i> Imprimir</button>
+        ${MODO==='admin'?`<button class="btn btn-sm btn-danger" onclick="ipEliminar('${i.id}')"><i class="ti ti-trash"></i> Eliminar</button>`:''}
+      </div>
+    </div>`;
+  };
+  const totN=lista.reduce((s,i)=>s+ipCalc(i).neto,0);
+  cont.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:.5rem 0 1rem">
+      <label style="font-size:12px;font-weight:600">Mes:</label>
+      <input type="month" value="${invMes}" onchange="invMes=this.value||invMes;renderInversores()" style="width:auto">
+      <span id="inv-guardando" style="font-size:11px;color:var(--text3)"></span>
+      <div style="flex:1"></div>
+      <span style="font-size:12px">Neto a pagar (todos): <b id="ip-totN" style="color:var(--green)">${fmtD(totN)}</b></span>
+      <button class="btn btn-primary" onclick="ipNuevo()"><i class="ti ti-plus"></i>Nuevo inversor</button>
+    </div>
+    ${lista.map(bloque).join('')||'<div class="empty"><i class="ti ti-coin"></i><p>Todavía no hay inversores en esta hoja. Tocá «Nuevo inversor».</p></div>'}
+    <p style="font-size:11px;color:var(--text3);margin-top:6px">Se edita directo en las celdas y se guarda solo. Interés mensual = monto invertido × tasa mensual. Neto a pagar = (interés − descuentos) + intereses pendientes. Solo informativo: no registra pagos en Caja, Bancos ni Contabilidad.</p>`;
+}
+function ipRefrescar(id){
+  const i=ipObj(id);if(!i)return;const c=ipCalc(i);
+  [['ipint-',c.interes],['ipnetomes-',c.netoMes],['ippend-',c.pend],['ipneto-',c.neto]].forEach(([p,v])=>{const el=document.getElementById(p+id);if(el)el.textContent=fmtD(v);});
+  const t=document.getElementById('ip-totN');if(t)t.textContent=fmtD(ipLista().reduce((s,x)=>s+ipCalc(x).neto,0));
+}
+function ipSet(id,campo,valor){
+  if(!puedeVerInversores())return;const i=ipObj(id);if(!i)return;
+  i[campo]=(campo==='tasa'||campo==='monto')?invNum(valor):String(valor).trim();
+  marcarEdicion(i);ipRefrescar(id);invGuardarPronto();
+}
+function ipSetFila(id,tipo,rid,campo,valor){
+  if(!puedeVerInversores())return;const i=ipObj(id);if(!i)return;
+  const r=(i[tipo]||[]).find(x=>x.id===rid);if(!r)return;
+  r[campo]=campo==='concepto'?String(valor).trim():invNum(valor);
+  marcarEdicion(i);ipRefrescar(id);invGuardarPronto();
+}
+function ipAgregarFila(id,tipo){
+  const i=ipObj(id);if(!i)return;i[tipo]=i[tipo]||[];
+  i[tipo].push(tipo==='menos'?{id:uid(),concepto:'',monto:0}:{id:uid(),concepto:'Intereses mes de ',saldo:0,abonado:''});
+  marcarEdicion(i);invGuardarPronto();renderInversores();
+}
+function ipQuitarFila(id,tipo,rid){
+  const i=ipObj(id);if(!i)return;
+  const r=(i[tipo]||[]).find(x=>x.id===rid);
+  if(r&&(Number(r.monto)||Number(r.saldo))&&!confirm(`¿Quitar "${r.concepto||'esta fila'}"?`))return;
+  i[tipo]=(i[tipo]||[]).filter(x=>x.id!==rid);marcarEdicion(i);invGuardarPronto();renderInversores();
+}
+function ipNuevo(){
+  if(!puedeVerInversores())return;
+  contData.inversoresPend=contData.inversoresPend||[];
+  const i={id:uid(),nombre:'NUEVO INVERSOR',tasa:0,monto:0,menos:[],pendientes:[],anulado:false};
+  marcarEdicion(i);contData.inversoresPend.push(i);invGuardarPronto();renderInversores();
+  setTimeout(()=>{const b=document.getElementById('ipblk-'+i.id);if(b){b.scrollIntoView({behavior:'smooth',block:'center'});const n=b.querySelector('input');if(n){n.focus();n.select();}}},100);
+}
+async function ipEliminar(id){
+  if(MODO!=='admin'){alert('⛔ Solo el Administrador puede eliminar.');return;}
+  const i=ipObj(id);if(!i)return;
+  if(!confirm(`¿Eliminar "${i.nombre}" de esta hoja?`))return;
+  i.anulado=true;marcarEdicion(i);await saveOne('contable',{id:'main',...contData});renderInversores();
+}
+function imprimirInteresesPend(id){
+  const i=ipObj(id);if(!i)return;const c=ipCalc(i);const mes=invMes||hoyLocal().slice(0,7);
+  const n=x=>Number(x||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const f=(a,b,cls)=>`<tr><td style="padding:4px 0">${a}</td><td class="${cls||''}" style="text-align:right;padding:4px 6px;width:150px">${b}</td><td style="width:90px"></td></tr>`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Intereses ${i.nombre} ${invMesTexto(mes)}</title>
+  <style>@page{size:letter portrait;margin:18mm}body{font-family:Arial,sans-serif;color:#212529;font-size:12.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  table{border-collapse:collapse;width:100%}.cel{background:#DDEBF7;font-weight:700}.ama{background:#FFF200;font-weight:800;border-bottom:3px double #212529}
+  #hoja{max-width:600px;margin:0 auto}#caja{border:1px solid #212529;padding:12px 16px}.chico td{font-size:11px;padding:3px 0}</style></head><body><div id="hoja">
+  <div style="font-size:18px;font-weight:800;margin-bottom:6px">NICAUTO</div>
+  <div id="caja">
+  <div style="font-weight:800;margin-bottom:8px">INTERESES ${String(i.nombre).toUpperCase()}</div>
+  <table>${f('<b>Actual</b>',mes.slice(0,4),'cel')}${f('<b style="color:#1F3864">mensual %</b>','<span style="color:#1F3864">'+Number(i.tasa||0).toFixed(2)+'%</span>')}${f('<b>Monto invertido</b>','<b>'+n(i.monto)+'</b>')}
+  <tr><td style="height:10px"></td></tr>${f('<b>Interés mensual</b>',n(c.interes),'cel')}</table>
+  <div style="font-weight:700;text-decoration:underline;margin-top:8px">Menos</div>
+  <table>${(i.menos||[]).map(m=>f(m.concepto||'',n(m.monto))).join('')}<tr><td style="height:8px"></td></tr>${f('<b>Neto a Pagar '+ipMesCorto(mes)+'</b>',n(c.netoMes),'ama')}</table>
+  ${(i.pendientes||[]).length?`<div style="font-weight:700;font-style:italic;text-decoration:underline;font-size:11px;margin-top:12px">PAGO DE INTERESES PENDIENTES</div>
+  <table class="chico">${(i.pendientes||[]).map(p=>`<tr><td>${String(p.concepto||'').toUpperCase()}</td><td style="text-align:right;width:150px;padding-right:6px">${n(p.saldo)}</td><td style="text-align:right;width:90px;color:#495057">${p.abonado!==''&&p.abonado!=null&&Number(p.abonado)?n(p.abonado):''}</td></tr>`).join('')}
+  <tr><td></td><td class="ama" style="text-align:right;padding:4px 6px">${n(c.pend)}</td><td></td></tr></table>`:''}
+  <table style="margin-top:12px">${f('<b>Neto a Pagar</b>',n(c.neto),'ama')}</table>
+  </div></div>
+  <script>window.onload=function(){var h=document.getElementById('hoja'),alto=11*96-2*68;if(h.scrollHeight>alto)h.style.zoom=Math.max(.55,alto/h.scrollHeight);setTimeout(function(){window.print();},200);};<\/script></body></html>`;
+  const w=window.open('','_blank');if(!w){alert('Permitir ventanas emergentes para imprimir.');return;}
+  w.document.open();w.document.write(html);w.document.close();
+}
+INV_HOJAS.push({k:'pendientes',t:'📋 Intereses con pendientes',render:renderInvHojaPendientes});
+
+function renderInversores(){
+  const bar=document.getElementById('inv-hojas-bar'),cont=document.getElementById('inv-hoja-cont');
+  if(!bar||!cont)return;
+  if(!puedeVerInversores()){cont.innerHTML='<div class="empty"><i class="ti ti-lock"></i><p>No tenés acceso a Inversores.</p></div>';bar.innerHTML='';return;}
+  if(!INV_HOJAS.length){
+    bar.innerHTML='';
+    cont.innerHTML='<div class="card" style="padding:2rem;text-align:center;color:var(--text2)"><i class="ti ti-coin" style="font-size:32px;color:var(--amber)"></i><p style="margin-top:.5rem">Aquí van a ir las hojas de Inversores.</p></div>';
+    return;
+  }
+  if(!invHojaActiva||!INV_HOJAS.some(h=>h.k===invHojaActiva))invHojaActiva=INV_HOJAS[0].k;
+  bar.innerHTML=INV_HOJAS.map(h=>`<button class="tab${h.k===invHojaActiva?' active':''}" onclick="invHojaActiva='${h.k}';renderInversores()">${h.t}</button>`).join('');
+  const hoja=INV_HOJAS.find(h=>h.k===invHojaActiva);
+  try{hoja.render(cont);}catch(e){console.error(e);cont.innerHTML='<div class="empty"><p>No se pudo mostrar esta hoja.</p></div>';}
+}
 function showPage(p){
+  if(p==='inversores'&&!puedeVerInversores())p='dashboard';
   if(p==='dashboard'&&!puedeVerDashboard()){
     // Quien no tiene acceso al Dashboard entra a la primera pantalla que sí tiene visible.
     const prim=[...document.querySelectorAll('.nav-btn')].find(b=>b.id!=='nb-dashboard'&&b.id&&b.id.startsWith('nb-')&&b.style.display!=='none');
@@ -5755,7 +6136,7 @@ function showPage(p){
   const nb=document.getElementById('nb-'+p);
   if(nb)nb.classList.add('active');
   try{safeStorage.setItem('nicauto_page',p);}catch(e){}
-  ({dashboard:renderDash,inventario:renderInv,'inv-gerencia':renderInvGer,clientes:renderCli,ventas:renderVtas,listaprecios:renderListaPrecios,chequeofisico:renderChequeoFisico,politicas:renderPoliticas,pizarras:renderPizarras,reportes:renderReportes,'ctrl-clientes':renderCtrlClientes,chat:renderChat,legal:renderLegal,operaciones:renderOperaciones,taller:renderTaller,marketing:renderMarketing,compras:renderCompras,rrhh:renderRrhh,bitacora:renderBit,contable:renderContable})[p]?.();
+  ({inversores:renderInversores,dashboard:renderDash,inventario:renderInv,'inv-gerencia':renderInvGer,clientes:renderCli,ventas:renderVtas,listaprecios:renderListaPrecios,chequeofisico:renderChequeoFisico,politicas:renderPoliticas,pizarras:renderPizarras,reportes:renderReportes,'ctrl-clientes':renderCtrlClientes,chat:renderChat,legal:renderLegal,operaciones:renderOperaciones,taller:renderTaller,marketing:renderMarketing,compras:renderCompras,rrhh:renderRrhh,bitacora:renderBit,contable:renderContable})[p]?.();
   // Si el señalador (resaltador/lápiz/flecha/texto) está activo, se reajusta al alto de la
   // página nueva — así nunca queda corto ni con espacio de más al cambiar de módulo.
   if(_annotCanvas)setTimeout(_annotResizeHandler,50);
@@ -20885,9 +21266,14 @@ function renderTimelineTaller(porVehiculoTodo,abiertosPorVehiculo){
   const DIAS_MAX_POR_PASO=2; // pasados estos días en el mismo paso, se marca en rojo de alerta
   // Solo se muestran acá los vehículos EN PROCESO — los que ya llegaron a Finalizado se van a
   // la lista de "Listos" de abajo, no se quedan mezclados en este cuadro.
-  const vehiculoIds=Object.keys(porVehiculoTodo).filter(vid=>!porVehiculoTodo[vid].some(r=>r.paso==='Finalizado'&&r.fechaFin));
+  // Solo los que YA pasaron por Recepción (sin Recepción no entran a esta lista de pasos).
+  const vehiculoIds=Object.keys(porVehiculoTodo).filter(vid=>!porVehiculoTodo[vid].some(r=>r.paso==='Finalizado'&&r.fechaFin)&&porVehiculoTodo[vid].some(r=>r.paso==='Recepción'));
   if(!vehiculoIds.length)return`<p style="text-align:center;color:var(--text3);font-size:12px;padding:1rem">No hay ningún vehículo en proceso ahora mismo.</p>`;
-  const ordenados=vehiculoIds.slice().sort((a,b)=>(porVehiculoTodo[a][0].vehiculoInfo||'').localeCompare(porVehiculoTodo[b][0].vehiculoInfo||''));
+  // Orden de RECEPCIÓN: el primero que se recepcionó va arriba y el último recepcionado queda al
+  // final de la lista.
+  const fechaRecep=vid=>{const l=porVehiculoTodo[vid]||[];const r=l.find(x=>x.paso==='Recepción');
+    return (r&&r.fechaInicio)||l.map(x=>x.fechaInicio||'').filter(Boolean).sort()[0]||'9999';};
+  const ordenados=vehiculoIds.slice().sort((a,b)=>fechaRecep(a).localeCompare(fechaRecep(b))||(porVehiculoTodo[a][0].vehiculoInfo||'').localeCompare(porVehiculoTodo[b][0].vehiculoInfo||''));
   return ordenados.map((vid,numero)=>{
     const lista=porVehiculoTodo[vid];
     const vehiculoInfo=lista[0].vehiculoInfo;
@@ -20993,6 +21379,8 @@ function iniciarPasoDesdeTimeline(vehiculoId,paso){
   // iniciando el trabajo, no necesariamente son quienes lo van a hacer. Se les pregunta a
   // quién asignárselo. Cada trabajador con su propio "¿Quién sos?" sigue igual que siempre
   // (self-service, un clic y listo).
+  // Finalizado: se asigna directo al Gerente Jordan Lopez, sin preguntar.
+  if(paso==='Finalizado'){iniciarPasoTallerRapido(vehiculoId,paso,TALLER_RESP_FINALIZADO);return;}
   if(MODO==='admin'||MODO==='operaciones2'){
     abrirAsignarTrabajadorNuevoPaso(vehiculoId,paso);
     return;
@@ -21001,8 +21389,10 @@ function iniciarPasoDesdeTimeline(vehiculoId,paso){
   if(!quienSoy){alert('Primero elegí "¿Quién sos?" arriba, en el panel "Mi Trabajo", y después volvé a hacer clic en el paso.');return;}
   iniciarPasoTallerRapido(vehiculoId,paso);
 }
+const TALLER_RESP_FINALIZADO='Jordan Lopez'; // el paso Finalizado siempre queda a nombre del Gerente Jordan Lopez
 function abrirAsignarTrabajadorNuevoPaso(vehiculoId,paso){
   if(paso==='Finalizado'&&!puedeTerminarTaller()){avisoSoloJordanTaller();return;}
+  if(paso==='Finalizado'){iniciarPasoTallerRapido(vehiculoId,paso,TALLER_RESP_FINALIZADO);return;}
   const v=vehiculos.find(x=>x.id===vehiculoId);
   document.getElementById('mtip-vehiculoid').value=vehiculoId;
   document.getElementById('mtip-paso').value=paso;
@@ -21216,7 +21606,7 @@ async function iniciarPasoTallerRapido(vehiculoId,paso,trabajadorForzado){
   await saveOne('contable',{id:'main',...contData});
   if(paso==='Finalizado')await verificarYActivarMarketing(vehiculoId);
   renderTaller();
-  alert(`✅ Iniciaste "${paso}" en ${v?v.marca+' '+v.modelo:'el vehículo'} — asignado a ${quienSoy}.`);
+  alert(paso==='Finalizado'?`✅ ${v?v.marca+' '+v.modelo:'El vehículo'} quedó FINALIZADO — asignado a ${quienSoy}.`:`✅ Iniciaste "${paso}" en ${v?v.marca+' '+v.modelo:'el vehículo'} — asignado a ${quienSoy}.`);
 }
 // Reasignar rápido a otro trabajador el paso que está llevando un vehículo (solo Admin o
 // Jefe de Taller) — se elige de una lista, no se escribe a mano (evita errores de tipeo).
@@ -21540,7 +21930,7 @@ async function guardarTallerRegistro(){
   const fecha=document.getElementById('tlr-fecha').value;
   const bitacora=document.getElementById('tlr-bitacora').value;
   const esRecepcion=paso==='Recepción';
-  const trabajador=esRecepcion?'Jefe Operativo':document.getElementById('tlr-trabajador').value;
+  const trabajador=esRecepcion?'Jefe Operativo':paso==='Finalizado'?TALLER_RESP_FINALIZADO:document.getElementById('tlr-trabajador').value;
   if(!esRecepcion&&!trabajador){alert('Elegí tu nombre (Trabajador).');return;}
   if(!paso){alert('Elegí el paso/proceso.');return;}
   if(!fecha){alert('Poné la fecha de inicio.');return;}
