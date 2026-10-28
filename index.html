@@ -27101,7 +27101,23 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
     movimientos=vehiculos.filter(v=>v.estado!=='Vendido'&&enRango(v.fechacompra)).map(v=>{const tot=costoInventarioVeh(v,hasta||undefined);return{id:v.id,fecha:v.fechacompra||'—',desc:v.marca+' '+v.modelo+' '+v.anio+' ('+v.placa+') — '+(v.estado||'')+' · compra '+fmtD(v.costo||0)+' + reparaciones '+fmtD(tot-Number(v.costo||0)),cat:'Inventario',monto:tot,signo:'+',color:'var(--green)'};}).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
   } else if(cuenta.startsWith('CxC')){
     titulo='Auxiliar — '+cuenta.replace('-',' ');
-    movimientos=cuentas.filter(ct=>ct.tipo===cuenta).map(ct=>({id:ct.id,fecha:ct.fecha,desc:ct.desc||ct.persona||'',cat:ct.tipo,monto:ct.saldo,signo:'+',color:'var(--blue)',estado:ct.estado,origenMovId:ct.origenMovId,vehId:ct.vehId,recibo:ct.reciboCancelacion,recibosPagos:(ct.historialPagos||[]).map(p=>p.recibo)}));
+    // CARGOS (la cuenta por cobrar, por su monto original) y CRÉDITOS (cada abono/cobro con su
+    // fecha, No. de recibo, concepto y monto). Saldo = cargos − créditos.
+    movimientos=[];
+    cuentas.filter(ct=>ct.tipo===cuenta).forEach(ct=>{
+      const hp=(Array.isArray(ct.historialPagos)?ct.historialPagos:[]).filter(p=>p&&Number(p.monto)>0);
+      const pagadoHist=hp.reduce((s,p)=>s+Number(p.monto||0),0);
+      const montoOrig=Number(ct.monto||0)>0?Number(ct.monto):Number(ct.saldo||0)+pagadoHist;
+      const quien=ct.persona||'';
+      movimientos.push({id:ct.id,fecha:ct.fecha,desc:ct.desc||quien||'',cat:ct.tipo,monto:montoOrig,signo:'+',color:'var(--blue)',estado:ct.estado,origenMovId:ct.origenMovId,vehId:ct.vehId,recibo:ct.recibo||'',recibosPagos:hp.map(p=>p.recibo).filter(Boolean),tipoMov:'cargo'});
+      hp.filter(p=>!hasta||!p.fecha||p.fecha<=hasta).forEach((p,ix)=>{
+        const formas=(Array.isArray(p.formas)?p.formas:[]).filter(f=>f&&Number(f.monto)>0).map(f=>(typeof CXC_DEST_TXT!=='undefined'&&CXC_DEST_TXT[f.dest])||f.dest).filter(Boolean);
+        movimientos.push({id:ct.id,fecha:p.fecha||ct.fecha,desc:`Abono${quien?' de '+quien:''}${p.concepto?' — '+p.concepto:(ct.desc?' — '+String(ct.desc).replace(/^\[Desde Rendición Operaciones\]\s*/,'').slice(0,90):'')}${formas.length?' ('+formas.join(', ')+')':''}`,cat:ct.tipo,monto:Number(p.monto),signo:'-',color:'var(--green)',estado:ct.estado,recibo:p.recibo||'',tipoMov:'abono',por:p.registradoPor||''});
+      });
+      const sinHist=montoOrig-Number(ct.saldo||0)-pagadoHist;
+      if(sinHist>0.005)movimientos.push({id:ct.id,fecha:ct.fechaPago||ct.fecha,desc:`Cobro registrado sin detalle${quien?' — '+quien:''}`,cat:ct.tipo,monto:sinHist,signo:'-',color:'var(--green)',estado:ct.estado,recibo:ct.reciboCancelacion||'',tipoMov:'abono'});
+    });
+    movimientos.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||((a.tipoMov==='cargo'?0:1)-(b.tipoMov==='cargo'?0:1)));
     if(cuenta==='CxC-Empleado'){
       // Gastos cargados a "CxC Empleados" (ej. reparación cobrada a un empleado): también son cuenta por cobrar.
       const hayCuentaPers=(contData.cuentasPersonalizadas||[]).some(c=>c.tipo==='activo'&&esCxCEmpleadosCat(c.nombre));
@@ -27189,6 +27205,17 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
     ${puedeReclasificar?`<p style="font-size:11px;color:var(--text3);margin-bottom:.5rem"><i class="ti ti-info-circle"></i> Si algún gasto quedó en la cuenta equivocada, cambiala directo en el desplegable de esa fila.</p>`:''}
     <div style="max-height:420px;overflow-y:auto">
       <table class="tbl" style="font-size:12px">
+        ${cuenta.startsWith('CxC')?(()=>{let sal=0;const tC=movimientos.filter(m=>m.tipoMov==='cargo').reduce((s,m)=>s+Number(m.monto||0),0),tA=movimientos.filter(m=>m.tipoMov==='abono').reduce((s,m)=>s+Number(m.monto||0),0);
+          return`<thead><tr><th>Fecha</th><th>No. Recibo</th><th>Concepto</th><th style="text-align:right">Cargo</th><th style="text-align:right">Crédito (abono)</th><th style="text-align:right">Saldo</th><th>Estado</th>${hayAcciones?'<th>Acciones</th>':''}</tr></thead>
+          <tbody>${movimientos.length?movimientos.map(m=>{sal+=m.tipoMov==='abono'?-Number(m.monto):Number(m.monto);return`<tr${m.tipoMov==='abono'?' style="background:#F4FCE3"':''}>
+            <td style="white-space:nowrap">${m.fecha||'—'}</td><td>${m.recibo||'—'}</td>
+            <td>${m.desc||'—'}${m.tipoMov==='cargo'?trazaHTML(m):''}${m.por?`<div style="font-size:10px;color:var(--text3)">por ${m.por}</div>`:''}</td>
+            <td style="text-align:right;font-weight:700;color:var(--blue)">${m.tipoMov==='cargo'?fmtD(m.monto):''}</td>
+            <td style="text-align:right;font-weight:700;color:var(--green)">${m.tipoMov==='abono'?fmtD(m.monto):''}</td>
+            <td style="text-align:right;font-weight:600">${fmtD(sal)}</td>
+            <td>${m.tipoMov==='cargo'?`<span class="badge badge-${m.estado==='Pagada'?'green':'amber'}" style="font-size:10px">${m.estado||'—'}</span>`:''}</td>
+            ${hayAcciones?`<td style="white-space:nowrap">${m.tipoMov==='cargo'?accionesAux(m):''}</td>`:''}</tr>`;}).join(''):`<tr><td colspan="8"><div class="empty" style="padding:1.5rem"><p>Sin movimientos</p></div></td></tr>`}</tbody>
+          <tfoot><tr style="background:var(--surface2);font-weight:800"><td colspan="3" style="text-align:right;padding:8px">TOTALES:</td><td style="text-align:right;padding:8px;color:var(--blue)">${fmtD(tC)}</td><td style="text-align:right;padding:8px;color:var(--green)">${fmtD(tA)}</td><td style="text-align:right;padding:8px;color:var(--red)">${fmtD(tC-tA)}</td><td colspan="${hayAcciones?2:1}"></td></tr></tfoot>`;})():`
         <thead><tr><th>Fecha</th><th>Descripción</th>${puedeReclasificar?'<th style="width:180px">Cuenta contable</th>':'<th>Categoría</th>'}${esAuxiliarDeGasto?'<th>Proveedor</th><th>Forma de pago</th><th>Vehículo</th>':''}<th style="text-align:right">Monto</th>${cuenta.startsWith('Cx')?'<th>Estado</th>':''}${hayAcciones?'<th>Acciones</th>':''}</tr></thead>
         <tbody>${movimientos.length?movimientos.map((m,i)=>`<tr>
           <td>${m.fecha||'—'}</td>
@@ -27205,7 +27232,7 @@ function abrirAuxiliarCuenta(cuenta,desde,hasta){
           <td style="padding:8px;text-align:right;font-weight:800;color:${total>=0?'var(--green)':'var(--red)'}">${fmtD(Math.abs(total))}</td>
           ${cuenta.startsWith('Cx')?'<td></td>':''}
           ${hayAcciones?'<td></td>':''}
-        </tr></tfoot>
+        </tr></tfoot>`}
       </table>
     </div>
   </div>`;
