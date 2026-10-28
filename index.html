@@ -13374,9 +13374,11 @@ function toggleMesCxCBanco(m){
 //  CxP: Crédito = lo que debemos (monto) · Cargo = pagos hechos.
 function cuentaPagado(c){return Math.max(0,Number(c.monto||0)-Number(c.saldo||0));}
 function celdasCargoCreditoCuenta(c){
-  const esCxP=String(c.tipo||'').startsWith('CxP');const pag=cuentaPagado(c);
-  const cargo=esCxP?pag:Number(c.monto||0),credito=esCxP?Number(c.monto||0):pag;
-  return`<td style="color:var(--blue);font-weight:600;text-align:right">${cargo?fmtD(cargo):'—'}</td><td style="color:var(--green);font-weight:600;text-align:right">${credito?fmtD(credito):'—'}</td><td style="font-weight:800;text-align:right">${fmtD(c.saldo)}</td>`;
+  const esCxP=String(c.tipo||'').startsWith('CxP');const m=Number(c.monto||0);
+  const tieneMovs=cuentaPagado(c)>0.005;
+  // Si tiene abonos/pagos, en esta fila va el monto original y el saldo corrido se ve en las filas de abajo.
+  const saldoFila=tieneMovs?m:Number(c.saldo||0);
+  return`<td style="color:var(--blue);font-weight:700;text-align:right">${esCxP?'':fmtD(m)}</td><td style="color:var(--green);font-weight:700;text-align:right">${esCxP?fmtD(m):''}</td><td style="font-weight:800;text-align:right">${fmtD(saldoFila)}</td>`;
 }
 function encabezadoCargoCredito(tipo){
   return String(tipo||'').startsWith('CxP')?'<th style="text-align:right">Cargos (pagos)</th><th style="text-align:right">Créditos (deuda)</th><th style="text-align:right">Saldo</th>'
@@ -13394,8 +13396,16 @@ function filasAbonosCxC(c,ncols){
   });
   if(sinHist>0.005)filas.push({fecha:c.fechaPago||'',recibo:c.reciboCancelacion||'',concepto:esCxP?'Pago registrado sin detalle':'Cobro registrado sin detalle',monto:sinHist,por:''});
   if(!filas.length)return'';
-  return filas.map(f=>`<tr style="background:#F4FCE3;font-size:11.5px" onclick="event.stopPropagation()"><td colspan="${ncols}" style="padding:3px 12px 3px 28px;color:var(--text2)">
-    <span style="color:var(--green);font-weight:700">↳ ${esCxP?'Cargo (pago)':'Crédito (abono)'}</span> &nbsp;${f.fecha||'—'} &nbsp;·&nbsp; Recibo <b>${f.recibo||'—'}</b> &nbsp;·&nbsp; ${f.concepto}${f.por?` <span style="color:var(--text3)">(${f.por})</span>`:''} &nbsp;·&nbsp; <b style="color:var(--green)">−${fmtD(f.monto)}</b></td></tr>`).join('');
+  const banco=ncols===12; // la tabla de CxC Bancos tiene 2 columnas extra (Días y Banco que debe)
+  let saldo=Number(c.monto||0);
+  return filas.map(f=>{saldo-=f.monto;return`<tr style="background:#F4FCE3;font-size:12px" onclick="event.stopPropagation()">
+    <td style="white-space:nowrap;color:var(--text2)">${f.fecha||'—'}</td>${banco?'<td></td><td></td>':''}
+    <td style="padding-left:18px;color:var(--green);font-weight:700">↳ ${esCxP?'Pago':'Abono'}</td>
+    <td style="font-size:12px;color:var(--text2)">${f.recibo?'Recibo <b>'+f.recibo+'</b>':'Sin recibo'}${f.concepto&&f.concepto!=='Abono'&&f.concepto!=='Pago'?' — '+f.concepto:''}${f.por?` <span style="color:var(--text3);font-size:10px">(${f.por})</span>`:''}</td>
+    <td style="text-align:right;color:var(--blue);font-weight:600">${esCxP?fmtD(f.monto):''}</td>
+    <td style="text-align:right;color:var(--green);font-weight:600">${esCxP?'':fmtD(f.monto)}</td>
+    <td style="text-align:right;font-weight:700">${fmtD(Math.max(0,saldo))}</td>
+    <td colspan="4"></td></tr>`;}).join('');
 }
 function tablaCxCBancos(tblRows){
   const todas=(contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco');
@@ -13419,9 +13429,9 @@ function tablaCxCBancos(tblRows){
     <div class="card-head"><h3><i class="ti ti-building-bank"></i> CxC — Bancos <span style="font-weight:400;font-size:12px;color:var(--text2)">— ${fmtD(total)} pendiente</span></h3>
       <div style="display:flex;gap:4px"><button class="btn btn-sm" onclick="abrirHistorialCxCBanco('')" title="Auxiliar: todas las cuentas por cobrar a bancos con sus cobros (recibos) y saldo"><i class="ti ti-list-details"></i>Auxiliar / historial</button>${botonesReporteCuentas(['CxC-Banco'],'CxC - Bancos')}<button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'CxC-Banco')"><i class="ti ti-plus"></i>Nueva</button></div></div>
     ${pend.length?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:.75rem 1rem 0">${Object.entries(porBanco).sort((a,b)=>b[1]-a[1]).map(([b,t])=>`<span onclick="abrirHistorialCxCBanco('${b==='Sin asignar'?'__sin__':b}')" title="Ver auxiliar de ${b}" style="cursor:pointer;background:${b==='Sin asignar'?'var(--red-light)':'var(--green-light)'};color:${b==='Sin asignar'?'var(--red)':'var(--green)'};border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700"><i class="ti ti-building-bank"></i> ${b}: ${fmtD(t)} <i class="ti ti-chevron-right" style="font-size:10px"></i></span>`).join('')}</div>`:''}
-    <table class="tbl"><thead><tr><th>Fecha</th><th>Días</th><th>Banco que debe</th><th>Persona/Entidad</th>${encabezadoCargoCredito('CxC-Banco')}<th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
+    <table class="tbl"><thead><tr><th>Fecha</th><th>Días</th><th>Banco que debe</th><th>Nombre</th><th>Concepto</th>${encabezadoCargoCredito('CxC-Banco')}<th>Vence</th><th>Estado</th><th>Origen</th><th></th></tr></thead>
     <tbody>${pend.length?pend.map(filaPend).join(''):'<tr><td colspan="12" style="text-align:center;color:var(--text3);padding:1rem">No hay cuentas por cobrar a bancos pendientes</td></tr>'}
-    ${pend.length?`<tr style="background:var(--surface2);font-weight:800"><td colspan="6" style="text-align:right">TOTAL POR COBRAR A BANCOS:</td><td style="text-align:right">${fmtD(total)}</td><td colspan="5"></td></tr>`:''}
+    ${pend.length?`<tr style="background:var(--surface2);font-weight:800"><td colspan="7" style="text-align:right">TOTAL POR COBRAR A BANCOS:</td><td style="text-align:right">${fmtD(total)}</td><td colspan="4"></td></tr>`:''}
     ${hist.length?`<tr><td colspan="12" style="background:var(--surface2);font-size:12px;font-weight:700;color:var(--text2);padding:8px 12px"><i class="ti ti-history"></i> Historial — cobradas o en cero (${hist.length})</td></tr>`:''}
     ${meses.map(m=>{const lista=hist.filter(c=>((c.fecha||'').slice(0,7)||'sin-fecha')===m).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));const ab=window._cxcBancoMesesAbiertos.has(m);
       return`<tr style="cursor:pointer" onclick="toggleMesCxCBanco('${m}')"><td colspan="12" style="font-size:12px;color:var(--text2);padding:6px 12px"><i class="ti ti-chevron-${ab?'down':'right'}"></i> <span style="text-transform:capitalize">${nm(m)}</span> (${lista.length})${ab?'':' — clic para ver'}</td></tr>`+(ab?lista.map(filaHist).join(''):'');}).join('')}
@@ -13540,12 +13550,12 @@ function renderCuentas(){
   };
   const tblRows=c=>`<tr style="cursor:pointer" onclick="abrirModalCuenta('${c.id}')">
     <td>${c.fecha}</td>
-    <td>${c.persona||'—'}</td>
+    <td style="font-weight:600">${c.persona||'—'}</td>
+    <td style="font-size:12px;color:var(--text2)">${c.desc||'—'}${trazaHTML({origenMovId:c.origenMovId,desc:c.desc,recibo:c.reciboCancelacion,recibosPagos:(c.historialPagos||[]).map(p=>p.recibo)},true)}</td>
     ${celdasCargoCreditoCuenta(c)}
     <td>${c.vence||'—'}</td>
     <td><span class="badge badge-${estColor[c.estado]||'gray'}">${c.estado==='Pendiente Validación'?'🕒 Pend. Validación':c.estado}</span></td>
     <td style="font-size:12px">${origenCuenta(c)}</td>
-    <td style="font-size:12px;color:var(--text2)">${c.desc||'—'}${trazaHTML({origenMovId:c.origenMovId,desc:c.desc,recibo:c.reciboCancelacion,recibosPagos:(c.historialPagos||[]).map(p=>p.recibo)},true)}</td>
     <td onclick="event.stopPropagation()"><div class="tbl-actions">
       ${c.estado==='Pendiente Validación'&&(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm btn-success" onclick="validarCxCRendicion('${c.id}')" title="Validar"><i class="ti ti-check"></i></button>`:''}
       ${c.estado!=='Pagada'&&(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm btn-success" onclick="registrarPagoCuenta('${c.id}')" title="Registrar pago"><i class="ti ti-cash"></i></button>`:''}
@@ -13567,14 +13577,14 @@ function renderCuentas(){
     const pagDe=l=>l.reduce((s,c)=>s+cuentaPagado(c),0);
     const esCxPT=String(tipo).startsWith('CxP');
     const celdasTot=(l,peso)=>{const m=montoDe(l),p=pagDe(l);return`<td style="font-weight:${peso};text-align:right;color:var(--blue)">${fmtD(esCxPT?p:m)}</td><td style="font-weight:${peso};text-align:right;color:var(--green)">${fmtD(esCxPT?m:p)}</td>`;};
-    const filaSub=g=>`<tr style="background:var(--surface2);font-size:12px"><td></td><td style="font-weight:700">Subtotal ${g.nombre} <span style="font-weight:400;color:var(--text3)">(${g.filas.length})</span></td>${celdasTot(g.filas,700)}<td style="font-weight:800;text-align:right">${fmtD(pendDe(g.filas))}</td><td colspan="5"></td></tr>`;
+    const filaSub=g=>`<tr style="background:var(--surface2);font-size:12px"><td></td><td style="font-weight:700">Subtotal ${g.nombre} <span style="font-weight:400;color:var(--text3)">(${g.filas.length})</span></td><td></td>${celdasTot(g.filas,700)}<td style="font-weight:800;text-align:right">${fmtD(pendDe(g.filas))}</td><td colspan="4"></td></tr>`;
     const cuerpo=grupos.map(g=>g.filas.map(c=>tblRows(c)+filasAbonosCxC(c,10)).join('')+filaSub(g)).join('')
-      +`<tr style="background:var(--blue-light);font-weight:800"><td></td><td>TOTAL ${String(titulo).replace(/<[^>]*>/g,'').trim()}</td>${celdasTot(filas,800)}<td style="text-align:right">${fmtD(pendDe(filas))}</td><td colspan="5" style="font-size:11px;font-weight:400;color:var(--text2)">saldo pendiente (sin contar las pagadas)</td></tr>`;
+      +`<tr style="background:var(--blue-light);font-weight:800"><td></td><td>TOTAL ${String(titulo).replace(/<[^>]*>/g,'').trim()}</td><td></td>${celdasTot(filas,800)}<td style="text-align:right">${fmtD(pendDe(filas))}</td><td colspan="4" style="font-size:11px;font-weight:400;color:var(--text2)">saldo pendiente (sin contar las pagadas)</td></tr>`;
     return`<div class="card" style="margin-bottom:1rem">
       <div class="card-head"><h3>${icono} ${titulo} <span style="font-weight:400;font-size:12px;color:var(--text2)">— ${fmtD(tot)} pendiente</span></h3>
         <div style="display:flex;gap:4px">${botonesReporteCuentas([tipo],(NOMBRE_TIPO_CUENTA[tipo]||tipo).replace('—','-'))}<button class="btn btn-sm btn-primary" onclick="abrirModalCuenta(null,'${tipo}')"><i class="ti ti-plus"></i>Nueva</button></div>
       </div>
-      <table class="tbl"><thead><tr><th>Fecha</th><th>Persona/Entidad</th>${encabezadoCargoCredito(tipo)}<th>Vence</th><th>Estado</th><th>Origen</th><th>Descripción</th><th></th></tr></thead>
+      <table class="tbl"><thead><tr><th>Fecha</th><th>Nombre</th><th>Concepto</th>${encabezadoCargoCredito(tipo)}<th>Vence</th><th>Estado</th><th>Origen</th><th></th></tr></thead>
       <tbody>${filas.length?cuerpo:'<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:1rem">Sin registros todavía</td></tr>'}</tbody></table>
     </div>`;
   };
