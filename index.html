@@ -1430,7 +1430,7 @@ body.no-delete .confirmDelete{display:none!important}
     </div>
     <div class="form-group" id="mfp-banco-box" style="display:none;background:var(--blue-light);border:1px solid #74C0FC;border-radius:var(--radius);padding:.6rem .75rem">
       <label id="mfp-banco-lbl" style="color:var(--blue)">¿A qué cuenta bancaria se depositó?</label>
-      <select id="mfp-banco"><option value="">— Sin cuenta bancaria (no afecta Bancos) —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+      <select id="mfp-banco"><option value="">— Sin cuenta bancaria (no afecta Bancos) —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option><option value="BACNIO">BAC C$</option></select>
       <div id="mfp-banco-nota" style="font-size:10px;color:var(--text2);margin-top:4px">Aparece solo en la hoja Bancos como entrada en esa cuenta, con la fecha de pago (o de ingreso).</div>
     </div>
     <div class="form-group"><label>Forma de pago</label>
@@ -1919,19 +1919,19 @@ body.no-delete .confirmDelete{display:none!important}
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">1.</span>
           <select id="mv-pf-fuente-0" onchange="mvPfCambio(0)" style="flex:1;min-width:150px"><option value="">— ¿De dónde sale? —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
-          <select id="mv-pf-banco-0" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <select id="mv-pf-banco-0" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option><option value="BACNIO">BAC C$</option></select>
           <input id="mv-pf-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el costo)" style="width:170px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">2.</span>
           <select id="mv-pf-fuente-1" onchange="mvPfCambio(1)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
-          <select id="mv-pf-banco-1" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <select id="mv-pf-banco-1" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option><option value="BACNIO">BAC C$</option></select>
           <input id="mv-pf-monto-1" type="number" step="0.01" placeholder="Monto" style="width:170px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">3.</span>
           <select id="mv-pf-fuente-2" onchange="mvPfCambio(2)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
-          <select id="mv-pf-banco-2" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option></select>
+          <select id="mv-pf-banco-2" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option><option value="BACNIO">BAC C$</option></select>
           <input id="mv-pf-monto-2" type="number" step="0.01" placeholder="Monto" style="width:170px">
         </div>
         <p style="font-size:10px;color:var(--text3);margin-top:4px"><b>Caja fuerte</b> → sale en Egresos del Reporte de Caja · <b>Fondo JM</b> → sale como Egreso en Fondos JM · <b>Banco</b> → sale como Salida en la hoja Bancos (cuentas de Don Julio M). Todo con la fecha de compra. Si es una sola forma de pago, dejá el monto vacío y toma todo el costo.</p>
@@ -2137,19 +2137,19 @@ body.no-delete .confirmDelete{display:none!important}
         <label style="font-size:11px;font-weight:700;color:var(--blue)"><i class="ti ti-building-bank"></i> Depósitos / transferencias del cliente — hasta 3, de diferentes bancos</label>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">1.</span>
-          <select id="mvt-dep-banco-0" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <select id="mvt-dep-banco-0" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
           <input id="mvt-dep-monto-0" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
           <input id="mvt-dep-ref-0" placeholder="No. recibo / ref." style="width:140px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">2.</span>
-          <select id="mvt-dep-banco-1" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <select id="mvt-dep-banco-1" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
           <input id="mvt-dep-monto-1" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
           <input id="mvt-dep-ref-1" placeholder="No. recibo / ref." style="width:140px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">3.</span>
-          <select id="mvt-dep-banco-2" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <select id="mvt-dep-banco-2" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
           <input id="mvt-dep-monto-2" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
           <input id="mvt-dep-ref-2" placeholder="No. recibo / ref." style="width:140px">
         </div>
@@ -2613,9 +2613,9 @@ body.no-delete .confirmDelete{display:none!important}
       </div>
       <div id="mcta-pf-box" style="background:#fff;border:1px dashed #8CE99A;border-radius:8px;padding:.5rem;margin-bottom:.5rem">
         <label style="font-size:11px;font-weight:700;color:var(--green)">¿Cómo se pagó? — hasta 3 formas (Cash y/o banco)</label>
-        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-0" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option></select><input id="mcta-pf-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el pago)" style="width:150px"></div>
-        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-1" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option></select><input id="mcta-pf-monto-1" type="number" step="0.01" placeholder="Monto" style="width:150px"></div>
-        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-2" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option></select><input id="mcta-pf-monto-2" type="number" step="0.01" placeholder="Monto" style="width:150px"></div>
+        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-0" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option><option value="BACNIO">🏦 BAC C$ (córdobas)</option></select><input id="mcta-pf-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el pago)" style="width:150px"></div>
+        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-1" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option><option value="BACNIO">🏦 BAC C$ (córdobas)</option></select><input id="mcta-pf-monto-1" type="number" step="0.01" placeholder="Monto" style="width:150px"></div>
+        <div style="display:flex;gap:6px;margin-top:4px"><select id="mcta-pf-dest-2" style="flex:1"><option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option><option value="BACNIO">🏦 BAC C$ (córdobas)</option></select><input id="mcta-pf-monto-2" type="number" step="0.01" placeholder="Monto" style="width:150px"></div>
         <p style="font-size:10px;color:var(--text3);margin:3px 0 0">Entra al Cash in Hand del día del pago (Cash en Caja fuerte / Cash Julio M; banco en su columna) y de ahí a la hoja Bancos.</p>
       </div>
       <p style="font-size:10px;color:var(--text2);margin:0">Si ponés un número de recibo, al guardar se registra el pago: baja el saldo y, si llega a $0, la cuenta queda <b>Pagada</b>. Si dejás el monto vacío se cancela el saldo completo.</p>
@@ -2919,7 +2919,7 @@ body.no-delete .confirmDelete{display:none!important}
           <option value="">— No registrar salida (ya se pagó por Rendición u otra vía) —</option>
           <option value="cajafuerte">💵 Cash — Caja fuerte</option>
           <option value="fondojm">💼 Cash JM (Fondos JM)</option>
-          <optgroup label="🏦 Bancos"><option value="banco:BACJM">BAC JM</option><option value="banco:BACGO">BAC GO</option><option value="banco:LAFISE">La Fise</option><option value="banco:FICOHSA">Ficohsa</option></optgroup>
+          <optgroup label="🏦 Bancos"><option value="banco:BACJM">BAC JM</option><option value="banco:BACGO">BAC GO</option><option value="banco:LAFISE">La Fise</option><option value="banco:FICOHSA">Ficohsa</option><option value="banco:BACNIO">BAC C$</option></optgroup>
         </select>
         <div style="font-size:10px;color:var(--text2);margin-top:4px"><b>Caja fuerte</b> → Egreso en el Reporte de Caja · <b>Cash JM</b> → Egreso en Fondos JM · <b>Banco</b> → Salida en la hoja Bancos. Con la fecha de la reparación. Si después se corrige o se borra la reparación, la salida se corrige sola.</div>
       </div>
@@ -8722,7 +8722,7 @@ function abrirReservaRapida(vid,esConsig){
 }
 // Reserva: si el anticipo no fue en efectivo, se elige el banco donde entró (va a esa columna
 // en Cash in Hand y de ahí a Bancos); si lo tiene un tercero, queda como CxC Tercero.
-const RESR_BANCOS_ING=[{k:'bac',t:'BAC (D. Julio)'},{k:'bacgisselle',t:'BAC Gisselle'},{k:'lafise',t:'La Fise (D. Julio)'},{k:'ficohsa',t:'Ficohsa (D. Julio)'},{k:'banpro',t:'Banpro-Norvin'},{k:'credex',t:'Credex'}];
+const RESR_BANCOS_ING=[{k:'bac',t:'BAC (D. Julio)'},{k:'bacgisselle',t:'BAC Gisselle'},{k:'lafise',t:'La Fise (D. Julio)'},{k:'ficohsa',t:'Ficohsa (D. Julio)'},{k:'bacnio',t:'BAC C$ (D. Julio)'},{k:'banpro',t:'Banpro-Norvin'},{k:'credex',t:'Credex'}];
 // El campo "¿Dónde entró el dinero?" se ve SIEMPRE: Caja fuerte, un banco, o CxC Tercero.
 // Va de la mano con la Forma de pago (si elegís un banco con "Efectivo", pasa a Transferencia).
 function resrLlenarDestinos(){
@@ -11047,7 +11047,7 @@ function autoFill(){
 }
 
 // Depósitos del cliente en la venta (hasta 3, de diferentes bancos)
-const CD_BANCO_DEP_COL={'BAC':'bac','BAC GO':'bacgisselle','La Fise':'lafise','Ficohsa':'ficohsa','Banpro':'banpro','Credex':'credex'};
+const CD_BANCO_DEP_COL={'BAC':'bac','BAC GO':'bacgisselle','La Fise':'lafise','Ficohsa':'ficohsa','BAC C$':'bacnio','Banpro':'banpro','Credex':'credex'};
 function mvtLeerDepositos(){
   const res=[];
   [0,1,2].forEach(i=>{
@@ -12826,8 +12826,8 @@ function abrirModalCuenta(id,tipoDefault){
   openOv('ov-cuenta');
 }
 // ---- Cobros de CxC: cómo se pagó (Cash y/o bancos) → Cash in Hand → Bancos ----
-const CXC_DEST_COL={cajafuerte:'cajafuerte',cashjulio:'cashjulio',BACJM:'bac',BACGO:'bacgisselle',LAFISE:'lafise',FICOHSA:'ficohsa'};
-const CXC_DEST_TXT={cajafuerte:'Cash Caja fuerte',cashjulio:'Cash Julio M',BACJM:'BAC JM',BACGO:'BAC GO',LAFISE:'La Fise',FICOHSA:'Ficohsa'};
+const CXC_DEST_COL={cajafuerte:'cajafuerte',cashjulio:'cashjulio',BACJM:'bac',BACGO:'bacgisselle',LAFISE:'lafise',FICOHSA:'ficohsa',BACNIO:'bacnio'};
+const CXC_DEST_TXT={cajafuerte:'Cash Caja fuerte',cashjulio:'Cash Julio M',BACJM:'BAC JM',BACGO:'BAC GO',LAFISE:'La Fise',FICOHSA:'Ficohsa',BACNIO:'BAC C$'};
 function mctaLeerFormas(total){
   const res=[];
   [0,1,2].forEach(i=>{
@@ -12863,7 +12863,7 @@ function editarFormasPagoCuenta(cuentaId,ix){
   const f=Array.isArray(p.formas)?p.formas:[];
   ov.innerHTML=`<div class="modal" style="max-width:520px"><div class="modal-head"><h3><i class="ti ti-cash"></i> ¿Cómo se pagó?</h3><button class="btn-ghost btn" onclick="closeOv('ov-formas-cxc')"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><p style="font-size:12px;margin-bottom:.5rem"><b>${c.persona||''}</b> — pago del ${p.fecha} por <b>${fmtD(p.monto)}</b>${p.recibo?' — Recibo '+p.recibo:''}</p>
-    ${[0,1,2].map(i=>`<div style="display:flex;gap:6px;margin-top:4px"><select id="fcx-dest-${i}" style="flex:1">${'<option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option>'.replace('value="'+((f[i]||{}).dest||'')+'"','value="'+((f[i]||{}).dest||'')+'" selected')}</select><input id="fcx-monto-${i}" type="number" step="0.01" value="${f[i]?f[i].monto:''}" placeholder="${i?'Monto':'Monto (vacío = todo)'}" style="width:140px"></div>`).join('')}
+    ${[0,1,2].map(i=>`<div style="display:flex;gap:6px;margin-top:4px"><select id="fcx-dest-${i}" style="flex:1">${'<option value="">— Forma —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash Julio M</option><option value="BACJM">🏦 Banco BAC JM</option><option value="BACGO">🏦 Banco BAC GO</option><option value="LAFISE">🏦 Banco La Fise</option><option value="FICOHSA">🏦 Banco Ficohsa</option><option value="BACNIO">🏦 BAC C$ (córdobas)</option>'.replace('value="'+((f[i]||{}).dest||'')+'"','value="'+((f[i]||{}).dest||'')+'" selected')}</select><input id="fcx-monto-${i}" type="number" step="0.01" value="${f[i]?f[i].monto:''}" placeholder="${i?'Monto':'Monto (vacío = todo)'}" style="width:140px"></div>`).join('')}
     <p style="font-size:10px;color:var(--text3);margin-top:6px">Se refleja en el Cash in Hand del ${p.fecha} y de ahí en la hoja Bancos.</p></div>
     <div class="modal-foot"><button class="btn" onclick="closeOv('ov-formas-cxc')">Cancelar</button><button class="btn btn-primary" onclick="guardarFormasPagoCuenta('${cuentaId}',${ix})"><i class="ti ti-check"></i> Guardar</button></div></div>`;
   openOv('ov-formas-cxc');
@@ -13033,8 +13033,15 @@ async function agregarTodosEmpleadosCxC(){
 // en la columna de un banco entran SOLOS aquí (se leen de la caja, no se copian, así que si se
 // corrige la caja se corrige el banco). El gran total de los 4 es el saldo de Bancos del Balance.
 // Salidas/pagos e ingresos manuales: solo el Administrador y Don Julio.
-const BANCOS_CTAS=[{k:'BACJM',t:'BAC JM'},{k:'BACGO',t:'BAC GO'},{k:'LAFISE',t:'La Fise'},{k:'FICOHSA',t:'Ficohsa'}];
-const CD_COL_BANCO={bac:'BACJM',bacgisselle:'BACGO',lafise:'LAFISE',ficohsa:'FICOHSA'};
+const BANCOS_CTAS=[{k:'BACJM',t:'BAC JM'},{k:'BACGO',t:'BAC GO'},{k:'LAFISE',t:'La Fise'},{k:'FICOHSA',t:'Ficohsa'},{k:'BACNIO',t:'BAC C$',moneda:'NIO'}];
+const CD_COL_BANCO={bac:'BACJM',bacgisselle:'BACGO',lafise:'LAFISE',ficohsa:'FICOHSA',bacnio:'BACNIO'};
+// Cuenta en córdobas (BAC C$): su saldo inicial y sus movimientos manuales se registran en C$.
+// Lo que llega en automático desde Caja, Compras, Reparaciones o Fondos JM viene en US$ y se
+// convierte a C$ con la tasa del sistema. En el Balance se suma convertida a US$.
+function bancoEsNIO(k){return(BANCOS_CTAS.find(b=>b.k===k)||{}).moneda==='NIO';}
+function bancoTasa(){try{return Number(getRendicionConfig().tasaCambio||36.5)||36.5;}catch(e){return 36.5;}}
+function fmtBanco(k,n){return bancoEsNIO(k)?'C$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):fmtD(n);}
+function bancoSaldoUSD(k,hasta){const s=bancoSaldo(k,hasta);return bancoEsNIO(k)?s/bancoTasa():s;}
 function puedeVerBancos(){return['admin','gerente1','gerente2','coordinador'].includes(MODO);}
 function puedeMoverBancos(){return MODO==='admin'||MODO==='gerente1';}
 function bancoSaldoInicial(k){const x=(contData.bancosSaldoInicial||[]).find(b=>b.id===k);return x?{monto:Number(x.monto||0),fecha:x.fecha||''}:{monto:0,fecha:''};}
@@ -13109,7 +13116,9 @@ function bancosMovsAutoVisibles(){
 }
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
-  return[...bancosMovsAutoVisibles().filter(m=>m.cuenta===k),...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  let auto=bancosMovsAutoVisibles().filter(m=>m.cuenta===k);
+  if(bancoEsNIO(k)){const t=bancoTasa();auto=auto.map(m=>({...m,montoUSD:Number(m.monto||0),monto:Math.round(Number(m.monto||0)*t*100)/100,desc:(m.desc||'')+` (US$ ${Number(m.monto||0).toLocaleString('en-US',{minimumFractionDigits:2})} × ${t})`}));}
+  return[...auto,...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
 }
 function bancoSaldo(k,hasta){
   const ini=bancoSaldoInicial(k);
@@ -13222,7 +13231,7 @@ function fondosJMMovsAuto(){return[...fondosJMMovsCompras(),...fondosJMMovsIngre
 function cajaFuerte2Saldo(hasta){
   return[...(contData.fondosJM||[]),...fondosJMMovsAuto()].filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
 }
-function bancosTotal(hasta){return BANCOS_CTAS.reduce((s,b)=>s+bancoSaldo(b.k,hasta),0);}
+function bancosTotal(hasta){return BANCOS_CTAS.reduce((s,b)=>s+bancoSaldoUSD(b.k,hasta),0);}
 function renderBancos(){
   const el=document.getElementById('cont-bancos');if(!el)return;
   const puede=puedeMoverBancos();
@@ -13238,7 +13247,7 @@ function renderBancos(){
     return`<div class="card" style="margin-bottom:1rem">
       <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <h3 style="cursor:pointer" onclick="window._bancoAbierto['${b.k}']=${!abierto};renderBancos()"><i class="ti ti-chevron-${abierto?'down':'right'}"></i> <i class="ti ti-building-bank"></i> ${b.t}
-          <span style="font-weight:800;color:${saldo>=0?'var(--green)':'var(--red)'};margin-left:8px">${fmtD(saldo)}</span></h3>
+          <span style="font-weight:800;color:${saldo>=0?'var(--green)':'var(--red)'};margin-left:8px">${fmtBanco(b.k,saldo)}</span>${bancoEsNIO(b.k)?`<span style="font-weight:400;font-size:11px;color:var(--text2);margin-left:6px">≈ ${fmtD(saldo/bancoTasa())} (tasa ${bancoTasa()})</span>`:''}</h3>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           ${puede?`<button class="btn btn-sm" onclick="bancoSaldoInicialModal('${b.k}')"><i class="ti ti-flag"></i>Saldo inicial</button>
           <button class="btn btn-sm btn-primary" onclick="bancoMovModal('${b.k}','ingreso')"><i class="ti ti-plus"></i>Ingreso</button>
@@ -13246,16 +13255,16 @@ function renderBancos(){
         </div>
       </div>
       ${abierto?`<div style="display:flex;gap:1rem;flex-wrap:wrap;padding:.5rem 1rem;font-size:12px;color:var(--text2)">
-        <span>Saldo inicial${ini.fecha?' ('+ini.fecha+')':''}: <b>${fmtD(ini.monto)}</b></span><span>Ingresos: <b style="color:var(--green)">${fmtD(ing)}</b></span><span>Salidas: <b style="color:var(--red)">${fmtD(egr)}</b></span></div>
+        <span>Saldo inicial${ini.fecha?' ('+ini.fecha+')':''}: <b>${fmtBanco(b.k,ini.monto)}</b></span><span>Ingresos: <b style="color:var(--green)">${fmtBanco(b.k,ing)}</b></span><span>Salidas: <b style="color:var(--red)">${fmtBanco(b.k,egr)}</b></span></div>
       <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
         <thead><tr><th>Fecha</th><th>Descripción</th><th>Ref. / Recibo</th><th style="text-align:right">Ingreso</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th><th></th></tr></thead>
         <tbody>${filas.length?filas.map(m=>`<tr>
           <td style="white-space:nowrap">${m.fecha||'—'}</td>
           <td>${m.desc||''}${m.autoCompra?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':m.autoFJ?' <span class="badge badge-purple" style="font-size:9px">Desde Fondos JM</span>':m.autoRep?' <span class="badge badge-amber" style="font-size:9px">Reparación</span>':m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
           <td>${m.ref||'—'}</td>
-          <td style="text-align:right;color:var(--green)">${m.tipo==='ingreso'?fmtD(m.monto):''}</td>
-          <td style="text-align:right;color:var(--red)">${m.tipo!=='ingreso'?fmtD(m.monto):''}</td>
-          <td style="text-align:right;font-weight:700">${fmtD(m.saldo)}</td>
+          <td style="text-align:right;color:var(--green)">${m.tipo==='ingreso'?fmtBanco(b.k,m.monto):''}</td>
+          <td style="text-align:right;color:var(--red)">${m.tipo!=='ingreso'?fmtBanco(b.k,m.monto):''}</td>
+          <td style="text-align:right;font-weight:700">${fmtBanco(b.k,m.saldo)}</td>
           <td style="white-space:nowrap">${m.auto&&puede?`${m.autoRep?`<button class="btn btn-sm" onclick="abrirReparaciones('${m.repVid}')" title="Modificar: corregir en Reparaciones (🔧) del vehículo"><i class="ti ti-edit"></i></button>`:m.autoFJ?`<button class="btn btn-sm" onclick="abrirModalFondoPersonal('fondosJM','${m.fjId}')" title="Modificar: corregir el traslado en Fondos JM"><i class="ti ti-edit"></i></button>`:m.autoCompra?`<button class="btn btn-sm" onclick="abrirModalVehiculo('${m.vehId}')" title="Modificar: corregir banco o monto en la compra del vehículo"><i class="ti ti-edit"></i></button>`:`<button class="btn btn-sm" onclick="cdFecha='${m.fecha}';showContTab('auxiliares')" title="Modificar: abrir el Cash in Hand del ${m.fecha}, de donde viene este movimiento"><i class="ti ti-edit"></i></button>`} <button class="btn btn-sm btn-danger" onclick="bancoOcultarAuto('${m.id}')" title="Quitar este movimiento de la hoja Bancos"><i class="ti ti-trash"></i></button>`:''}${!m.auto&&puede?`<div class="tbl-actions"><button class="btn btn-sm" onclick="bancoMovModal('${b.k}','${m.tipo}','${m.id}')"><i class="ti ti-edit"></i></button><button class="btn btn-sm btn-danger" onclick="bancoAnularMov('${m.id}')"><i class="ti ti-trash"></i></button></div>`:''}</td>
         </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Sin movimientos</td></tr>'}</tbody>
       </table></div>`:''}
@@ -13266,8 +13275,8 @@ function renderBancos(){
   el.innerHTML=`${encabezadoNicautoHTML('Bancos','Auxiliares por cuenta bancaria')}
     ${nQuit&&puede?`<div style="text-align:right;margin-bottom:.5rem"><button class="btn btn-sm" onclick="bancoVerQuitados()"><i class="ti ti-trash"></i> Quitados (${nQuit})</button></div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1rem">
-      ${BANCOS_CTAS.map(b=>`<div class="stat-card"><div class="stat-label">${b.t}</div><div class="stat-value" style="font-size:18px;color:${bancoSaldo(b.k)>=0?'var(--green)':'var(--red)'}">${fmtD(bancoSaldo(b.k))}</div></div>`).join('')}
-      <div class="stat-card" style="border:2px solid var(--blue)"><div class="stat-label">GRAN TOTAL BANCOS</div><div class="stat-value stat-blue" style="font-size:20px">${fmtD(total)}</div></div>
+      ${BANCOS_CTAS.map(b=>`<div class="stat-card"><div class="stat-label">${b.t}</div><div class="stat-value" style="font-size:18px;color:${bancoSaldo(b.k)>=0?'var(--green)':'var(--red)'}">${fmtBanco(b.k,bancoSaldo(b.k))}</div>${bancoEsNIO(b.k)?`<div style="font-size:11px;color:var(--text2)">≈ ${fmtD(bancoSaldoUSD(b.k))}</div>`:''}</div>`).join('')}
+      <div class="stat-card" style="border:2px solid var(--blue)"><div class="stat-label">GRAN TOTAL BANCOS (US$)</div><div class="stat-value stat-blue" style="font-size:20px">${fmtD(total)}</div></div>
     </div>
     <p style="font-size:11px;color:var(--text2);margin-bottom:1rem"><i class="ti ti-info-circle"></i> Lo que en el Reporte de Caja entra en las columnas <b>BAC (D.Julio) → BAC JM</b>, <b>BAC Gisselle → BAC GO</b>, <b>La Fise</b> y <b>Ficohsa</b> aparece aquí solo. El gran total es el saldo de <b>Bancos</b> en el Balance General.${puede?'':' Solo el Administrador y Don Julio pueden registrar movimientos.'}</p>
     ${tarjetas}`;
@@ -13287,7 +13296,7 @@ function bancoMovModal(k,tipo,editId){
   const nombre=(BANCOS_CTAS.find(b=>b.k===k)||{}).t;
   bancoModal(`${tipo==='ingreso'?'Ingreso a':'Salida / pago de'} ${nombre}`,`
     <div class="form-row"><div class="form-group"><label>Fecha</label><input type="date" id="bn-fecha" value="${m?.fecha||hoyLocal()}"></div>
-    <div class="form-group"><label>Monto (USD $)</label><input type="number" step="0.01" id="bn-monto" value="${m?.monto||''}"></div></div>
+    <div class="form-group"><label>Monto (${bancoEsNIO(k)?'C$ córdobas':'USD $'})</label><input type="number" step="0.01" id="bn-monto" value="${m?.monto||''}"></div></div>
     <div class="form-group"><label>Descripción</label><input id="bn-desc" value="${m?.desc||''}" placeholder="${tipo==='ingreso'?'Ej. Depósito de financiamiento La Fise — Venta Verna':'Ej. Pago de tarjeta, transferencia a proveedor…'}"></div>
     <div class="form-group"><label>Referencia / No. de transferencia</label><input id="bn-ref" value="${m?.ref||''}"></div>
     <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="bn-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px">${m?.nota||''}</textarea></div>`,
@@ -13340,7 +13349,7 @@ function bancoSaldoInicialModal(k){
   const ini=bancoSaldoInicial(k);
   bancoModal(`Saldo inicial — ${(BANCOS_CTAS.find(b=>b.k===k)||{}).t}`,`
     <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">El saldo que tenía la cuenta al empezar a llevarla en el sistema. Después se mueve solo con los ingresos y salidas.</p>
-    <div class="form-row"><div class="form-group"><label>Saldo (USD $)</label><input type="number" step="0.01" id="bn-ini" value="${ini.monto||''}"></div>
+    <div class="form-row"><div class="form-group"><label>Saldo (${bancoEsNIO(k)?'C$ córdobas':'USD $'})</label><input type="number" step="0.01" id="bn-ini" value="${ini.monto||''}"></div>
     <div class="form-group"><label>A la fecha</label><input type="date" id="bn-ini-fecha" value="${ini.fecha||hoyLocal()}"></div></div>`,
   async()=>{
     contData.bancosSaldoInicial=(contData.bancosSaldoInicial||[]).filter(b=>b.id!==k);
@@ -14002,7 +14011,7 @@ function renderBalance(){
     +fS('Caja Fuerte # 2 (Fondos JM)',cajaFuerte2,"showContTab('fondosjm')")
     +cajaHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
     +fM('Bancos',totBanco,"showContTab('bancos')")
-    +BANCOS_CTAS.map(b=>fS(b.t,bancoSaldo(b.k,fechaCorte||undefined))).join('')
+    +BANCOS_CTAS.map(b=>fS(b.t+(bancoEsNIO(b.k)?` (${fmtBanco(b.k,bancoSaldo(b.k,fechaCorte||undefined))} a ${bancoTasa()})`:''),bancoSaldoUSD(b.k,fechaCorte||undefined))).join('')
     +bancoHijas.map(c=>fS(c.nombre,sp(c),aux(c.nombre))).join('')
     +fM('Cuentas por cobrar',totCxC,bgDet?'':`localStorage.setItem('bgConSubcuentas','1');renderBalance()`)
     +subCxC.map(([l,v,k])=>fS(l,v,aux(k))+(k==='CxC-Banco'?Object.entries(bancosPorCxC).map(([b,t])=>fS(b,t,`abrirHistorialCxCBanco('${b==='Sin asignar'?'__sin__':b}')`,2)).join(''):'')).join('')
@@ -19001,6 +19010,7 @@ const CD_COLS=[
   {k:'lafise',t:'La Fise',g:'banco',sub:'D.Julio'},
   {k:'bac',t:'BAC',g:'banco',sub:'D.Julio'},
   {k:'ficohsa',t:'Ficohsa',g:'banco',sub:'D.Julio'},
+  {k:'bacnio',t:'BAC C$',g:'banco',sub:'D.Julio',opcional:true},
   {k:'banpro',t:'Banpro-Norvin',g:'banco',sub:''},
   {k:'credex',t:'Credex',g:'banco',sub:'',opcional:true},
   {k:'sinbanco',t:'Banco s/asignar',g:'banco',sub:'',opcional:true},
