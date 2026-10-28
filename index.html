@@ -13071,6 +13071,17 @@ function bancosMovsDesdeCompras(){
   });
   return res;
 }
+// Depósitos de la caja a una cuenta bancaria propia (Salida de caja → INGRESO al banco) y retiros
+// del banco hacia la caja (Ingreso de caja → SALIDA del banco). Se corrigen solos desde la caja.
+function bancosMovsDesdeCajaTraslados(){
+  return(contData.cajaDiariaMovs||[]).filter(m=>m&&!m.anulado&&m.trasladoBanco&&BANCOS_CTAS.some(b=>b.k===m.trasladoBanco)).map(m=>{
+    const partes=Array.isArray(m.partes)&&m.partes.length?m.partes:[{col:m.col,monto:m.monto}];
+    const efectivo=partes.filter(p=>p.col!=='banco').reduce((s,p)=>s+Number(p.monto||0),0)||Number(m.monto||0);
+    const dep=m.tipo==='egreso';
+    return{id:'CJT_'+m.id,cuenta:m.trasladoBanco,fecha:m.fecha,tipo:dep?'ingreso':'egreso',monto:efectivo,auto:true,
+      desc:`Caja ${m.fecha}: ${dep?'Depósito desde':'Retiro hacia'} la caja — ${m.desc||''}`,ref:m.recibo||'',nota:m.nota||''};
+  }).filter(x=>x.monto>0);
+}
 // Salidas automáticas por reparaciones pagadas con transferencia (banco elegido en la reparación)
 function bancosMovsDesdeReparaciones(){
   return reparacionesConPago().filter(x=>x.rep.fuentePago==='banco'&&BANCOS_CTAS.some(b=>b.k===x.rep.bancoPago)).map(x=>({
@@ -13094,7 +13105,7 @@ function bancosMovsDesdeFondosJM(){
 function bancosOcultosSet(){return new Set((contData.bancosOcultos||[]).filter(x=>x&&!x.restaurado).map(x=>x.id));}
 function bancosMovsAutoVisibles(){
   const oc=bancosOcultosSet();
-  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...bancosMovsDesdeFondosJM(),...bancosMovsDesdeReparaciones()].filter(m=>!oc.has(m.id));
+  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...bancosMovsDesdeFondosJM(),...bancosMovsDesdeReparaciones(),...bancosMovsDesdeCajaTraslados()].filter(m=>!oc.has(m.id));
 }
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
@@ -19259,7 +19270,7 @@ function cdHojaHTML(h,enPantalla){
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
     <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
     <tbody>${(()=>{const egrCaja=h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'));return egrCaja;})().length?cdOrdenarPorRecibo(h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'))).map(e=>`<tr>
-      <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='banco'?'🏦 '+((BANCOS_CTAS.find(b=>b.k===e.bancoCta)||{}).t||'Banco')+(e.forma?' — '+e.forma:''):(e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte')}${e.col!=='banco'&&e.forma&&e.forma!=='Cash'?' — '+e.forma:''}</td>
+      <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.trasladoBanco?` <span style="font-size:9px;background:#E7F5FF;color:#1971C2;border-radius:8px;padding:1px 6px">→ ${(BANCOS_CTAS.find(b=>b.k===e.trasladoBanco)||{}).t||e.trasladoBanco}</span>`:''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='banco'?'🏦 '+((BANCOS_CTAS.find(b=>b.k===e.bancoCta)||{}).t||'Banco')+(e.forma?' — '+e.forma:''):(e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte')}${e.col!=='banco'&&e.forma&&e.forma!=='Cash'?' — '+e.forma:''}</td>
       <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
       :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
   </table>
@@ -19426,6 +19437,12 @@ function cdAbrirMov(tipo,editId){
       <span><b>Es comisión directa (venta externa)</b><br>Se suma en Ventas → "Comisiones directas" y en el Estado de Resultado → 4002 Otros ingresos.</span>
     </label>`:''}
     <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="cd-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px" placeholder="Ej. el cliente pagó en dos partes; recibo físico extraviado…">${(m?.nota)||''}</textarea></div>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--blue-light);border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer;margin-bottom:.5rem">
+      <input type="checkbox" id="cd-trasbanco" ${m?.trasladoBanco?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-trasbanco-wrap').style.display=this.checked?'block':'none'">
+      <span><b>${tipo==='egreso'?'Depósito a cuenta bancaria propia':'Retiro de cuenta bancaria propia'}</b><br>${tipo==='egreso'?'Sale de la caja y entra como INGRESO en esa cuenta de la hoja Bancos.':'Entra a la caja y sale como SALIDA de esa cuenta en la hoja Bancos.'}</span>
+    </label>
+    <div class="form-group" id="cd-trasbanco-wrap" style="display:${m?.trasladoBanco?'block':'none'};margin-top:-.25rem"><label>${tipo==='egreso'?'¿En qué cuenta se depositó?':'¿De qué cuenta se retiró?'}</label>
+      <select id="cd-trasbanco-cta">${BANCOS_CTAS.map(b=>`<option value="${b.k}" ${m?.trasladoBanco===b.k?'selected':''}>${b.t}</option>`).join('')}</select></div>
     <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--purple-light);border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer">
       <input type="checkbox" id="cd-trasladojm" ${m?.trasladoJM?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-fjm-wrap').style.display=this.checked?'block':'none'">
       <span><b>Traslado de fondos con Don Julio (Fondos JM)</b><br>El monto también se registra en la hoja Fondos JM.</span>
@@ -19444,6 +19461,7 @@ function cdAbrirMov(tipo,editId){
     if(partes.some(p=>!p.dest)){alert('En cada forma de pago elegí a dónde entra / de dónde sale.');return;}
     if(partes.some(p=>!(p.monto>0))){alert('Poné el monto de cada forma de pago (o dejá una sola sin monto).');return;}
     const sumaP=partes.reduce((s,p)=>s+p.monto,0);
+    if(document.getElementById('cd-trasbanco')?.checked&&document.getElementById('cd-trasladojm')?.checked){alert('Elegí solo una: depósito/retiro de banco O traslado con Don Julio.');return;}
     if(Math.abs(sumaP-monto)>0.009&&!confirm(`Las formas de pago suman ${fmtD(sumaP)} y el monto es ${fmtD(monto)}.\n\n¿Guardar con el total ${fmtD(sumaP)}?`))return;
     const partesObj=partes.map(p=>{const banco=!esIng&&p.forma!=='Cash';return{forma:p.forma,col:banco?'banco':p.dest,bancoCta:banco?p.dest:'',monto:Number(p.monto.toFixed(2))};});
     const p0=partesObj[0];
@@ -19453,6 +19471,7 @@ function cdAbrirMov(tipo,editId){
       monto:Number(sumaP.toFixed(2)),col:p0.col,forma:p0.forma,bancoCta:p0.bancoCta,partes:partesObj,registradoPor:m?.registradoPor||getNombreUsuario(),
       nota:cdVal('cd-nota'),
       trasladoJM:!!document.getElementById('cd-trasladojm')?.checked,
+      trasladoBanco:document.getElementById('cd-trasbanco')?.checked?(document.getElementById('cd-trasbanco-cta')?.value||''):'',
       comisionDirecta:esIng&&!!document.getElementById('cd-comdir')?.checked,
       fjmTipo:document.getElementById('cd-trasladojm')?.checked?(document.getElementById('cd-fjmtipo')?.value||''):''};
     const i=contData.cajaDiariaMovs.findIndex(x=>x.id===obj.id);
