@@ -3927,13 +3927,70 @@ async function guardarPoliticasDocs(){
     return false;
   }
 }
+// Carga de Prospectos / Control de Piso a prueba de fallas: si el servidor responde con error
+// (no solo si se cae la red) se reintenta; si igual falla se marca y se sigue reintentando en
+// segundo plano hasta lograrlo, y entonces se vuelve a dibujar la lista sola.
+async function _fetchCtrlClientes(){
+  const r=await fetch(`${SB_URL}/rest/v1/ctrlclientes?select=*`,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY},cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const rows=await r.json();
+  if(!Array.isArray(rows))throw new Error('respuesta inválida');
+  return rows.map(x=>x.data).filter(Boolean);
+}
+async function cargarCtrlClientesSeguro(){
+  for(let i=0;i<4;i++){
+    try{const r=await _fetchCtrlClientes();window._ctrlCargaFallo=false;return r;}
+    catch(e){console.warn('Prospectos: intento',i+1,'falló',e);await new Promise(z=>setTimeout(z,1500*(i+1)));}
+  }
+  window._ctrlCargaFallo=true;
+  programarReintentoCtrlClientes();
+  return[];
+}
+function programarReintentoCtrlClientes(){
+  if(window._ctrlReintentoTimer)return;
+  window._ctrlReintentoTimer=setTimeout(async()=>{
+    window._ctrlReintentoTimer=null;
+    try{
+      const cc=await _fetchCtrlClientes();
+      window._ctrlCargaFallo=false;
+      const idsLoc=new Set([...ctrlClientes,...controlPiso].map(x=>x.id));
+      // Se respeta lo que se haya registrado en esta pantalla mientras tanto
+      cc.forEach(x=>{if(x&&!idsLoc.has(x.id)){(x.tipoReg==='piso'?controlPiso:ctrlClientes).push(x);}});
+      try{renderCtrlClientesLP();}catch(e){}
+    }catch(e){programarReintentoCtrlClientes();}
+  },15000);
+}
+// Si alguna pieza (Taller, Gastos, Compras, etc.) no se pudo cargar al abrir el sistema porque el
+// servidor estaba lento, se vuelve a intentar sola cada 15 segundos hasta traerla, y se vuelve a
+// dibujar la pantalla abierta. Lo que se haya registrado en esta pantalla mientras tanto se respeta.
+const PIEZAS_REINTENTO={'Taller':{id:'taller_data',campo:'tallerRegistros'},'Gastos':{id:'gastos_data',campo:'gastos'},'Recibos':{id:'recibos_data',campo:'recibos'},'Compras':{id:'compras_data',campo:'compras'},'Cuentas':{id:'cuentas_data',campo:'cuentas'},'Historial de Rendiciones':{id:'rendicion_historial',campo:'rendicionHistorial'},'Historial de Chequeo Físico':{id:'chequeo_historial',campo:'historialChequeoFisico'}};
+function reintentarPiezasFallidas(pendientes){
+  if(!pendientes.length)return;
+  setTimeout(async()=>{
+    const quedan=[];
+    for(const nombre of pendientes){
+      const pz=PIEZAS_REINTENTO[nombre];if(!pz)continue;
+      const fila=await obtenerFilaRemotaPorId('contable',pz.id,2);
+      if(fila&&Array.isArray(fila[pz.campo])){
+        const remoto=fila[pz.campo];const ids=new Set(remoto.map(x=>x&&x.id));
+        const localesNuevos=(contData[pz.campo]||[]).filter(x=>x&&x.id&&!ids.has(x.id));
+        contData[pz.campo]=[...remoto,...localesNuevos];
+        try{if(['gastos','recibos','compras','cuentas','tallerRegistros'].includes(pz.campo))setBaseLista(pz.campo,remoto);}catch(e){}
+      }else quedan.push(nombre);
+    }
+    try{const pg=safeStorage.getItem('nicauto_page');if(pg)showPage(pg);}catch(e){}
+    if(quedan.length)reintentarPiezasFallidas(quedan);
+  },15000);
+}
 async function load(){
   try{
     document.getElementById('nb-dashboard').textContent='⏳ Cargando...';
     const [v,c,vt,b,co,vg,cc,msg]=await Promise.all([
       sbGet('vehiculos'),sbGet('clientes'),sbGet('ventas'),sbGet('bitacora'),sbGetMainContable(),
       sbGet('vehgerencia').catch(()=>[]),
-      sbGet('ctrlclientes').catch(()=>[]),
+      // Prospectos / Control de Piso: si falla la carga se reintenta, y si igual falla se avisa
+      // (antes quedaba la lista vacía en silencio y parecía que se habían borrado).
+      cargarCtrlClientesSeguro(),
       sbGet('mensajes').catch(()=>[])
     ]);
     vehiculos=v||[];clientes=c||[];ventas=vt||[];bitacora=b||[];
@@ -4020,6 +4077,7 @@ async function load(){
     // de dejar que la pantalla se vea vacía en silencio, para que nunca parezca que todo está al
     // día cuando en realidad la carga falló.
     if(fallosCarga.length){
+      reintentarPiezasFallidas(fallosCarga.slice());
       setTimeout(()=>alert(`⚠️ No se pudieron cargar completamente estos datos: ${fallosCarga.join(', ')}.\n\nEsto suele ser un problema de conexión momentáneo, no que se haya perdido información (sigue segura en el servidor).\n\nHacé Ctrl+Shift+R (refresco forzado) para intentar cargarlos de nuevo antes de confiar en los totales que ves ahora.`),1200);
     }
   }catch(e){console.error('Error cargando:',e);}
@@ -6252,6 +6310,8 @@ function renderCtrlClientesLP(){
   try{renderControlWa();}catch(e){console.warn('Control WhatsApp:',e);}
   const tbody=document.getElementById('tbl-ctrcli2');
   if(!tbody)return;
+  if(!ctrlClientes.length&&!controlPiso.length&&!window._ctrlReintentoTimer&&(window._ctrlCargaFallo||!window._ctrlReintentoHecho)){window._ctrlReintentoHecho=true;programarReintentoCtrlClientes();}
+  if(window._ctrlCargaFallo&&!ctrlClientes.length){tbody.innerHTML='<tr><td colspan="11" style="text-align:center;padding:1.5rem;color:var(--red);font-weight:600">⏳ El servidor no respondió al cargar los prospectos. NO se borraron — el sistema vuelve a intentar solo cada 15 segundos (o presioná Ctrl + F5).</td></tr>';return;}
   // Agrupado por mes: el mes actual siempre visible; los meses anteriores quedan plegados en una
   // fila de título (clic para ver u ocultar). Si hay búsqueda escrita, se abren todos solos.
   window._ctrcliMesesAbiertos=window._ctrcliMesesAbiertos||new Set();
