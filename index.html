@@ -6495,8 +6495,13 @@ function renderControlWa(){
   const pctColor=(c,r)=>!r?'var(--text3)':c/r>=0.9?'var(--green)':c/r>=0.7?'var(--amber)':'var(--red)';
   const esc=t=>String(t||'').replace(/'/g,"\\'");
   const inp=(w,k)=>waPuedeEditar(w.vendedor)?`<input type="number" min="0" step="1" value="${Number(w[k]!=null?w[k]:(k==='recibidos'?w.chats||0:0))}" onchange="waSetCampo('${w.id}','${k}',this.value)" style="width:70px;text-align:center;padding:3px;font-weight:700">`:`<b>${Number(w[k]!=null?w[k]:(k==='recibidos'?w.chats||0:0))}</b>`;
+  const dia=window._waDia||hoyLocal();
+  const delDia=(contData.whatsappChats||[]).filter(w=>w&&!w.anulado&&w.fecha===dia);
+  const filasDia=(ger?(fv?vendedores.filter(n=>_nomEq(n,fv)):vendedores):[yo]).map(n=>({n,w:delDia.find(w=>_nomEq(w.vendedor,n))||null}));
+  const totDia=filasDia.reduce((t,f)=>f.w?{r:t.r+rec(f.w),c:t.c+con(f.w),s:t.s+sin(f.w)}:t,{r:0,c:0,s:0});
   const porVend={};
-  regs.forEach(w=>{const k=w.vendedor;if(!porVend[k])porVend[k]={r:0,c:0,s:0,d:0};porVend[k].r+=rec(w);porVend[k].c+=con(w);porVend[k].s+=sin(w);porVend[k].d++;});
+  (ger?(fv?vendedores.filter(n=>_nomEq(n,fv)):vendedores):[yo]).forEach(n=>{porVend[n]={r:0,c:0,s:0,d:0};});
+  regs.forEach(w=>{const k=Object.keys(porVend).find(n=>_nomEq(n,w.vendedor))||w.vendedor;if(!porVend[k])porVend[k]={r:0,c:0,s:0,d:0};porVend[k].r+=rec(w);porVend[k].c+=con(w);porVend[k].s+=sin(w);porVend[k].d++;});
   const tot=Object.values(porVend).reduce((t,v)=>({r:t.r+v.r,c:t.c+v.c,s:t.s+v.s}),{r:0,c:0,s:0});
   const meses=[...new Set([hoyLocal().slice(0,7),...(contData.whatsappChats||[]).map(w=>(w.fecha||'').slice(0,7))].filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse();
   const nm=m=>new Date(m+'-15T12:00:00').toLocaleDateString('es-NI',{month:'long',year:'numeric'});
@@ -6506,21 +6511,26 @@ function renderControlWa(){
         <select onchange="window._waMes=this.value;renderControlWa()" style="padding:5px;text-transform:capitalize">${meses.map(m=>`<option value="${m}" ${m===mes?'selected':''}>${nm(m)}</option>`).join('')}</select>
         ${ger?`<select onchange="window._waVend=this.value;renderControlWa()" style="padding:5px"><option value="">Todos los vendedores</option>${vendedores.map(n=>`<option ${_nomEq(n,fv)?'selected':''}>${n}</option>`).join('')}</select>`:''}
       </div></div>
-    <div style="padding:.75rem 1rem;background:#E6FCF5;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;font-size:12px">
-      <div><label style="font-size:11px;font-weight:600">Fecha</label><br><input type="date" id="wa-n-fecha" value="${hoyLocal()}" style="padding:5px"></div>
-      ${ger?`<div><label style="font-size:11px;font-weight:600">Vendedor</label><br><select id="wa-n-vend" style="padding:5px">${vendedores.map(n=>`<option>${n}</option>`).join('')}</select></div>`:`<input type="hidden" id="wa-n-vend" value="${yo}">`}
-      <div><label style="font-size:11px;font-weight:600">Chats recibidos</label><br><input type="number" min="0" id="wa-n-rec" style="width:100px;padding:5px"></div>
-      <div><label style="font-size:11px;font-weight:600">Chats contestados</label><br><input type="number" min="0" id="wa-n-con" style="width:100px;padding:5px"></div>
-      <button class="btn btn-sm btn-primary" onclick="waAgregarDia()"><i class="ti ti-plus"></i> Registrar día</button>
-      <span style="color:var(--text3);font-size:11px">Si ya hay registro de ese día y vendedor, se actualiza.</span>
+    <div style="padding:.75rem 1rem;background:#E6FCF5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px">
+      <b>Planilla del día:</b> <input type="date" value="${dia}" onchange="window._waDia=this.value||hoyLocal();renderControlWa()" style="padding:5px;width:auto">
+      <span style="font-size:11px;color:var(--text2)">Escribí los números en cada fila; se guardan solos al pasar a la otra casilla.</span>
     </div>
+    <div style="overflow-x:auto"><table class="tbl tbl-grid" style="font-size:12.5px">
+      <thead><tr style="background:#E6FCF5"><th>Vendedor</th><th style="text-align:center">Chats recibidos</th><th style="text-align:center">Chats contestados</th><th style="text-align:center">Chats sin contestar</th><th style="text-align:center">% respuesta</th></tr></thead>
+      <tbody>${filasDia.map(f=>`<tr><td style="font-weight:700;white-space:nowrap">${f.n}</td>
+        <td style="text-align:center">${waPuedeEditar(f.n)?`<input type="number" min="0" step="1" value="${f.w?rec(f.w):''}" placeholder="0" onchange="waSetDia('${esc(f.n)}','${dia}','recibidos',this.value)" style="width:80px;text-align:center;padding:4px;font-weight:700">`:`<b>${f.w?rec(f.w):0}</b>`}</td>
+        <td style="text-align:center">${waPuedeEditar(f.n)?`<input type="number" min="0" step="1" value="${f.w&&f.w.contestados!=null?f.w.contestados:''}" placeholder="0" onchange="waSetDia('${esc(f.n)}','${dia}','contestados',this.value)" style="width:80px;text-align:center;padding:4px;font-weight:700">`:`<b>${f.w?Number(f.w.contestados||0):0}</b>`}</td>
+        <td style="text-align:center;font-weight:800;color:${f.w&&sin(f.w)?'var(--red)':'var(--text3)'}">${f.w?sin(f.w):0}</td>
+        <td style="text-align:center;font-weight:700;color:${f.w?pctColor(con(f.w),rec(f.w)):'var(--text3)'}">${f.w?pct(con(f.w),rec(f.w)):'—'}</td></tr>`).join('')}</tbody>
+      ${filasDia.length>1?`<tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL DEL DÍA</td><td style="text-align:center">${totDia.r}</td><td style="text-align:center">${totDia.c}</td><td style="text-align:center">${totDia.s}</td><td style="text-align:center">${pct(totDia.c,totDia.r)}</td></tr></tfoot>`:''}
+    </table></div>
     <div style="padding:.75rem 1rem 0;font-weight:700;font-size:13px">Resumen por vendedor — <span style="text-transform:capitalize">${nm(mes)}</span></div>
     <div style="overflow-x:auto"><table class="tbl tbl-grid" style="font-size:12px">
       <thead><tr><th>Vendedor</th><th style="text-align:center">Días registrados</th><th style="text-align:center">Chats recibidos</th><th style="text-align:center">Contestados</th><th style="text-align:center">Sin contestar</th><th style="text-align:center">% respuesta</th></tr></thead>
-      <tbody>${Object.entries(porVend).sort((a,b)=>b[1].r-a[1].r).map(([n,v])=>`<tr><td style="font-weight:700">${n}</td><td style="text-align:center">${v.d}</td><td style="text-align:center;font-weight:700">${v.r}</td><td style="text-align:center;color:var(--green);font-weight:700">${v.c}</td><td style="text-align:center;color:${v.s?'var(--red)':'var(--text3)'};font-weight:700">${v.s}</td><td style="text-align:center;font-weight:800;color:${pctColor(v.c,v.r)}">${pct(v.c,v.r)}</td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:1rem">Sin registros este mes</td></tr>'}</tbody>
+      <tbody>${Object.entries(porVend).map(([n,v])=>`<tr><td style="font-weight:700">${n}</td><td style="text-align:center">${v.d}</td><td style="text-align:center;font-weight:700">${v.r}</td><td style="text-align:center;color:var(--green);font-weight:700">${v.c}</td><td style="text-align:center;color:${v.s?'var(--red)':'var(--text3)'};font-weight:700">${v.s}</td><td style="text-align:center;font-weight:800;color:${pctColor(v.c,v.r)}">${pct(v.c,v.r)}</td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:1rem">Sin registros este mes</td></tr>'}</tbody>
       ${Object.keys(porVend).length>1?`<tfoot><tr style="background:var(--surface2);font-weight:800"><td>TOTAL</td><td></td><td style="text-align:center">${tot.r}</td><td style="text-align:center">${tot.c}</td><td style="text-align:center">${tot.s}</td><td style="text-align:center">${pct(tot.c,tot.r)}</td></tr></tfoot>`:''}
     </table></div>
-    <div style="padding:.75rem 1rem 0;font-weight:700;font-size:13px">Registro diario</div>
+    <div style="padding:.75rem 1rem 0;font-weight:700;font-size:13px">Historial del mes (día por día)</div>
     <div style="overflow-x:auto"><table class="tbl tbl-grid" style="font-size:12px">
       <thead><tr><th>Fecha</th><th>Vendedor</th><th style="text-align:center">Chats recibidos</th><th style="text-align:center">Chats contestados</th><th style="text-align:center">Chats sin contestar</th><th style="text-align:center">% respuesta</th><th></th></tr></thead>
       <tbody>${regs.map(w=>`<tr><td style="white-space:nowrap">${w.fecha}</td><td>${w.vendedor}</td><td style="text-align:center">${inp(w,'recibidos')}</td><td style="text-align:center">${inp(w,'contestados')}</td>
@@ -6529,6 +6539,15 @@ function renderControlWa(){
     </table></div>
     <p style="font-size:11px;color:var(--text3);padding:.5rem 1rem">Sin contestar = recibidos − contestados. % respuesta en verde desde 90%, ámbar de 70% a 89%, rojo menos de 70%. Cada vendedor ve y anota lo suyo; Gerencia ve a todos.</p>
   </div>`;
+}
+async function waSetDia(vend,fecha,campo,valor){
+  if(!waPuedeEditar(vend)){alert('⛔ Solo el vendedor o Gerencia pueden anotar esto.');return;}
+  const n=Math.max(0,parseInt(valor,10)||0);
+  contData.whatsappChats=contData.whatsappChats||[];
+  const id=waId(vend,fecha);let w=contData.whatsappChats.find(x=>x.id===id);
+  if(!w){w={id,fecha,vendedor:vend,recibidos:0,chats:0,contestados:0,registradoPor:getNombreUsuario()};contData.whatsappChats.push(w);}
+  w[campo]=n;if(campo==='recibidos')w.chats=n;w.anulado=false;w.editadoPor=getNombreUsuario();
+  await saveOne('contable',{id:'main',...contData});renderCtrlClientesLP();
 }
 async function waAgregarDia(){
   const fecha=document.getElementById('wa-n-fecha')?.value||hoyLocal();
