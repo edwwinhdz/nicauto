@@ -6401,7 +6401,7 @@ function renderAlertasVendedores(){
   const ger=esGerenciaCtrl();
   const yo=getNombreUsuario();
   const vendedores=(ger?vendedoresCtrl():(MODO==='vendedor'?[yo]:[])).filter(n=>!noEvaluadoCtrl(n));
-  const cuentaHoy=n=>ctrlClientes.filter(x=>x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length+controlPiso.filter(x=>x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length;
+  const cuentaHoy=n=>ctrlClientes.filter(x=>x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length+controlPiso.filter(x=>!esPisoDeProspecto(x)&&x.fecha===hoy&&_nomEq(vendedorDeRegistro(x),n)).length;
   const faltan=vendedores.map(n=>({n,c:cuentaHoy(n)})).filter(o=>o.c<META_CLIENTES_DIA);
   const porLlamar=controlPiso.filter(ctrlVisible).filter(pisoRequiereLlamada);
   let html='';
@@ -6427,7 +6427,7 @@ function renderConteoContactados(){
   const lunesStr=`${lunes.getFullYear()}-${String(lunes.getMonth()+1).padStart(2,'0')}-${String(lunes.getDate()).padStart(2,'0')}`;
   const mes=hoy.slice(0,7);
   const pm=new Date(d.getFullYear(),d.getMonth()-1,15);const mesAnt=`${pm.getFullYear()}-${String(pm.getMonth()+1).padStart(2,'0')}`;
-  const todos=[...ctrlClientes.filter(ctrlVisible).map(x=>({...x,_t:'p'})),...controlPiso.filter(ctrlVisible).map(x=>({...x,_t:'f'}))];
+  const todos=[...ctrlClientes.filter(ctrlVisible).map(x=>({...x,_t:'p'})),...controlPiso.filter(ctrlVisible).filter(x=>!esPisoDeProspecto(x)).map(x=>({...x,_t:'f'}))];
   const nombres=new Map();
   (esGerenciaCtrl()?vendedoresCtrl():[getNombreUsuario()]).forEach(n=>nombres.set(n.toLowerCase(),n));
   todos.forEach(x=>{const n=(vendedorDeRegistro(x)||'Sin vendedor').trim();if(!nombres.has(n.toLowerCase()))nombres.set(n.toLowerCase(),n);});
@@ -6493,7 +6493,7 @@ function renderControlPiso(){
   const nCols=ger?9:8;
   const fila=(x,i)=>`<tr>
         <td style="text-align:center;color:var(--text2)">${i+1}</td>
-        <td><b>${x.nombre||'—'}</b></td>
+        <td><b>${x.nombre||'—'}</b>${x.prospectoId?' <span class="badge badge-blue" style="font-size:9px">Desde Prospectos</span>':''}</td>
         <td><a href="https://wa.me/${(x.cel||'').replace(/[^0-9]/g,'')}" target="_blank" style="color:var(--green);text-decoration:none"><i class="ti ti-brand-whatsapp"></i> ${x.cel||'—'}</a></td>
         <td>${x.carroBusca||'—'}</td>
         <td style="font-size:11px">${ORIGEN_PISO[x.origen]||'—'}</td>
@@ -6629,7 +6629,7 @@ function renderCarrosBuscados(){
   const mesesCB=[...new Set([hoyLocal().slice(0,7),...controlPiso.map(x=>(x.fecha||'').slice(0,7)),...ctrlClientes.map(x=>(x.fecha||'').slice(0,7))].filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().reverse();
   const enMes=f=>mesSel==='todos'||(f||'').slice(0,7)===mesSel;
   const norm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-  const items=[...controlPiso.filter(x=>enMes(x.fecha)).map(x=>({t:x.carroBusca,f:x.fecha,v:vendedorDeRegistro(x),o:'Piso'})),
+  const items=[...controlPiso.filter(x=>enMes(x.fecha)&&!esPisoDeProspecto(x)).map(x=>({t:x.carroBusca,f:x.fecha,v:vendedorDeRegistro(x),o:'Piso'})),
                ...ctrlClientes.filter(x=>enMes(x.fecha)&&x.interes).map(x=>({t:x.interes,f:x.fecha,v:vendedorDeRegistro(x),o:'Prospecto'}))].filter(i=>norm(i.t));
   const grupos={};
   items.forEach(i=>{const k=norm(i.t);if(!grupos[k])grupos[k]={texto:String(i.t).trim(),n:0,piso:0,prosp:0,ult:'',vend:new Set()};const g=grupos[k];g.n++;i.o==='Piso'?g.piso++:g.prosp++;if((i.f||'')>g.ult)g.ult=i.f||'';if(i.v)g.vend.add(i.v.split(' ')[0]);});
@@ -17971,15 +17971,37 @@ function guardarCtrlCliente(){
   marcarEdicion(obj);
   const i=ctrlClientes.findIndex(x=>x.id===id);
   if(i>=0)ctrlClientes[i]=obj; else ctrlClientes.push(obj);
-  saveOne('ctrlclientes',obj);closeOv('ov-ctrcli');renderCtrlClientes();renderCtrlClientesLP();
+  saveOne('ctrlclientes',obj);
+  sincronizarPisoDeProspecto(obj);
+  closeOv('ov-ctrcli');renderCtrlClientes();renderCtrlClientesLP();
 }
+// Cada prospecto que registra un vendedor queda registrado también en Control de Piso (mismo
+// cliente, vendedor y fecha). Va marcado "Desde Prospectos" y NO se cuenta dos veces en la meta
+// diaria, en "Clientes contactados por vendedor" ni en "Carros buscados".
+const COMO_A_ORIGEN_PISO={redes_pagina:'redes_empresa',redes_vendedor:'redes_personales',llego_solo:'llego_solo',referido:'referido'};
+function sincronizarPisoDeProspecto(p){
+  if(!p||!p.id)return;
+  const ex=controlPiso.find(x=>x.prospectoId===p.id);
+  const datos={nombre:p.nombre,cel:p.cel,carroBusca:p.interes||'(sin especificar)',fecha:p.fecha||hoyLocal(),
+    origen:COMO_A_ORIGEN_PISO[p.como]||(ex?ex.origen:'llego_solo'),vendedor:vendedorDeRegistro(p)||p.registradoPor||getNombreUsuario()};
+  let obj;
+  if(ex)obj={...ex,...datos};
+  else obj={id:uid(),tipoReg:'piso',prospectoId:p.id,...datos,registradoPor:p.registradoPor||getNombreUsuario(),notas:'Registrado desde Prospectos',negociacion:false};
+  marcarEdicion(obj);
+  const i=controlPiso.findIndex(x=>x.id===obj.id);
+  if(i>=0)controlPiso[i]=obj;else controlPiso.push(obj);
+  saveOne('ctrlclientes',obj);
+}
+function esPisoDeProspecto(x){return!!(x&&x.prospectoId);}
 function delCtrlCliente(id){
   if(MODO!=='admin'&&MODO!=='jefecomercial'){alert('⛔ Solo el Administrador (Edwin) puede eliminar este registro.');return;}
   if(MODO==='jefecomercial'&&!verificarCodigoSeguridadBorrado())return;
   const x=ctrlClientes.find(c=>c.id===id);
   if(!puedeEditarCtrlCliente(x)){alert('⛔ Solo el Administrador o quien registró este contacto pueden eliminarlo.');return;}
   if(!confirmDelete('contacto'))return;
-  ctrlClientes=ctrlClientes.filter(x=>x.id!==id);deleteOne('ctrlclientes',id);renderCtrlClientes();renderCtrlClientesLP?.();
+  ctrlClientes=ctrlClientes.filter(x=>x.id!==id);deleteOne('ctrlclientes',id);
+  controlPiso.filter(x=>x.prospectoId===id).forEach(x=>deleteOne('ctrlclientes',x.id));controlPiso=controlPiso.filter(x=>x.prospectoId!==id);
+  renderCtrlClientes();renderCtrlClientesLP?.();
 }
 function exportExcelCtrlClientes(){
   const rows=[['#','Nombre','Celular','Email','Vendedor','Estado','Interés','Cómo llegó','Notas','Fecha']];
