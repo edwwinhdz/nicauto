@@ -6481,14 +6481,17 @@ async function waGuardarChats(vend,valor){
 
 // ---- Hoja "Control WhatsApp": por día y por vendedor — chats recibidos, contestados y sin contestar ----
 // Sin contestar = recibidos − contestados. El vendedor anota lo suyo; Gerencia ve y edita a todos.
+// Vendedores que se muestran en Control de Piso y Control WhatsApp (pedido de Edwin, 29/10).
+const VEND_CTRL_SELECTOS=['Yenkel Luna','Eduardo Giacoman','Erick Araquistain'];
 function renderControlWa(){
   const el=document.getElementById('wa-control-box');if(!el)return;
   const ger=esGerenciaCtrl(),yo=getNombreUsuario();
   const mes=window._waMes||hoyLocal().slice(0,7);
   const fv=window._waVend||'';
-  const vendedores=ger?vendedoresCtrl().filter(n=>!noEvaluadoCtrl(n)):[yo];
+  // Vendedores que llevan Control WhatsApp (pedido de Edwin): solo Yenkel, Giacoman y Erick.
+  const vendedores=ger?VEND_CTRL_SELECTOS.map(n=>vendedoresCtrl().find(v=>_nomEq(v,n))||n):[yo];
   const regs=(contData.whatsappChats||[]).filter(w=>w&&!w.anulado&&(w.fecha||'').slice(0,7)===mes)
-    .filter(w=>ger?(!fv||_nomEq(w.vendedor,fv)):_nomEq(w.vendedor,yo))
+    .filter(w=>ger?(fv?_nomEq(w.vendedor,fv):vendedores.some(n=>_nomEq(n,w.vendedor))):_nomEq(w.vendedor,yo))
     .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||String(a.vendedor).localeCompare(String(b.vendedor),'es'));
   const rec=w=>waRecibidos(w),con=w=>Math.min(Number(w.contestados||0),waRecibidos(w)),sin=w=>Math.max(0,rec(w)-Number(w.contestados||0));
   const pct=(c,r)=>r?Math.round(c/r*100)+'%':'—';
@@ -6631,9 +6634,9 @@ function renderControlPiso(){
     const emp=l.filter(x=>x.origen==='redes_empresa').length,pers=l.filter(x=>x.origen==='redes_personales').length;
     return`<tr><td colspan="${nCols}" style="background:${f===hoyLocal()?'var(--blue-light)':'var(--surface2)'};font-weight:800;font-size:12px;padding:6px 10px;text-transform:capitalize">📅 ${nomDia(f)} — ${l.length} cliente${l.length===1?'':'s'} <span style="font-weight:400;text-transform:none;color:var(--text2)">(📱 empresa ${emp} · 📲 personales ${pers})</span></td></tr>`+l.map(x=>fila(x,n++)).join('');}).join('');
   // Resumen por vendedor (Gerencia) en el mismo periodo
-  const resumen=ger?[...vendedoresCtrl(),...OTROS_REGISTRAN_CTRL].filter((v,i,a)=>a.findIndex(z=>_nomEq(z,v))===i).map(nm=>{const l=vis.filter(x=>_nomEq(vendedorDeRegistro(x),nm));const lp=l.filter(x=>enRg(x.fecha));
+  const resumen=ger?VEND_CTRL_SELECTOS.map(nm=>vendedoresCtrl().find(v=>_nomEq(v,nm))||nm).map(nm=>{const l=vis.filter(x=>_nomEq(vendedorDeRegistro(x),nm));const lp=l.filter(x=>enRg(x.fecha));
     return{n:nm,per:lp.length,neg:l.filter(x=>x.negociacion).length,llamar:l.filter(pisoRequiereLlamada).length,emp:lp.filter(x=>x.origen==='redes_empresa').length,pers:lp.filter(x=>x.origen==='redes_personales').length,
-      prosp:ctrlClientes.filter(x=>_nomEq(vendedorDeRegistro(x),nm)&&enRg(x.fecha)).length};}).filter(r=>r.per||r.neg||r.prosp||vendedoresCtrl().some(v=>_nomEq(v,r.n))):[];
+      prosp:ctrlClientes.filter(x=>_nomEq(vendedorDeRegistro(x),nm)&&enRg(x.fecha)).length};}):[];
   const btnPer=(k,l)=>`<button class="btn btn-sm ${per===k?'btn-primary':''}" onclick="window._pisoPer='${k}';renderControlPiso()" style="padding:3px 10px">${l}</button>`;
   el.innerHTML=`<div class="card">
     <div class="card-head" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -6646,7 +6649,7 @@ function renderControlPiso(){
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:.6rem 1rem;border-bottom:1px solid var(--border);font-size:12px">
       <b><i class="ti ti-calendar"></i> Periodo:</b> ${btnPer('hoy','Hoy')}${btnPer('ayer','Ayer')}${btnPer('semana','Esta semana')}${btnPer('mes','Este mes')}${btnPer('todo','Todo')}
       <input type="date" value="${per==='fecha'?fechaSel:''}" onchange="window._pisoPer='fecha';window._pisoFecha=this.value;renderControlPiso()" title="Ver un día específico" style="padding:3px;${per==='fecha'?'border-color:var(--blue)':''}">
-      ${ger?`<select id="ctrpiso-fvend" onchange="renderControlPiso()" style="padding:4px;margin-left:auto"><option value="">Todos los vendedores</option>${[...vendedoresCtrl(),...OTROS_REGISTRAN_CTRL].map(nm=>`<option ${_nomEq(nm,fv)?'selected':''}>${nm}</option>`).join('')}</select>`:''}
+      ${ger?`<select id="ctrpiso-fvend" onchange="renderControlPiso()" style="padding:4px;margin-left:auto"><option value="">Todos los vendedores</option>${VEND_CTRL_SELECTOS.map(nm=>`<option ${_nomEq(nm,fv)?'selected':''}>${nm}</option>`).join('')}</select>`:''}
       <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="ctrpiso-soloneg" ${soloNeg?'checked':''} onchange="renderControlPiso()" style="width:auto"> Solo en negociación</label>
     </div>
     ${ger&&resumen.length?`<div style="overflow-x:auto;padding:.5rem 1rem"><table class="tbl tbl-grid" style="font-size:12px"><thead><tr><th>Vendedor</th><th style="text-align:center">Atendidos en piso (${rg.txt.toLowerCase()})</th><th style="text-align:center">Prospectos (${rg.txt.toLowerCase()})</th><th style="text-align:center">Redes empresa</th><th style="text-align:center">Redes personales</th><th style="text-align:center">En negociación</th><th style="text-align:center">Por llamar</th></tr></thead>
@@ -6676,8 +6679,9 @@ function abrirModalPiso(id){
   const ger=esGerenciaCtrl();
   const selV=document.getElementById('mpiso-vend');
   const yo=getNombreUsuario();
-  selV.innerHTML=(ger?[...vendedoresCtrl(),...OTROS_REGISTRAN_CTRL.filter(n=>!vendedoresCtrl().some(v=>_nomEq(v,n)))]:[yo]).map(n=>`<option>${n}</option>`).join('');
-  selV.value=x?(x.vendedor||x.registradoPor||yo):(ger?(vendedoresCtrl()[0]||yo):yo);
+  const selectosPiso=VEND_CTRL_SELECTOS.map(nm=>vendedoresCtrl().find(v=>_nomEq(v,nm))||nm);
+  selV.innerHTML=(ger?selectosPiso:[yo]).map(n=>`<option>${n}</option>`).join('');
+  selV.value=x?(x.vendedor||x.registradoPor||yo):(ger?(selectosPiso[0]||yo):yo);
   if(x&&![...selV.options].some(o=>o.value===selV.value)){selV.innerHTML+=`<option>${x.vendedor}</option>`;selV.value=x.vendedor;}
   document.getElementById('mpiso-vend-wrap').style.display=ger?'':'none';
   // Sugerencias de carros: modelos del inventario
