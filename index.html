@@ -799,7 +799,7 @@ body.no-delete .confirmDelete{display:none!important}
       <span id="lp-modo-ops-badge" style="display:none;background:var(--purple-light);color:var(--purple);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:600"><i class="ti ti-tool"></i> Modo Operaciones</span>
       <button class="btn" onclick="abrirComparadorVehiculos()" style="color:var(--purple);border-color:var(--purple)"><i class="ti ti-arrows-left-right"></i>Comparar</button>
       <button class="btn" onclick="abrirImprimirLP()" style="color:var(--blue);border-color:var(--blue)"><i class="ti ti-printer"></i>Imprimir</button>
-      <button class="btn" onclick="generarCatalogoLP()" style="color:#0B6E6E;border-color:#0B6E6E"><i class="ti ti-book"></i>Catálogo</button>
+      <button class="btn" onclick="catalogoElegirEstados()" style="color:#0B6E6E;border-color:#0B6E6E"><i class="ti ti-book"></i>Catálogo</button>
       <button class="btn" onclick="exportExcelListaPrecios()"><i class="ti ti-download"></i>Excel</button>
       <button class="btn" onclick="renderListaPrecios()"><i class="ti ti-refresh"></i>Actualizar</button>
     </div>
@@ -15588,6 +15588,39 @@ function tipoDeducidoConsig(v){
   return'';
 }
 function tipoConsig(v){return (v&&v.tipo)||tipoDeducidoConsig(v)||'Otro';}
+// Al presionar "Catálogo" en Lista de Precios se abre primero esta ventanita para elegir qué
+// estados incluir (todos marcados de entrada), con la cantidad de carros de cada uno.
+function catalogoElegirEstados(){
+  const ant=document.getElementById('cat-estados-ov');if(ant)ant.remove();
+  const estados=[...new Set(vehiculos.filter(v=>v.estado!=='Vendido'&&v.estado).map(v=>v.estado))].sort();
+  const cuenta=e=>vehiculos.filter(v=>v.estado===e).length;
+  const pre=lpEstadosSel.length?lpEstadosSel:estados;
+  const ov=document.createElement('div');ov.id='cat-estados-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;max-width:360px;width:100%;padding:1.2rem;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div style="font-weight:800;font-size:16px;margin-bottom:4px"><i class="ti ti-book"></i> Catálogo — ¿qué estados incluir?</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Marcá los estados de los carros que querés en el catálogo.</div>
+    <div id="cat-est-lista" style="max-height:50vh;overflow:auto">${estados.map(e=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 2px;cursor:pointer;border-bottom:1px solid var(--border)">
+      <input type="checkbox" value="${e}" ${pre.includes(e)?'checked':''} onchange="catEstContar()" style="width:16px;height:16px"> ${e} <span style="color:var(--text3);margin-left:auto">${cuenta(e)}</span></label>`).join('')}</div>
+    <div style="display:flex;gap:6px;margin:10px 0">
+      <button type="button" class="btn btn-sm" onclick="document.querySelectorAll('#cat-est-lista input').forEach(c=>c.checked=true);catEstContar()">Marcar todos</button>
+      <button type="button" class="btn btn-sm" onclick="document.querySelectorAll('#cat-est-lista input').forEach(c=>c.checked=false);catEstContar()">Ninguno</button></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">
+      <span id="cat-est-total" style="font-size:12px;font-weight:700;margin-right:auto"></span>
+      <button type="button" class="btn" onclick="document.getElementById('cat-estados-ov').remove()">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="catEstGenerar()"><i class="ti ti-book"></i> Generar</button></div></div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);catEstContar();
+}
+function catEstElegidos(){return[...document.querySelectorAll('#cat-est-lista input:checked')].map(c=>c.value);}
+function catEstContar(){const el=document.getElementById('cat-est-total');if(!el)return;const el2=catEstElegidos();const n=vehiculos.filter(v=>v.estado!=='Vendido'&&el2.includes(v.estado)).length;el.textContent=n+' vehículo'+(n===1?'':'s');}
+function catEstGenerar(){
+  const el=catEstElegidos();
+  if(!el.length){alert('Marcá al menos un estado.');return;}
+  document.getElementById('cat-estados-ov')?.remove();
+  const prev=lpEstadosSel;lpEstadosSel=el;
+  try{generarCatalogoLP();}finally{lpEstadosSel=prev;}
+}
 function generarCatalogoLP(origen){
   const esc=x=>String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const norm=x=>String(x||'').trim().toLowerCase();
@@ -15604,7 +15637,7 @@ function generarCatalogoLP(origen){
       .map(c=>({...c,precio:c.precioA,tipo:tipoConsig(c)}));
   }else{
     veh=lpVehiculosFiltrados();
-    if(!lpEstadosSel.length)veh=veh.filter(v=>CAT_ESTADOS.some(c=>norm(c.e)===norm(v.estado)));
+    // Sin filtro de estado = TODOS los carros del inventario (no vendidos). Con filtro, solo los estados marcados.
   }
   veh=sortByTipo(veh);
   if(!veh.length){alert('No hay vehículos para el catálogo con los filtros actuales.');return;}
