@@ -376,6 +376,13 @@ body.no-delete .confirmDelete{display:none!important}
   /* Columnas ocultadas por el selector de campos a imprimir (ver imprimirModulo) */
   .print-col-oculta{display:none !important}
 }
+
+/* Ventas en vista limitada (Jordan): la lista y el registro quedan normales; solo se ocultan
+   los totales de abajo, los resúmenes/cuadros de control y la pestaña KPI */
+body.vtas-limitada #page-ventas .tab-bar,
+body.vtas-limitada #tfoot-vtas,
+body.vtas-limitada #ventas-resumen-word,body.vtas-limitada #ventas-resumen-compradores-word,body.vtas-limitada #ventas-resumen-local-consig-word,
+body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres-ventas{display:none!important}
 </style>
 </head>
 <body>
@@ -5454,7 +5461,7 @@ function aplicarModoAcceso(){
     showPage('dashboard');
   } else if(MODO==='operaciones2'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
-    ['nb-listaprecios','nb-chequeofisico','nb-operaciones','nb-chat','nb-pizarras','nb-inventario','nb-taller'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
+    ['nb-listaprecios','nb-chequeofisico','nb-operaciones','nb-chat','nb-pizarras','nb-inventario','nb-taller','nb-ventas'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
     showPage('operaciones');
   } else if(MODO==='compras'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
@@ -10670,6 +10677,7 @@ async function limpiarReservasHuerfanas(){
 }
 // ======================== KPI DE VENTAS Y COMPRAS ========================
 function showVentasTab(t){
+  if(t==='kpi'&&ventasVistaLimitada())t='registro';
   document.querySelectorAll('#page-ventas .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['registro','kpi'][i]===t));
   document.getElementById('ventas-tab-registro').style.display=t==='registro'?'block':'none';
   document.getElementById('ventas-tab-kpi').style.display=t==='kpi'?'block':'none';
@@ -10896,7 +10904,11 @@ function filtrarVtasPorCategoria(tipo){
   window._vtaFiltroCategoria=window._vtaFiltroCategoria===tipo?'':tipo;
   renderVtas();
 }
+// Jordan (Jefe de Taller) entra a Ventas para registrar, facturar e imprimir: la lista queda igual
+// que para todos, pero sin los totales de abajo, sin KPI ni cuadros de control/resúmenes.
+function ventasVistaLimitada(){return MODO==='operaciones2';}
 function renderVtas(){
+  document.body.classList.toggle('vtas-limitada',ventasVistaLimitada());
   actualizarBotonLimpiarReservas();
   actualizarBotonReservasHuerfanas();
   const btnCierre=document.getElementById('btn-cierre-ventas');
@@ -11020,6 +11032,10 @@ function renderVtas(){
   const cur=sel.value;
   sel.innerHTML='<option value="">Todos los vendedores</option>'+clientes.filter(c=>c.rol==='vendedor').map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
   sel.value=cur;
+  if(ventasVistaLimitada()){
+    ['tfoot-vtas','ventas-resumen-word','ventas-resumen-compradores-word','ventas-resumen-local-consig-word','caja-correccion-cierre','historial-cierres-ventas'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
+    return;
+  }
   renderVtasTotals(data);
   renderResumenVentasWord();
   renderResumenCompradoresWord();
@@ -16267,7 +16283,7 @@ function imprimirListaVentas(){
     <table>
       <thead><tr><th>Fecha</th><th>Comprador</th><th>Vendedor</th><th>Vehículo</th><th>P. Venta</th><th>Ganancia</th><th>Estado</th></tr></thead>
       <tbody>${filas}</tbody>
-      <tfoot><tr><td colspan="4">TOTAL (${lista.length} ventas)</td><td>${fmtD(totalVenta)}</td><td colspan="2"></td></tr></tfoot>
+      ${ventasVistaLimitada()?'':`<tfoot><tr><td colspan="4">TOTAL (${lista.length} ventas)</td><td>${fmtD(totalVenta)}</td><td colspan="2"></td></tr></tfoot>`}
     </table>
     <div class="fecha-print">Generado desde NICAUTO el ${new Date().toLocaleDateString('es-NI')}</div>
   </body></html>`;
