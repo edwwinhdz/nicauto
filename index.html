@@ -13639,12 +13639,12 @@ function encabezadoCargoCredito(tipo){
 function filasAbonosCxC(c,ncols){
   if(!c||!/^Cx[CP]/.test(String(c.tipo||'')))return'';
   const esCxP=String(c.tipo).startsWith('CxP');
-  const hp=(Array.isArray(c.historialPagos)?c.historialPagos:[]).filter(p=>p&&Number(p.monto)>0).slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const hp=(Array.isArray(c.historialPagos)?c.historialPagos:[]).map((p,i)=>p?{...p,_i:i}:p).filter(p=>p&&Number(p.monto)>0).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
   const pagado=hp.reduce((s,p)=>s+Number(p.monto||0),0);
   const sinHist=Number(c.monto||0)-Number(c.saldo||0)-pagado;
   const filas=hp.map(p=>{
     const formas=(Array.isArray(p.formas)?p.formas:[]).filter(f=>f&&Number(f.monto)>0).map(f=>(typeof CXC_DEST_TXT!=='undefined'&&CXC_DEST_TXT[f.dest])||f.dest).filter(Boolean);
-    return{fecha:p.fecha||'',recibo:p.recibo||'',concepto:(p.concepto||(esCxP?'Pago':'Abono'))+(formas.length?' — '+formas.join(', '):''),monto:Number(p.monto),por:p.registradoPor||''};
+    return{fecha:p.fecha||'',recibo:p.recibo||'',concepto:(p.concepto||(esCxP?'Pago':'Abono'))+(formas.length?' — '+formas.join(', '):''),monto:Number(p.monto),por:p.registradoPor||'',idx:p._i};
   });
   if(sinHist>0.005)filas.push({fecha:c.fechaPago||'',recibo:c.reciboCancelacion||'',concepto:esCxP?'Pago registrado sin detalle':'Cobro registrado sin detalle',monto:sinHist,por:''});
   if(!filas.length)return'';
@@ -13657,7 +13657,35 @@ function filasAbonosCxC(c,ncols){
     <td style="text-align:right;color:var(--blue);font-weight:600">${esCxP?fmtD(f.monto):''}</td>
     <td style="text-align:right;color:var(--green);font-weight:600">${esCxP?'':fmtD(f.monto)}</td>
     <td style="text-align:right;font-weight:700">${fmtD(Math.max(0,saldo))}</td>
-    <td colspan="4"></td></tr>`;}).join('');
+    <td colspan="4" style="text-align:right">${f.idx!=null&&(MODO==='admin'||MODO==='coordinador')?`<button class="btn btn-sm" title="Corregir este ${esCxP?'pago':'abono'}" onclick="event.stopPropagation();corregirAbonoCuenta('${c.id}',${f.idx})"><i class="ti ti-edit"></i></button>`:''}</td></tr>`;}).join('');
+}
+// Corregir (o quitar) un abono/pago ya registrado en una cuenta: monto, fecha y recibo.
+// El saldo y el estado de la cuenta se recalculan solos.
+async function corregirAbonoCuenta(id,idx){
+  if(MODO!=='admin'&&MODO!=='coordinador'){alert('⛔ Solo el Administrador puede corregir abonos.');return;}
+  const c=(contData.cuentas||[]).find(x=>x.id===id);if(!c||!Array.isArray(c.historialPagos))return;
+  const p=c.historialPagos[idx];if(!p)return;
+  const mStr=prompt(`Corregir abono de ${c.persona||''} (${p.fecha||''}, recibo ${p.recibo||'—'})\n\nMonto correcto (US$). Poné 0 para QUITAR este abono:`,String(p.monto));
+  if(mStr===null)return;
+  const monto=parseFloat(String(mStr).replace(/,/g,''));
+  if(isNaN(monto)||monto<0){alert('Monto no válido.');return;}
+  if(monto===0){
+    if(!confirm(`¿Quitar el abono de ${fmtD(Number(p.monto))} del ${p.fecha||''}?`))return;
+    c.historialPagos.splice(idx,1);
+  } else {
+    const fecha=prompt('Fecha del abono (AAAA-MM-DD):',p.fecha||hoyLocal());if(fecha===null)return;
+    const recibo=prompt('No. de recibo:',p.recibo||'');if(recibo===null)return;
+    const anterior=Number(p.monto);
+    Object.assign(p,{monto,fecha:(fecha||'').trim()||p.fecha,recibo:recibo.trim(),corregidoPor:getNombreUsuario(),corregidoFecha:hoyLocal(),montoAnterior:anterior!==monto?anterior:p.montoAnterior});
+  }
+  const pagado=c.historialPagos.reduce((s,x)=>s+(x?Number(x.monto||0):0),0);
+  c.saldo=Math.max(0,parseFloat((Number(c.monto||0)-pagado).toFixed(2)));
+  c.estado=c.saldo===0?'Pagada':(pagado>0?'Parcial':'Pendiente');
+  if(c.saldo>0)delete c.reciboCancelacion;
+  c.ultimaEdicionPor=getNombreUsuario();c.ultimaEdicionFecha=new Date().toLocaleString('es-NI');
+  await saveOne('contable',{id:'main',...contData});
+  renderCuentas();
+  alert(`✅ Abono corregido. Saldo de la cuenta: ${fmtD(c.saldo)}.`);
 }
 function tablaCxCBancos(tblRows){
   const todas=(contData.cuentas||[]).filter(c=>c.tipo==='CxC-Banco');
