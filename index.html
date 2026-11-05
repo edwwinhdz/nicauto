@@ -2145,20 +2145,23 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
         <label style="font-size:11px;font-weight:700;color:var(--blue)"><i class="ti ti-building-bank"></i> Depósitos / transferencias del cliente — hasta 3, de diferentes bancos</label>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">1.</span>
-          <select id="mvt-dep-banco-0" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <select id="mvt-dep-banco-0" onchange="mvtDepVerNio(0)" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
           <input id="mvt-dep-monto-0" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
+          <input id="mvt-dep-nio-0" class="calc-input" type="text" inputmode="decimal" placeholder="Monto C$ depositado" oninput="mvtDepNio(0)" title="Córdobas que realmente entraron al BAC C$ (así cae exacto en el banco)" style="width:150px;display:none;border-color:var(--amber)">
           <input id="mvt-dep-ref-0" placeholder="No. recibo / ref." style="width:140px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">2.</span>
-          <select id="mvt-dep-banco-1" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <select id="mvt-dep-banco-1" onchange="mvtDepVerNio(1)" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
           <input id="mvt-dep-monto-1" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
+          <input id="mvt-dep-nio-1" class="calc-input" type="text" inputmode="decimal" placeholder="Monto C$ depositado" oninput="mvtDepNio(1)" title="Córdobas que realmente entraron al BAC C$ (así cae exacto en el banco)" style="width:150px;display:none;border-color:var(--amber)">
           <input id="mvt-dep-ref-1" placeholder="No. recibo / ref." style="width:140px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">3.</span>
-          <select id="mvt-dep-banco-2" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
+          <select id="mvt-dep-banco-2" onchange="mvtDepVerNio(2)" style="flex:1;min-width:130px"><option value="">-- Banco --</option><option value="BAC">BAC (D. Julio)</option><option value="BAC GO">BAC GO (Gisselle)</option><option value="La Fise">La Fise</option><option value="Ficohsa">Ficohsa</option><option value="BAC C$">BAC C$ (córdobas)</option><option value="Banpro">Banpro</option><option value="Credex">Credex</option></select>
           <input id="mvt-dep-monto-2" class="calc-input" type="text" inputmode="decimal" placeholder="Monto USD" oninput="calcLiquidacion()" style="width:120px">
+          <input id="mvt-dep-nio-2" class="calc-input" type="text" inputmode="decimal" placeholder="Monto C$ depositado" oninput="mvtDepNio(2)" title="Córdobas que realmente entraron al BAC C$ (así cae exacto en el banco)" style="width:150px;display:none;border-color:var(--amber)">
           <input id="mvt-dep-ref-2" placeholder="No. recibo / ref." style="width:140px">
         </div>
         <p style="font-size:10px;color:var(--text3);margin-top:4px">Cada depósito cae en la columna de su banco en el Reporte de Caja y se resta del cash a recibir. (El "Monto Bancario" de arriba queda para financiamiento del banco.)</p>
@@ -11255,7 +11258,8 @@ function mvtLeerDepositos(){
     const banco=document.getElementById('mvt-dep-banco-'+i)?.value||'';
     const monto=parseFloat(document.getElementById('mvt-dep-monto-'+i)?.value||0)||0;
     const ref=(document.getElementById('mvt-dep-ref-'+i)?.value||'').trim();
-    if(banco||monto)res.push({banco,monto,ref});
+    const montoNIO=banco==='BAC C$'?(parseFloat(document.getElementById('mvt-dep-nio-'+i)?.value||0)||0):0;
+    if(banco||monto)res.push(montoNIO>0?{banco,monto,ref,montoNIO}:{banco,monto,ref});
   });
   return res;
 }
@@ -11264,7 +11268,22 @@ function mvtCargarDepositos(v){
   [0,1,2].forEach(i=>{
     const b=document.getElementById('mvt-dep-banco-'+i),m=document.getElementById('mvt-dep-monto-'+i),r=document.getElementById('mvt-dep-ref-'+i);
     if(b)b.value=l[i]?l[i].banco||'':'';if(m)m.value=l[i]&&l[i].monto?Number(l[i].monto).toFixed(2):'';if(r)r.value=l[i]?l[i].ref||'':'';
+    const n=document.getElementById('mvt-dep-nio-'+i);if(n)n.value=l[i]&&l[i].montoNIO?Number(l[i].montoNIO).toFixed(2):'';
+    mvtDepVerNio(i);
   });
+}
+// BAC C$: además del monto en US$ (lo que se abona a la venta) se anota cuántos CÓRDOBAS entraron
+// de verdad al banco — así el BAC C$ recibe exactamente esa cantidad, sin depender de la tasa del
+// sistema. Si se escribe solo el monto en C$, el US$ se calcula con la tasa del sistema.
+function mvtDepVerNio(i){
+  const b=document.getElementById('mvt-dep-banco-'+i),n=document.getElementById('mvt-dep-nio-'+i);
+  if(n)n.style.display=b&&b.value==='BAC C$'?'':'none';
+}
+function mvtDepNio(i){
+  const n=parseFloat(document.getElementById('mvt-dep-nio-'+i)?.value||0)||0;
+  const m=document.getElementById('mvt-dep-monto-'+i);
+  if(m&&n>0&&!(parseFloat(m.value)>0)){m.value=(n/bancoTasa()).toFixed(2);}
+  calcLiquidacion();
 }
 function totalDepositosVenta(v){return(Array.isArray(v&&v.depositos)?v.depositos:[]).reduce((s,d)=>s+Number(d.monto||0),0);}
 function calcLiquidacion(){
@@ -13259,7 +13278,7 @@ function bancosMovsDesdeCaja(){
     let h;try{h=cdCalcular(d);}catch(e){return;}
     (h.ingresos||[]).forEach(l=>{
       const k=CD_COL_BANCO[l.col];if(!k)return;
-      res.push({id:'CJ_'+(l.key||l.id),cuenta:k,fecha:d,tipo:'ingreso',monto:Number(l.monto||0),auto:true,
+      res.push({id:'CJ_'+(l.key||l.id),cuenta:k,fecha:d,tipo:'ingreso',monto:Number(l.monto||0),montoNIO:Number(l.montoNIO||0)||undefined,auto:true,
         desc:`Caja ${d}: ${[l.cliente,l.vehiculo||l.desc].filter(Boolean).join(' — ')}${l.forma?' ('+l.forma+')':''}`,ref:l.recibo||'',nota:l.nota||''});
     });
   });
@@ -13318,12 +13337,19 @@ function bancosMovsAutoVisibles(){
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
   let auto=bancosMovsAutoVisibles().filter(m=>m.cuenta===k);
-  if(bancoEsNIO(k)){const t=bancoTasa();auto=auto.map(m=>({...m,montoUSD:Number(m.monto||0),monto:Math.round(Number(m.monto||0)*t*100)/100,desc:(m.desc||'')+` (US$ ${Number(m.monto||0).toLocaleString('en-US',{minimumFractionDigits:2})} × ${t})`}));}
+  if(bancoEsNIO(k)){const t=bancoTasa();auto=auto.map(m=>{
+    const usd=Number(m.monto||0);
+    // Si se anotó cuántos córdobas entraron de verdad, manda esa cantidad (no la tasa del sistema)
+    if(Number(m.montoNIO)>0){const nio=Number(m.montoNIO);return{...m,montoUSD:usd,monto:nio,desc:(m.desc||'')+` (US$ ${usd.toLocaleString('en-US',{minimumFractionDigits:2})}${usd?' a TC '+(nio/usd).toFixed(4).replace(/\.?0+$/,''):''})`};}
+    return{...m,montoUSD:usd,monto:Math.round(usd*t*100)/100,desc:(m.desc||'')+` (US$ ${usd.toLocaleString('en-US',{minimumFractionDigits:2})} × ${t})`};});}
   return[...auto,...man].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
 }
+// Saldo inicial con fecha = saldo real de la cuenta al CIERRE de ese día (estado de cuenta). Desde ahí
+// solo suman los movimientos de días POSTERIORES; los anteriores quedan visibles solo para consulta.
+function bancoMovCuenta(k,m){const f=bancoSaldoInicial(k).fecha;return !f||(m.fecha||'')>f;}
 function bancoSaldo(k,hasta){
   const ini=bancoSaldoInicial(k);
-  return ini.monto+bancosMovs(k).filter(m=>!hasta||(m.fecha||'')<=hasta).reduce((s,m)=>s+(m.tipo==='ingreso'?1:-1)*Number(m.monto||0),0);
+  return ini.monto+bancosMovs(k).filter(m=>bancoMovCuenta(k,m)).filter(m=>!hasta||(m.fecha||'')<=hasta).reduce((s,m)=>s+(m.tipo==='ingreso'?1:-1)*Number(m.monto||0),0);
 }
 // ---- Cambios de precio: el día que se cambia Precio A o B se ve en AZUL (Lista de Precios,
 // Inventario, Consignación y Marketing); al día siguiente vuelve a su color normal. Marketing
@@ -13439,9 +13465,14 @@ function renderBancos(){
   window._bancoAbierto=window._bancoAbierto||{};
   const tarjetas=BANCOS_CTAS.map(b=>{
     const ini=bancoSaldoInicial(b.k);
-    const movs=bancosMovs(b.k);
+    const todosMovs=bancosMovs(b.k);
+    const previos=todosMovs.filter(m=>!bancoMovCuenta(b.k,m));
+    const movs=todosMovs.filter(m=>bancoMovCuenta(b.k,m));
     let saldo=ini.monto;
     const filas=movs.map(m=>{saldo+=(m.tipo==='ingreso'?1:-1)*Number(m.monto||0);return{...m,saldo};});
+    const verPrev=!!(window._bancoVerPrevios||{})[b.k];
+    const filaPrev=previos.length?`<tr><td colspan="7" style="background:var(--surface2);font-size:11px;color:var(--text2);cursor:pointer" onclick="window._bancoVerPrevios=window._bancoVerPrevios||{};window._bancoVerPrevios['${b.k}']=${!verPrev};renderBancos()"><i class="ti ti-chevron-${verPrev?'down':'right'}"></i> ${previos.length} movimiento${previos.length===1?'':'s'} anterior${previos.length===1?'':'es'} al saldo inicial del ${ini.fecha} — <b>solo consulta, no suman al saldo</b></td></tr>`
+      +(verPrev?previos.map(m=>`<tr style="opacity:.55"><td style="white-space:nowrap">${m.fecha||'—'}</td><td>${m.desc||''}</td><td>${m.ref||'—'}</td><td style="text-align:right">${m.tipo==='ingreso'?fmtBanco(b.k,m.monto):''}</td><td style="text-align:right">${m.tipo!=='ingreso'?fmtBanco(b.k,m.monto):''}</td><td style="text-align:right;font-size:10px">no suma</td><td></td></tr>`).join(''):''):'';
     const ing=movs.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+Number(m.monto||0),0);
     const egr=movs.filter(m=>m.tipo!=='ingreso').reduce((s,m)=>s+Number(m.monto||0),0);
     const abierto=window._bancoAbierto[b.k]!==false;
@@ -13459,7 +13490,7 @@ function renderBancos(){
         <span>Saldo inicial${ini.fecha?' ('+ini.fecha+')':''}: <b>${fmtBanco(b.k,ini.monto)}</b></span><span>Ingresos: <b style="color:var(--green)">${fmtBanco(b.k,ing)}</b></span><span>Salidas: <b style="color:var(--red)">${fmtBanco(b.k,egr)}</b></span></div>
       <div style="overflow-x:auto"><table class="tbl" style="font-size:12px">
         <thead><tr><th>Fecha</th><th>Descripción</th><th>Ref. / Recibo</th><th style="text-align:right">Ingreso</th><th style="text-align:right">Salida</th><th style="text-align:right">Saldo</th><th></th></tr></thead>
-        <tbody>${filas.length?filas.map(m=>`<tr>
+        <tbody>${filaPrev}${ini.fecha?`<tr style="background:var(--blue-light)"><td style="white-space:nowrap">${ini.fecha}</td><td colspan="4"><b>Saldo inicial</b> (al cierre del ${ini.fecha})</td><td style="text-align:right;font-weight:800">${fmtBanco(b.k,ini.monto)}</td><td></td></tr>`:''}${filas.length?filas.map(m=>`<tr>
           <td style="white-space:nowrap">${m.fecha||'—'}</td>
           <td>${m.desc||''}${m.autoCompra?' <span class="badge badge-amber" style="font-size:9px">Compra de vehículo</span>':m.autoFJ?' <span class="badge badge-purple" style="font-size:9px">Desde Fondos JM</span>':m.autoRep?' <span class="badge badge-amber" style="font-size:9px">Reparación</span>':m.auto?' <span class="badge badge-blue" style="font-size:9px">Desde Caja</span>':''}${m.nota?`<div style="font-size:10px;color:#E67700"><i class="ti ti-note"></i> ${m.nota}</div>`:''}${m.registradoPor&&!m.auto?`<div style="font-size:9px;color:var(--text3)">por ${m.registradoPor}</div>`:''}</td>
           <td>${m.ref||'—'}</td>
@@ -13549,9 +13580,9 @@ function bancoSaldoInicialModal(k){
   if(!puedeMoverBancos())return;
   const ini=bancoSaldoInicial(k);
   bancoModal(`Saldo inicial — ${(BANCOS_CTAS.find(b=>b.k===k)||{}).t}`,`
-    <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">El saldo que tenía la cuenta al empezar a llevarla en el sistema. Después se mueve solo con los ingresos y salidas.</p>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:.75rem">El saldo REAL de la cuenta al <b>cierre</b> del día que elijas (según el estado de cuenta del banco). Desde ahí el saldo se mueve solo con los ingresos y salidas de los días <b>siguientes</b>. Los movimientos de ese día y anteriores quedan visibles solo para consulta y no suman.</p>
     <div class="form-row"><div class="form-group"><label>Saldo (${bancoEsNIO(k)?'C$ córdobas':'USD $'})</label><input type="number" step="0.01" id="bn-ini" value="${ini.monto||''}"></div>
-    <div class="form-group"><label>A la fecha</label><input type="date" id="bn-ini-fecha" value="${ini.fecha||hoyLocal()}"></div></div>`,
+    <div class="form-group"><label>Saldo al cierre del día</label><input type="date" id="bn-ini-fecha" value="${ini.fecha||(()=>{const d=new Date(hoyLocal()+'T12:00:00');d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);})()}"></div></div>`,
   async()=>{
     contData.bancosSaldoInicial=(contData.bancosSaldoInicial||[]).filter(b=>b.id!==k);
     contData.bancosSaldoInicial.push({id:k,monto:parseFloat(document.getElementById('bn-ini').value)||0,fecha:document.getElementById('bn-ini-fecha').value,por:getNombreUsuario()});
@@ -19304,7 +19335,7 @@ function cdLineasAuto(fecha){
           col:financiado?'cxc':(CD_BANCO_COL[v.banco]||'sinbanco'),banco:v.banco||'',monto:banc,tipoLinea:'Venta'});
       }
       (Array.isArray(v.depositos)?v.depositos:[]).forEach((d,i)=>{if(Number(d.monto||0)>0)lineas.push({...base,key:'V_'+v.id+'_dep'+i,recibo:d.ref||v.recibo||'',
-        forma:'Depósito '+(d.banco||''),col:CD_BANCO_DEP_COL[d.banco]||'sinbanco',banco:d.banco||'',monto:Number(d.monto),tipoLinea:'Venta'});});
+        forma:'Depósito '+(d.banco||''),col:CD_BANCO_DEP_COL[d.banco]||'sinbanco',banco:d.banco||'',monto:Number(d.monto),montoNIO:Number(d.montoNIO||0)||undefined,tipoLinea:'Venta'});});
       if(canje>0)lineas.push({...base,key:'V_'+v.id+'_canje',forma:'Canje'+(v.canjeDesc?': '+v.canjeDesc:''),col:'canje',monto:canje,tipoLinea:'Venta'});
     } else if((v.estado==='Pendiente'||(v.estado==='Anulada'&&v.devolucionReserva))&&Number(v.anticipo||0)>0){
       const pago=v.pago||'Efectivo';
