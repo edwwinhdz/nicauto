@@ -13360,6 +13360,12 @@ function bancosMovsDesdeReparaciones(){
     id:'VR_'+x.rep.id,cuenta:x.rep.bancoPago,fecha:x.rep.fecha||'',tipo:'egreso',monto:Number(x.rep.costo),auto:true,autoRep:true,
     repVid:x.origen==='Consignación'?'CONSIG_'+x.veh.id:x.origen==='Gerencia'?'VGER_'+x.veh.id:x.veh.id,desc:x.desc,ref:x.rep.factura||''}));
 }
+// Gastos del Registro Directo pagados desde un banco propio
+function bancosMovsDesdeRegistroDirecto(){
+  return(contData.registroDirectoGastos||[]).filter(r=>r&&String(r.salioDe||'').startsWith('banco:')&&Number(r.monto)>0&&BANCOS_CTAS.some(b=>b.k===r.salioDe.slice(6))).map(r=>({
+    id:'RDB_'+r.id,cuenta:r.salioDe.slice(6),fecha:r.fecha||'',tipo:'egreso',monto:Number(r.monto),auto:true,autoRDG:true,
+    desc:`${r.cuenta||'Gasto'}${r.proveedor?' — '+r.proveedor:''}${r.desc?' — '+r.desc:''} (Registro directo de gastos)`,ref:''}));
+}
 // Traslados de Fondos JM a/desde una cuenta bancaria propia (se elige la cuenta en el movimiento de
 // Fondos JM): Egreso en Fondos JM = entrada al banco; Ingreso en Fondos JM = salida del banco.
 function bancosMovsDesdeFondosJM(){
@@ -13377,7 +13383,7 @@ function bancosMovsDesdeFondosJM(){
 function bancosOcultosSet(){return new Set((contData.bancosOcultos||[]).filter(x=>x&&!x.restaurado).map(x=>x.id));}
 function bancosMovsAutoVisibles(){
   const oc=bancosOcultosSet();
-  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...bancosMovsDesdeFondosJM(),...bancosMovsDesdeReparaciones(),...bancosMovsDesdeCajaTraslados()].filter(m=>!oc.has(m.id));
+  return[...bancosMovsDesdeCaja(),...bancosMovsDesdeCompras(),...bancosMovsDesdeCajaEgresos(),...bancosMovsDesdeFondosJM(),...bancosMovsDesdeReparaciones(),...bancosMovsDesdeCajaTraslados(),...bancosMovsDesdeRegistroDirecto()].filter(m=>!oc.has(m.id));
 }
 function bancosMovs(k){
   const man=(contData.bancosMovs||[]).filter(m=>!m.anulado&&m.cuenta===k);
@@ -13499,7 +13505,15 @@ function fondosJMMovsReparaciones(){
     id:'FJP_'+x.rep.id,auto:true,autoTipo:'reparacion',vehId:x.veh.id,repVid:x.origen==='Consignación'?'CONSIG_'+x.veh.id:x.origen==='Gerencia'?'VGER_'+x.veh.id:x.veh.id,
     tipo:'Egreso',monto:Number(x.rep.costo),fechaIngreso:x.rep.fecha||'',fechaPago:x.rep.fecha||'',detalle:x.desc,clasificacion:'Inversión Vehículo',placa:x.veh.placa||'',formaPago:'Cash',registradoPor:'Automático (Reparación)'}));
 }
-function fondosJMMovsAuto(){return[...fondosJMMovsCompras(),...fondosJMMovsIngresosAuto(),...fondosJMMovsReparaciones()];}
+// Egresos automáticos en Fondos JM por gastos del Registro Directo pagados con Cash JM
+function fondosJMMovsRegistroDirecto(){
+  const hist=contData.fondosJMHistorial||[];
+  const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
+  return(contData.registroDirectoGastos||[]).filter(r=>r&&r.salioDe==='fondojm'&&Number(r.monto)>0).filter(r=>!(desde&&r.fecha&&r.fecha<=desde)).map(r=>({
+    id:'FJG_'+r.id,auto:true,autoTipo:'gasto',tipo:'Egreso',monto:Number(r.monto),fechaIngreso:r.fecha||'',fechaPago:r.fecha||'',
+    detalle:`${r.cuenta||'Gasto'}${r.proveedor?' — '+r.proveedor:''}${r.desc?' — '+r.desc:''} (Registro directo)`,clasificacion:'Otro',placa:'',formaPago:'Cash',registradoPor:'Automático (Registro directo de gastos)'}));
+}
+function fondosJMMovsAuto(){return[...fondosJMMovsCompras(),...fondosJMMovsIngresosAuto(),...fondosJMMovsReparaciones(),...fondosJMMovsRegistroDirecto()];}
 function cajaFuerte2Saldo(hasta){
   return[...(contData.fondosJM||[]),...fondosJMMovsAuto()].filter(f=>!f.anulado&&(!hasta||!f.fechaIngreso||f.fechaIngreso<=hasta)).reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
 }
@@ -19437,6 +19451,12 @@ function cdEgresosAuto(fecha){
       nuevas.push(a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,nota:a.nota||'',oculta:!!a.oculta}:l);
     });
   });
+  // Gastos del Registro Directo que salieron de la Caja fuerte (se registran una sola vez allá)
+  (contData.registroDirectoGastos||[]).filter(r=>r&&r.salioDe==='cajafuerte'&&r.fecha===fecha&&Number(r.monto)>0).forEach(r=>{
+    const l={key:'RDG_'+r.id,fecha,auto:true,tipoLinea:'Gasto',col:'cajafuerte',monto:Number(r.monto),recibo:'',desc:`${r.cuenta||'Gasto'}${r.proveedor?' — '+r.proveedor:''}${r.desc?' — '+r.desc:''} (Registro directo de gastos)`};
+    const a=cdAjuste(l.key);
+    nuevas.push(a?{...l,col:(a.col==='cajafuerte'||a.col==='cashjulio')?a.col:l.col,nota:a.nota||'',oculta:!!a.oculta}:l);
+  });
   // Reparaciones pagadas con Cash — Caja fuerte
   reparacionesConPago().filter(x=>x.rep.fuentePago==='cajafuerte'&&x.rep.fecha===fecha).forEach(x=>{
     const l={key:'RP_'+x.rep.id,fecha,auto:true,tipoLinea:'Reparación',col:'cajafuerte',monto:Number(x.rep.costo),recibo:x.rep.factura||'',desc:x.desc};
@@ -19694,7 +19714,7 @@ function cdSalidasFondosJMHTML(fecha){
 function cdSalidasBancariasHTML(fecha){
   let movs=[];
   try{
-    movs=[...bancosMovsAutoVisibles().filter(m=>m.autoCompra||m.autoRep||String(m.id).startsWith('CJE_')),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
+    movs=[...bancosMovsAutoVisibles().filter(m=>m.autoCompra||m.autoRep||m.autoRDG||String(m.id).startsWith('CJE_')),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
       .filter(m=>m.fecha===fecha&&m.tipo!=='ingreso'&&Number(m.monto||0)>0);
   }catch(e){return'';}
   if(!movs.length)return'';
@@ -25332,7 +25352,15 @@ function renderRegistroDirectoGastos(){
         <div class="form-group"><label style="font-size:11px">Monto (USD $)</label><input class="calc-input" type="text" inputmode="decimal" id="rdg-monto" placeholder="0.00" style="padding:7px"></div>
         <div class="form-group"><label style="font-size:11px">Proveedor</label><input id="rdg-proveedor" placeholder="A quién se le pagó…" style="padding:7px"></div>
       </div>
-      <div class="form-group"><label style="font-size:11px">Descripción</label><input id="rdg-desc" placeholder="Detalle del gasto…" style="padding:7px"></div>
+      <div class="form-row">
+        <div class="form-group"><label style="font-size:11px">Descripción</label><input id="rdg-desc" placeholder="Detalle del gasto…" style="padding:7px"></div>
+        <div class="form-group"><label style="font-size:11px">¿De dónde salió el dinero?</label><select id="rdg-salio" style="padding:7px">
+          <option value="">No sale de caja (otro medio)</option>
+          <option value="cajafuerte">💵 Caja fuerte — sale en el Cash in Hand</option>
+          <option value="fondojm">💼 Cash JM (Fondos JM) — egreso en Fondos JM</option>
+          <optgroup label="🏦 Bancos — salida en la hoja Bancos">${BANCOS_CTAS.map(b=>`<option value="banco:${b.k}">${b.t}</option>`).join('')}</optgroup>
+        </select></div>
+      </div>
       <button class="btn btn-primary btn-sm" onclick="guardarRegistroDirectoGasto()"><i class="ti ti-plus"></i> Agregar (queda pendiente de validar)</button>
     </div>
     ${regs.length?renderRegistroDirectoGastosPorMes(regs):''}
@@ -25375,16 +25403,34 @@ function renderRegistroDirectoGastosPorMes(regs){
           <td><span class="badge badge-blue">${r.cuenta}</span></td>
           <td>${r.proveedor||'—'}</td>
           <td style="font-size:11px;color:var(--text2)">${r.desc||'—'}</td>
-          <td style="font-weight:700">${fmtD(r.monto)}</td>
+          <td style="font-weight:700">${fmtD(r.monto)}${r.salioDe?`<div><span class="badge badge-green" style="font-size:9px">${rdgSalioTxt(r.salioDe)}</span></div>`:''}</td>
           <td>${r.validado?`<span style="color:var(--green);font-size:11px"><i class="ti ti-check"></i> Validado (${r.validadoPor||''})</span>`:`<span style="color:var(--amber);font-size:11px">⏳ Pendiente</span>`}</td>
           ${MODO==='admin'?`<td><div class="tbl-actions">
             ${!r.validado?`<button class="btn btn-sm btn-success" onclick="validarRegistroDirectoGasto('${r.id}')" title="Validar y registrar en Estado de Resultado"><i class="ti ti-check"></i></button>`:''}
+            <button class="btn btn-sm" onclick="rdgCambiarSalio('${r.id}')" title="Cambiar de dónde salió el dinero (Caja fuerte, Fondos JM o Banco)" style="color:#2B8A3E;border-color:#8CE99A"><i class="ti ti-cash"></i></button>
             <button class="btn btn-sm btn-danger" onclick="eliminarRegistroDirectoGasto('${r.id}')"><i class="ti ti-trash"></i></button>
           </div></td>`:''}
         </tr>`).join('')}</tbody>
       </table>`}
     </div>`;
   }).join('');
+}
+function rdgSalioTxt(v){
+  if(v==='cajafuerte')return'💵 Caja fuerte';if(v==='fondojm')return'💼 Fondos JM';
+  if(String(v).startsWith('banco:')){const b=BANCOS_CTAS.find(x=>x.k===v.slice(6));return'🏦 '+(b?b.t:v.slice(6));}
+  return'';
+}
+async function rdgCambiarSalio(id){
+  if(MODO!=='admin'){alert('⛔ Solo el Administrador.');return;}
+  const r=getRegistroDirectoGastos().find(x=>x.id===id);if(!r)return;
+  const ops=[['','No sale de caja (otro medio)'],['cajafuerte','Caja fuerte'],['fondojm','Cash JM (Fondos JM)'],...BANCOS_CTAS.map(b=>['banco:'+b.k,'Banco '+b.t])];
+  const actual=Math.max(0,ops.findIndex(o=>o[0]===(r.salioDe||'')));
+  const resp=prompt(`¿De dónde salió el dinero de este gasto de ${fmtD(r.monto)} (${r.fecha})?\n\n`+ops.map((o,i)=>`${i}. ${o[1]}`).join('\n')+'\n\nEscribí el número:',String(actual));
+  if(resp===null)return;
+  const op=ops[parseInt(resp,10)];if(!op){alert('Número no válido.');return;}
+  if(op[0]==='cajafuerte'&&cdCierreDe(r.fecha))alert(`⚠️ La caja del ${r.fecha} ya está cerrada: reabrila y volvé a cerrarla para que tome esta salida.`);
+  r.salioDe=op[0];
+  await saveOne('contable',{id:'main',...contData});renderRendicionCuentas();
 }
 function toggleMesRegistroDirecto(mes){
   if(window._rdgMesesColapsados.has(mes))window._rdgMesesColapsados.delete(mes);else window._rdgMesesColapsados.add(mes);
@@ -25396,17 +25442,19 @@ async function guardarRegistroDirectoGasto(){
   const monto=parseFloat(document.getElementById('rdg-monto').value)||0;
   const proveedor=document.getElementById('rdg-proveedor').value.trim();
   const desc=document.getElementById('rdg-desc').value.trim();
+  const salioDe=document.getElementById('rdg-salio')?.value||'';
   if(!fecha){alert('La fecha es obligatoria.');return;}
+  if(salioDe==='cajafuerte'&&cdCierreDe(fecha)&&!confirm(`⚠️ La caja del ${fecha} ya está CERRADA. La salida no va a aparecer en ese cierre hasta que el Administrador reabra y vuelva a cerrar ese día.\n\n¿Guardar de todos modos?`))return;
   if(monto<=0){alert('Ingresá un monto válido.');return;}
   const regs=getRegistroDirectoGastos();
-  regs.push({id:uid(),fecha,cuenta,monto,proveedor,desc,validado:false,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
+  regs.push({id:uid(),fecha,cuenta,monto,proveedor,desc,salioDe,validado:false,creadoPor:getNombreUsuario(),fechaRegistro:hoyLocal()});
   contData.registroDirectoGastos=regs;
   await saveOne('contable',{id:'main',...contData});
   document.getElementById('rdg-monto').value='';
   document.getElementById('rdg-proveedor').value='';
   document.getElementById('rdg-desc').value='';
   renderRendicionCuentas();
-  alert('✅ Gasto agregado — queda pendiente de validar por el Administrador antes de contar en el Estado de Resultado.');
+  alert('✅ Gasto agregado — queda pendiente de validar por el Administrador antes de contar en el Estado de Resultado.'+(salioDe==='cajafuerte'?'\n\n💵 Ya aparece como salida de Caja fuerte en el Cash in Hand del '+fecha+'.':salioDe==='fondojm'?'\n\n💼 Ya aparece como egreso en Fondos JM (y abajo en el Cash in Hand) del '+fecha+'.':salioDe.startsWith('banco:')?'\n\n🏦 Ya aparece como salida en la hoja Bancos ('+rdgSalioTxt(salioDe).slice(3)+') del '+fecha+'.':''));
 }
 // Al validar, se crea el gasto REAL en Contabilidad (contData.gastos), conectándolo de una vez
 // al Estado de Resultado — antes de esto, el gasto NO cuenta en ningún reporte.
