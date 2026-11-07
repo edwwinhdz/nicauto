@@ -473,6 +473,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
         <option value="gerente1">Julio Mendoza</option>
         <option value="gerente2">Gisselle</option>
         <option value="operaciones">Jordan</option>
+        <option value="jefeoperativo">Carlos Lorío</option>
         <option value="vendedor1">Eduardo</option>
         <option value="vendedor2">Erick</option>
         <option value="vendedor3">Yenkel</option>
@@ -4922,6 +4923,7 @@ const USERS={
   'gerente1':   {pass:'Julio2026',      modo:'gerente1',     label:'Julio Mendoza',      nombre:'Julio Mendoza'},
   'gerente2':   {pass:'Gisselle2026',   modo:'gerente2',     label:'Gisselle Ortega',    nombre:'Gisselle Ortega'},
   'operaciones':{pass:'gerenteregional',modo:'operaciones2', label:'Jordan Lopez',       nombre:'Jordan Lopez'},
+  'jefeoperativo':{pass:'Carlos2026',   modo:'jefeoperativo', label:'Carlos Lorío',       nombre:'Carlos Lorío'},
   'vendedor1':  {pass:'Eduardo2026',    modo:'vendedor',     label:'Eduardo Giacoman',   nombre:'Eduardo Giacoman'},
   'vendedor2':  {pass:'Erick2026',      modo:'vendedor',     label:'Erick Araquistain',  nombre:'Erick Araquistain'},
   'vendedor3':  {pass:'Yenkel2026*',    modo:'vendedor',     label:'Yenkel Luna',        nombre:'Yenkel Luna'},
@@ -5383,6 +5385,7 @@ async function intentarLogin(){
       else if(MODO==='legal')showPage('legal');
       else if(MODO==='compras')showPage('compras');
       else if(MODO==='taller')showPage('taller');
+      else if(MODO==='jefeoperativo')showPage('operaciones');
       try{refreshAIChips();}catch(e){}
       setTimeout(()=>{
         try{makeResizable('tbl-inv-table');}catch(e){}
@@ -5465,6 +5468,14 @@ function aplicarModoAcceso(){
   } else if(MODO==='operaciones2'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
     ['nb-listaprecios','nb-chequeofisico','nb-operaciones','nb-chat','nb-pizarras','nb-inventario','nb-taller','nb-ventas'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
+    showPage('operaciones');
+  } else if(MODO==='jefeoperativo'){
+    // Carlos Lorío — Jefe Operativo: Operaciones (Rendición de cuentas: ingresa gastos) y Taller
+    // como Jefe Operativo (Recepción, asignar pasos). Jordan sigue con el mando (Finalizar, KPI,
+    // cierres de semana).
+    document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
+    ['nb-operaciones','nb-taller','nb-chat'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='flex';});
+    try{safeStorage.setItem('taller_quien_soy','Jefe Operativo');}catch(e){}
     showPage('operaciones');
   } else if(MODO==='compras'){
     document.querySelectorAll('.nav-btn').forEach(b=>b.style.display='none');
@@ -11196,7 +11207,7 @@ function abrirModalVenta(id){
     const liq=document.getElementById('mvt-liquidacion');if(liq)liq.style.display='none';
     // Numeración automática de recibo de venta (req #9)
     const mvtReciboEl=document.getElementById('mvt-recibo');
-    if(mvtReciboEl){mvtReciboEl.value=previsualizarNumeroRecibo('venta');mvtReciboEl.readOnly=!(MODO==='admin'||MODO==='coordinador'||MODO==='jefecomercial');}
+    if(mvtReciboEl){mvtReciboEl.value=previsualizarNumeroRecibo('venta');mvtReciboEl.readOnly=!(MODO==='admin'||MODO==='coordinador'||MODO==='jefecomercial'||MODO==='operaciones2');}
   }
   document.getElementById('mvt-rep-ref').style.display='none';
   const chkVenta=document.getElementById('mvt-confirmarventa');
@@ -18371,6 +18382,7 @@ const TODOS_USUARIOS=[
   {key:'admin',     nombre:'Edwin Hernández',    rol:'Administrador'},
   {key:'gerente1',  nombre:'Julio Mendoza',      rol:'Gerente 1'},
   {key:'gerente2',  nombre:'Gisselle Ortega',    rol:'Gerente 2'},
+  {key:'jefeoperativo',nombre:'Carlos Lorío',     rol:'Jefe Operativo'},
   {key:'operaciones',nombre:'Jordan Lopez',      rol:'Operaciones'},
   {key:'jefecomercial',nombre:'Vacante',     rol:'Jefe Comercial'},
   {key:'vendedor1', nombre:'Eduardo Giacoman',   rol:'Vendedor'},
@@ -21042,7 +21054,7 @@ function tallerColaPendientes(){
     .sort((a,b)=>((a.v.fechacompra||a.fechaIngreso||'')+a.fechaIngreso).localeCompare((b.v.fechacompra||b.fechaIngreso||'')+b.fechaIngreso));
 }
 function puedeVerColaTaller(){
-  return MODO==='admin'||MODO==='operaciones2'||(safeStorage.getItem('taller_quien_soy')||'')==='Jefe Operativo';
+  return esJefeTaller()||(safeStorage.getItem('taller_quien_soy')||'')==='Jefe Operativo';
 }
 function renderColaRecepcionTaller(){
   if(!puedeVerColaTaller())return'';
@@ -21122,7 +21134,7 @@ function renderTaller(){
   // taller (Kevin, Carlos, Francisco, Rudy, Maycol) solo ven los que YA pasaron por Recepción
   // — no pueden elegir un carro nuevo por su cuenta.
   const quienSoyActual=safeStorage.getItem('taller_quien_soy')||'';
-  const vistaCompleta=MODO==='admin'||MODO==='operaciones2'||quienSoyActual==='Jefe Operativo';
+  const vistaCompleta=esJefeTaller()||quienSoyActual==='Jefe Operativo';
   const vehiculosDisponibles=(vehiculos||[]).filter(v=>{
     if(v.estado==='Vendido')return false;
     if(vistaCompleta)return true;
@@ -21278,7 +21290,7 @@ function renderTaller(){
   <div class="card" style="margin-bottom:1.5rem">
     <div class="card-head"><h3><i class="ti ti-list-check"></i> Vehículos en proceso ahora mismo (${enProceso.length})</h3></div>
     <table class="tbl" style="font-size:12px">
-      <thead><tr><th>#</th><th>Vehículo</th><th>Paso actual</th><th>Trabajador</th><th>Fecha inicio</th><th>Días transcurridos</th><th></th>${(MODO==='admin'||MODO==='operaciones2')?'<th>Reasignar</th>':''}</tr></thead>
+      <thead><tr><th>#</th><th>Vehículo</th><th>Paso actual</th><th>Trabajador</th><th>Fecha inicio</th><th>Días transcurridos</th><th></th>${esJefeTaller()?'<th>Reasignar</th>':''}</tr></thead>
       <tbody>${enProceso.length?enProceso.map((r,idx)=>{
         const dias=r.fechaInicio?diasDesde(r.fechaInicio):null;
         const colorDias=dias===null?'':dias<=3?'var(--green)':dias<=7?'var(--amber)':'var(--red)';
@@ -21292,7 +21304,7 @@ function renderTaller(){
           <td>${r.fechaInicio||'—'}</td>
           <td style="font-weight:700;color:${colorDias}">${dias!=null?dias+' día'+(dias===1?'':'s'):'—'}</td>
           <td style="cursor:pointer" onclick="verHistorialTallerVehiculo('${r.vehiculoId}')"><i class="ti ti-eye" style="color:var(--blue)"></i></td>
-          ${(MODO==='admin'||MODO==='operaciones2')?`<td><div class="tbl-actions">
+          ${esJefeTaller()?`<td><div class="tbl-actions">
             <button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="abrirEditarRecepcionTaller('${r.vehiculoId}')" title="Editar recepción / reclasificar / finalizar"><i class="ti ti-edit"></i></button>
             <button class="btn btn-sm" onclick="reasignarTrabajadorTaller('${r.id}')" title="Reasignar a otro trabajador"><i class="ti ti-user-exclamation"></i></button>
             <button class="btn btn-sm btn-danger" onclick="eliminarRegistroTallerDirecto('${r.id}')" title="Borrar este registro"><i class="ti ti-trash"></i></button>
@@ -21379,7 +21391,7 @@ function renderTaller(){
   <div class="card">
     <div class="card-head"><h3><i class="ti ti-flag-check"></i> ✅ Listos (${completados.length}) — vehículos que ya finalizaron</h3></div>
     <table class="tbl" style="font-size:12px">
-      <thead><tr><th>Vehículo</th><th>Inicio del proceso</th><th>Fecha Fin</th><th>Pasos registrados</th><th>Días totales</th><th></th>${(MODO==='admin'||MODO==='operaciones2')?'<th>Editar</th>':''}${puedeTerminarTaller()?'<th>Revertir</th>':''}</tr></thead>
+      <thead><tr><th>Vehículo</th><th>Inicio del proceso</th><th>Fecha Fin</th><th>Pasos registrados</th><th>Días totales</th><th></th>${esJefeTaller()?'<th>Editar</th>':''}${puedeTerminarTaller()?'<th>Revertir</th>':''}</tr></thead>
       <tbody>${completados.length?completados.map(c=>{
         const colorDias=c.dias===null?'':c.dias<=7?'var(--green)':c.dias<=15?'var(--amber)':'var(--red)';
         return`<tr>
@@ -21389,7 +21401,7 @@ function renderTaller(){
           <td style="text-align:center">${c.pasos}</td>
           <td style="font-weight:700;color:${colorDias}">${c.dias!=null?c.dias+' día'+(c.dias===1?'':'s'):'—'}</td>
           <td style="cursor:pointer" onclick="verHistorialTallerVehiculo('${c.vehiculoId}')"><i class="ti ti-eye" style="color:var(--blue)"></i></td>
-          ${(MODO==='admin'||MODO==='operaciones2')?`<td><button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="abrirEditarRecepcionTaller('${c.vehiculoId}')" title="Editar recepción / reabrir / reclasificar"><i class="ti ti-edit"></i></button></td>`:''}
+          ${esJefeTaller()?`<td><button class="btn btn-sm" style="color:var(--purple);border-color:var(--purple)" onclick="abrirEditarRecepcionTaller('${c.vehiculoId}')" title="Editar recepción / reabrir / reclasificar"><i class="ti ti-edit"></i></button></td>`:''}
           ${puedeTerminarTaller()?`<td><button class="btn btn-sm" style="color:var(--red);border-color:var(--red)" onclick="revertirFinalizadoTaller('${c.vehiculoId}')" title="Revertir: el carro deja de estar Finalizado y vuelve a Taller"><i class="ti ti-arrow-back-up"></i> Revertir</button></td>`:''}
         </tr>`;
       }).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Todavía no hay ningún vehículo con el proceso terminado</td></tr>'}</tbody>
@@ -21763,8 +21775,8 @@ function renderTimelineTaller(porVehiculoTodo,abiertosPorVehiculo){
     //    activo=terminar).
     //  - Admin y Jordan (Jefe de Taller): pueden clickear CUALQUIER círculo — si ESE paso en
     //    particular está abierto, lo termina; si no, lo inicia (preguntando a quién asignarlo).
-    const puedeMarcar=MODO==='admin'||MODO==='operaciones2'||MODO==='taller';
-    const esJefe=MODO==='admin'||MODO==='operaciones2';
+    const puedeMarcar=esJefeTaller()||MODO==='taller';
+    const esJefe=esJefeTaller();
     const circulos=pasosAMostrar.map(paso=>{
       const idx=TALLER_PASOS.indexOf(paso); // número real del paso (1-17), no la posición en esta lista acortada
       const completado=completadosSet.has(paso)||terminado;
@@ -21844,7 +21856,7 @@ function iniciarPasoDesdeTimeline(vehiculoId,paso){
   // (self-service, un clic y listo).
   // Finalizado: se asigna directo al Gerente Jordan Lopez, sin preguntar.
   if(paso==='Finalizado'){iniciarPasoTallerRapido(vehiculoId,paso,TALLER_RESP_FINALIZADO);return;}
-  if(MODO==='admin'||MODO==='operaciones2'){
+  if(esJefeTaller()){
     abrirAsignarTrabajadorNuevoPaso(vehiculoId,paso);
     return;
   }
@@ -24891,8 +24903,10 @@ function esCxCEmpleadosCat(cat){
 
 // ======================== RENDICIÓN DE CUENTAS ========================
 function puedeEditarRendicion(){
-  return (MODO==='admin'||MODO==='coordinador')||MODO==='operaciones2';
+  return (MODO==='admin'||MODO==='coordinador')||MODO==='operaciones2'||MODO==='jefeoperativo';
 }
+// Jefes de Taller: Admin, Jordan (mando) y Carlos Lorío (Jefe Operativo)
+function esJefeTaller(){return MODO==='admin'||MODO==='operaciones2'||MODO==='jefeoperativo';}
 function getRendicionConfig(){
   if(!contData.rendicionConfig){
     contData.rendicionConfig={saldoInicial:0,fondosRecibidos:[],numeroActual:1};
