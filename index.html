@@ -1918,7 +1918,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
       <p style="font-size:11px;font-weight:600;color:var(--blue);margin-bottom:.625rem;text-transform:uppercase;letter-spacing:.04em"><i class="ti ti-arrows-exchange"></i> Registrar pago en módulo contable</p>
       <div class="form-row" style="margin-bottom:0">
         <div class="form-group" style="margin:0"><label>Medio de pago</label>
-          <select id="mv-mediopago" onchange="mvSugerirPagaCaja()"><option value="">No registrar ahora</option><option value="Caja (efectivo)">Caja (efectivo)</option><option value="Banco (transferencia)">Banco (transferencia)</option><option value="Tarjeta de crédito">Tarjeta de crédito</option><option value="Cheque">Cheque</option></select>
+          <select id="mv-mediopago" onchange="mvSugerirPagaCaja()"><option value="">No registrar ahora</option><option value="Caja (efectivo)">Caja (efectivo)</option><option value="Banco (transferencia)">Banco (transferencia)</option><option value="Banco (transferencia) + Canje">Banco (transferencia) + Canje de vehículo</option><option value="Caja (efectivo) + Canje">Caja (efectivo) + Canje de vehículo</option><option value="Canje de vehículo">Canje de vehículo</option><option value="Tarjeta de crédito">Tarjeta de crédito</option><option value="Cheque">Cheque</option></select>
         </div>
         <div class="form-group" style="margin:0"><label>No. Recibo / Ref.</label><input id="mv-recibo" placeholder="REC-001…"></div>
       </div>
@@ -1927,23 +1927,26 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
         <label style="font-size:11px;font-weight:700;color:var(--blue)"><i class="ti ti-wallet"></i> ¿De dónde sale el dinero? — hasta 3 formas de pago</label>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">1.</span>
-          <select id="mv-pf-fuente-0" onchange="mvPfCambio(0)" style="flex:1;min-width:150px"><option value="">— ¿De dónde sale? —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
+          <select id="mv-pf-fuente-0" onchange="mvPfCambio(0)" style="flex:1;min-width:150px"><option value="">— ¿De dónde sale? —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option><option value="canje">🚗 Canje de vehículo</option></select>
           <select id="mv-pf-banco-0" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option><option value="BACNIO">BAC C$</option></select>
+          <input id="mv-pf-canje-0" placeholder="Vehículo que se dio en canje (marca, modelo, año, placa)" style="display:none;flex:1;min-width:220px">
           <input id="mv-pf-monto-0" type="number" step="0.01" placeholder="Monto (vacío = todo el costo)" style="width:170px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">2.</span>
-          <select id="mv-pf-fuente-1" onchange="mvPfCambio(1)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
+          <select id="mv-pf-fuente-1" onchange="mvPfCambio(1)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option><option value="canje">🚗 Canje de vehículo</option></select>
           <select id="mv-pf-banco-1" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option><option value="BACNIO">BAC C$</option></select>
+          <input id="mv-pf-canje-1" placeholder="Vehículo que se dio en canje (marca, modelo, año, placa)" style="display:none;flex:1;min-width:220px">
           <input id="mv-pf-monto-1" type="number" step="0.01" placeholder="Monto" style="width:170px">
         </div>
         <div style="display:flex;gap:6px;margin-top:5px;align-items:center;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:700;color:var(--text2);width:18px">3.</span>
-          <select id="mv-pf-fuente-2" onchange="mvPfCambio(2)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option></select>
+          <select id="mv-pf-fuente-2" onchange="mvPfCambio(2)" style="flex:1;min-width:150px"><option value="">— otra forma de pago (opcional) —</option><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="fondojm">💼 Fondo JM</option><option value="banco">🏦 Banco</option><option value="cashjulio">Cash Julio M (Gerencia)</option><option value="canje">🚗 Canje de vehículo</option></select>
           <select id="mv-pf-banco-2" style="display:none;width:120px"><option value="">— Banco —</option><option value="BACJM">BAC JM</option><option value="BACGO">BAC GO</option><option value="LAFISE">La Fise</option><option value="FICOHSA">Ficohsa</option><option value="BACNIO">BAC C$</option></select>
+          <input id="mv-pf-canje-2" placeholder="Vehículo que se dio en canje (marca, modelo, año, placa)" style="display:none;flex:1;min-width:220px">
           <input id="mv-pf-monto-2" type="number" step="0.01" placeholder="Monto" style="width:170px">
         </div>
-        <p style="font-size:10px;color:var(--text3);margin-top:4px"><b>Caja fuerte</b> → sale en Egresos del Reporte de Caja · <b>Fondo JM</b> → sale como Egreso en Fondos JM · <b>Banco</b> → sale como Salida en la hoja Bancos (cuentas de Don Julio M). Todo con la fecha de compra. Si es una sola forma de pago, dejá el monto vacío y toma todo el costo.</p>
+        <p style="font-size:10px;color:var(--text3);margin-top:4px"><b>Caja fuerte</b> → sale en Egresos del Reporte de Caja · <b>Fondo JM</b> → sale como Egreso en Fondos JM · <b>Banco</b> → sale como Salida en la hoja Bancos (cuentas de Don Julio M) · <b>Canje de vehículo</b> → parte del pago con un carro nuestro, no mueve dinero. Todo con la fecha de compra. Si es una sola forma de pago, dejá el monto vacío y toma todo el costo.</p>
       </div>
       <div class="form-row" style="margin-bottom:0">
         <div class="form-group" style="margin:0"><label>Agente de compra</label><select id="mv-agentecompra"><option value="">-- Seleccionar --</option></select></div>
@@ -10041,13 +10044,21 @@ function calcMargenVehiculo(){
 function mvSugerirPagaCaja(){
   const medio=document.getElementById('mv-mediopago')?.value||'';
   const f0=document.getElementById('mv-pf-fuente-0');
-  if(f0&&!f0.value){if(medio==='Caja (efectivo)')f0.value='cajafuerte';else if(medio==='Banco (transferencia)')f0.value='banco';}
+  const f1=document.getElementById('mv-pf-fuente-1');
+  if(f0&&!f0.value){
+    if(medio.startsWith('Caja (efectivo)'))f0.value='cajafuerte';
+    else if(medio.startsWith('Banco (transferencia)'))f0.value='banco';
+    else if(medio==='Canje de vehículo')f0.value='canje';
+    mvPfCambio(0);
+  }
+  if(f1&&!f1.value&&medio.endsWith('+ Canje')){f1.value='canje';mvPfCambio(1);}
   [0,1,2].forEach(mvPfCambio);
 }
 // Formas de pago de la compra (hasta 3): Caja fuerte / Fondo JM / Banco (/ Cash Julio M)
 function mvPfCambio(i){
   const f=document.getElementById('mv-pf-fuente-'+i)?.value||'';
   const b=document.getElementById('mv-pf-banco-'+i);if(b)b.style.display=f==='banco'?'':'none';
+  const c=document.getElementById('mv-pf-canje-'+i);if(c)c.style.display=f==='canje'?'':'none';
 }
 function pagosCompraDe(v){
   if(!v)return[];
@@ -10064,6 +10075,7 @@ function mvCargarPagos(v){
     const f=document.getElementById('mv-pf-fuente-'+i),b=document.getElementById('mv-pf-banco-'+i),m=document.getElementById('mv-pf-monto-'+i);
     if(f)f.value=l[i]?l[i].fuente:'';if(b)b.value=l[i]&&l[i].banco?l[i].banco:'';
     if(m)m.value=l[i]&&l[i].monto?l[i].monto:'';
+    const c=document.getElementById('mv-pf-canje-'+i);if(c)c.value=l[i]&&l[i].canjeDesc?l[i].canjeDesc:'';
     mvPfCambio(i);
   });
 }
@@ -10073,7 +10085,9 @@ function mvLeerPagos(costo){
     const fuente=document.getElementById('mv-pf-fuente-'+i)?.value||'';
     if(!fuente)return;
     const mRaw=document.getElementById('mv-pf-monto-'+i)?.value;
-    res.push({fuente,banco:fuente==='banco'?(document.getElementById('mv-pf-banco-'+i)?.value||''):'',monto:mRaw===''||mRaw==null?null:Number(mRaw)});
+    const p={fuente,banco:fuente==='banco'?(document.getElementById('mv-pf-banco-'+i)?.value||''):'',monto:mRaw===''||mRaw==null?null:Number(mRaw)};
+    if(fuente==='canje')p.canjeDesc=(document.getElementById('mv-pf-canje-'+i)?.value||'').trim();
+    res.push(p);
   });
   if(res.length===1&&res[0].monto==null)res[0].monto=Number(costo||0);
   return res;
@@ -10088,11 +10102,12 @@ function guardarVehiculo(){
     const pagos=mvLeerPagos(vals.costo);
     if(pagos.some(p=>p.monto==null||!(p.monto>0))){alert('Poné el monto de cada forma de pago (o dejá una sola sin monto para que tome todo el costo).');return;}
     if(pagos.some(p=>p.fuente==='banco'&&!p.banco)){alert('Elegí el banco de donde salió la transferencia.');return;}
+    if(pagos.some(p=>p.fuente==='canje'&&!p.canjeDesc)){alert('Escribí qué vehículo se dio en canje (marca, modelo, año, placa).');return;}
     if(pagos.length&&!(parseFloat(vals.costo)>0)){alert('Para registrar de dónde sale el dinero hace falta el costo (precio de compra) del vehículo.');return;}
     const suma=pagos.reduce((s,p)=>s+p.monto,0);
     if(pagos.length&&Math.abs(suma-Number(vals.costo||0))>0.009&&!confirm(`Las formas de pago suman ${fmtD(suma)} y el costo del vehículo es ${fmtD(Number(vals.costo||0))}.\n\n¿Guardar así de todos modos?`))return;
     const esNuevoV=!document.getElementById('mv-id').value;
-    if(esNuevoV&&!pagos.length&&(vals.mediopago==='Caja (efectivo)'||vals.mediopago==='Banco (transferencia)')){alert('Indicá de dónde sale el dinero de esta compra (Caja fuerte, Fondo JM o Banco).');return;}
+    if(esNuevoV&&!pagos.length&&/^(Caja \(efectivo\)|Banco \(transferencia\)|Canje)/.test(vals.mediopago||'')){alert('Indicá de dónde sale el dinero de esta compra (Caja fuerte, Fondo JM o Banco).');return;}
     vals.pagosCompra=pagos;
     vals.pagacaja='';vals.pagoBancos=[];
     vals.fechaPagoCaja=vals.fechacompra||hoyLocal();
@@ -10136,6 +10151,12 @@ function guardarVehiculo(){
     const desc=`${vals.marca} ${vals.modelo} ${vals.anio||''} — ${vals.placa||''} — ${vals.nombrecomprador||''}`;
     const comprobanteId=uid();
     contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Ingreso',medio:'Inventario',monto:costo,cat:'Entrada de inventario',ref:vals.recibo||'',persona:vals.nombrecomprador||'',vehId:id,desc:`DÉBITO INVENTARIO: ${desc}`});
+    if(/Canje/.test(vals.mediopago)&&Array.isArray(vals.pagosCompra)&&vals.pagosCompra.length){
+      // Pago mixto con canje: un crédito por cada medio (el canje no mueve dinero de caja ni banco)
+      const medioDe=f=>f==='banco'?'Banco (transferencia)':f==='canje'?'Canje de vehículo':(f==='cajafuerte'||f==='cashjulio')?'Caja (efectivo)':'Fondo JM';
+      const grupos={};vals.pagosCompra.forEach(p=>{const m=medioDe(p.fuente);grupos[m]=(grupos[m]||0)+Number(p.monto||0);});
+      Object.entries(grupos).forEach(([m,monto])=>contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Egreso',medio:m,monto,cat:'Compra de vehículo',ref:vals.recibo||'',persona:vals.nombrecomprador||'',vehId:id,desc:`CRÉDITO ${m.toUpperCase()}: ${desc}`}));
+    } else
     contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Egreso',medio:vals.mediopago,monto:costo,cat:'Compra de vehículo',ref:vals.recibo||'',persona:vals.nombrecomprador||'',vehId:id,desc:`CRÉDITO ${vals.mediopago.toUpperCase()}: ${desc}`});
     saveOne('contable',{id:'main',...contData});
   }
@@ -19671,7 +19692,7 @@ function cdHojaHTML(h,enPantalla){
   <div style="margin-top:16px;font-weight:800;background:#E9ECEF;display:inline-block;padding:4px 12px">EGRESOS / SALIDAS</div>
   <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
     <thead><tr style="background:#F1F3F5"><th>Fecha</th><th>Descripción</th><th>Recibo / ROC</th><th>Sale de</th><th style="text-align:right">Monto</th>${enPantalla?'<th></th>':''}</tr></thead>
-    <tbody>${(()=>{const egrCaja=h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'));return egrCaja;})().length?cdOrdenarPorRecibo(h.egresos.filter(e=>!(e.devolucionReservaVentaId&&e.col==='banco'))).map(e=>`<tr>
+    <tbody>${(()=>{const egrCaja=h.egresos.filter(e=>e.col!=='banco');return egrCaja;})().length?cdOrdenarPorRecibo(h.egresos.filter(e=>e.col!=='banco')).map(e=>`<tr>
       <td>${e.fecha}</td><td>${e.desc||''}${e.trasladoJM?' <span style="font-size:9px;background:#F3F0FF;color:#7048E8;border-radius:8px;padding:1px 6px">→ Fondos JM</span>':''}${e.trasladoBanco?` <span style="font-size:9px;background:#E7F5FF;color:#1971C2;border-radius:8px;padding:1px 6px">→ ${(BANCOS_CTAS.find(b=>b.k===e.trasladoBanco)||{}).t||e.trasladoBanco}</span>`:''}${e.nota?`<div style="font-size:10px;color:#E67700;margin-top:2px"><i class="ti ti-note"></i> ${e.nota}</div>`:''}</td><td>${e.recibo||''}</td><td>${e.col==='banco'?'🏦 '+((BANCOS_CTAS.find(b=>b.k===e.bancoCta)||{}).t||'Banco')+(e.forma?' — '+e.forma:''):(e.col==='cashjulio'?'Cash Julio M (Gerencia)':'Caja fuerte')}${e.col!=='banco'&&e.forma&&e.forma!=='Cash'?' — '+e.forma:''}</td>
       <td style="text-align:right">${fmtD(Number(e.monto))}</td>${acciones(e)}</tr>`).join('')
       :`<tr><td colspan="5" style="text-align:center;color:#868E96;padding:10px">Sin salidas este día</td>${enPantalla?'<td></td>':''}</tr>`}</tbody>
@@ -19683,7 +19704,7 @@ function cdHojaHTML(h,enPantalla){
     <tr><td style="font-weight:800;font-size:14px;padding-top:8px">SALDO FINAL CAJA</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cajafuerte)}</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cashjulio)} <span style="font-weight:400;font-size:10px">${cjNuevo?'del día → Fondos JM (auxiliar Don Julio)':'en caja Don Julio'}</span></td></tr>
-  </table>${cdSalidasBancariasHTML(h.fecha)}${cdSalidasFondosJMHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
+  </table>${cdSalidasBancariasHTML(h.fecha,enPantalla?acciones:null,h.egresos)}${cdSalidasFondosJMHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
 }
 // Solo informativo (NO afecta los saldos de la caja): salidas de las cuentas bancarias de
 // Gerencia de ese día — compras de vehículos pagadas por transferencia y salidas registradas a
@@ -19723,7 +19744,7 @@ function cdSalidasFondosJMHTML(fecha){
     <tfoot><tr style="background:#F3F0FF;font-weight:800"><td style="${td}" colspan="2">TOTAL PAGADO POR DON JULIO (FONDOS JM)</td><td style="${td};text-align:right">${fmtD(movs.reduce((s,f)=>s+Number(f.monto||0),0))}</td></tr></tfoot>
   </table>`;
 }
-function cdSalidasBancariasHTML(fecha){
+function cdSalidasBancariasHTML(fecha,acc,egresosCaja){
   let movs=[];
   try{
     movs=[...bancosMovsAutoVisibles().filter(m=>m.autoCompra||m.autoRep||m.autoRDG||String(m.id).startsWith('CJE_')),...(contData.bancosMovs||[]).filter(m=>!m.anulado)]
@@ -19747,9 +19768,9 @@ function cdSalidasBancariasHTML(fecha){
   const td='padding:4px 6px;border:1px solid #DEE2E6';
   return`<div style="margin-top:14px;font-weight:800;font-size:13px;color:#1864AB">SALIDAS BANCARIAS DE GERENCIA <span style="font-weight:400;font-size:10px;color:#868E96">(solo informativo — ya están descontadas en la hoja Bancos, no afectan la caja)</span></div>
   <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">
-    <thead><tr><th style="${th};text-align:left">Concepto</th><th style="${th}">Ref. / Recibo</th>${bancos.map(b=>`<th style="${th};text-align:right">${b.t}${bancoEsNIO(b.k)?' <span style="font-weight:400;font-size:9px">(en US$, tasa '+t+')</span>':''}</th>`).join('')}</tr></thead>
-    <tbody>${movs.map(m=>`<tr><td style="${td}">${m.desc||'—'}${m.autoCompra?' <span style="font-size:9px;color:#E67700">(compra de vehículo)</span>':m.autoRep?' <span style="font-size:9px;color:#E67700">(reparación)</span>':''}</td><td style="${td};text-align:center">${m.ref||'—'}</td>${bancos.map(b=>`<td style="${td};text-align:right">${celda(m,b)}</td>`).join('')}</tr>`).join('')}</tbody>
-    <tfoot><tr style="background:#E7F5FF;font-weight:800"><td style="${td}" colspan="2">TOTAL SALIDAS BANCARIAS (US$) — ${fmtD(movs.reduce((s,m)=>s+m._usd,0))}</td>${bancos.map(b=>`<td style="${td};text-align:right">${bancoEsNIO(b.k)?`${fmtD(tot(b.k))}<div style="font-size:10px;font-weight:400">(${fmtBanco(b.k,totNIO(b.k))})</div>`:fmtD(tot(b.k))}</td>`).join('')}</tr></tfoot>
+    <thead><tr><th style="${th};text-align:left">Concepto</th><th style="${th}">Ref. / Recibo</th>${bancos.map(b=>`<th style="${th};text-align:right">${b.t}${bancoEsNIO(b.k)?' <span style="font-weight:400;font-size:9px">(en US$, tasa '+t+')</span>':''}</th>`).join('')}${acc?`<th style="${th}"></th>`:''}</tr></thead>
+    <tbody>${movs.map(m=>`<tr><td style="${td}">${m.desc||'—'}${m.autoCompra?' <span style="font-size:9px;color:#E67700">(compra de vehículo)</span>':m.autoRep?' <span style="font-size:9px;color:#E67700">(reparación)</span>':''}</td><td style="${td};text-align:center">${m.ref||'—'}</td>${bancos.map(b=>`<td style="${td};text-align:right">${celda(m,b)}</td>`).join('')}${acc?(()=>{const e=String(m.id).startsWith('CJE_')?(egresosCaja||[]).find(x=>String(m.id).startsWith('CJE_'+x.id+'_')):null;return e?acc(e):`<td style="${td}"></td>`;})():''}</tr>`).join('')}</tbody>
+    <tfoot><tr style="background:#E7F5FF;font-weight:800"><td style="${td}" colspan="2">TOTAL SALIDAS BANCARIAS (US$) — ${fmtD(movs.reduce((s,m)=>s+m._usd,0))}</td>${bancos.map(b=>`<td style="${td};text-align:right">${bancoEsNIO(b.k)?`${fmtD(tot(b.k))}<div style="font-size:10px;font-weight:400">(${fmtBanco(b.k,totNIO(b.k))})</div>`:fmtD(tot(b.k))}</td>`).join('')}${acc?`<td style="${td}"></td>`:''}</tr></tfoot>
   </table>`;
 }
 
