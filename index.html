@@ -1700,6 +1700,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
     <button class="tab" onclick="showComprasTab('Gerencia')">Gerencia</button>
     <button class="tab" onclick="showComprasTab('aprobado')">Aprobados</button>
     <button class="tab" onclick="showComprasTab('validador')"><i class="ti ti-calculator" style="font-size:13px"></i> Validador de Compra</button>
+    <button class="tab" onclick="showComprasTab('avaluos')"><i class="ti ti-clipboard-check" style="font-size:13px"></i> Avalúos</button>
   </div>
   <div id="compras-lista-container">
   <div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;align-items:flex-start">
@@ -1723,6 +1724,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
   </div>
   </div><!-- end compras-lista-container -->
   <div id="compras-validador" style="display:none"></div>
+  <div id="compras-avaluos" style="display:none"></div>
 </div>
 
 </div><!-- end main -->
@@ -23836,11 +23838,161 @@ function usarPrecioFinalValidador(){
     if(precioEl)precioEl.value=precioFinal;
   },200);
 }
+
+// ═══════════ AVALÚOS DE VEHÍCULOS (Compras) ═══════════
+// Formato para registrar el avalúo de un carro que nos ofrecen: datos del vehículo, del dueño,
+// condición, precio que pide, valor de mercado, reparaciones estimadas y el PRECIO DE OFERTA DE
+// COMPRA. Se guarda en contData.avaluos y se imprime en una hoja.
+let avFiltro='';
+const AV_COND=[['carroceria','Carrocería'],['pintura','Pintura'],['motor','Motor'],['transmision','Transmisión'],['suspension','Suspensión / frenos'],['interior','Interior / tapicería'],['llantas','Llantas'],['electrico','Sistema eléctrico / A/C']];
+const AV_NIVELES=['','Excelente','Bueno','Regular','Malo'];
+function avLista(){contData.avaluos=contData.avaluos||[];return contData.avaluos.filter(a=>a&&!a.anulado);}
+function avEsc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+function avNum(v){const n=parseFloat(String(v||'').replace(/,/g,''));return isNaN(n)?0:n;}
+function avColorEstado(e){return{'Pendiente':'var(--amber)','Oferta enviada':'var(--blue)','Aceptada — comprado':'var(--green)','Rechazada':'var(--red)'}[e]||'var(--text2)';}
+function renderAvaluos(){
+  const cont=document.getElementById('compras-avaluos');if(!cont)return;
+  const q=avFiltro.toLowerCase();
+  const lista=avLista().filter(a=>!q||[a.marca,a.modelo,a.placa,a.dueno,a.avaluadoPor,a.anio].join(' ').toLowerCase().includes(q))
+    .sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const totOf=lista.reduce((s,a)=>s+avNum(a.oferta),0);
+  cont.innerHTML=`<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <div><div style="font-weight:800;font-size:15px"><i class="ti ti-clipboard-check"></i> Avalúos de vehículos</div>
+        <div style="font-size:11px;color:var(--text3)">${lista.length} avalúo${lista.length===1?'':'s'} · ofertas por ${fmtD(totOf)}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input placeholder="Buscar marca, placa, dueño…" value="${avEsc(avFiltro)}" oninput="avFiltro=this.value;renderAvaluos();this.focus();this.setSelectionRange(this.value.length,this.value.length)" style="padding:6px 10px;min-width:200px">
+        <button class="btn btn-primary" onclick="abrirAvaluo()"><i class="ti ti-plus"></i> Nuevo avalúo</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl" style="min-width:900px">
+      <thead><tr><th>Fecha</th><th>Vehículo</th><th>Placa</th><th>Dueño</th><th style="text-align:right">Pide</th><th style="text-align:right">Oferta de compra</th><th>Avaluado por</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${lista.length?lista.map(a=>`<tr>
+        <td style="white-space:nowrap">${a.fecha||'—'}</td>
+        <td><b>${avEsc(a.marca)} ${avEsc(a.modelo)}</b> ${avEsc(a.anio)}<div style="font-size:10px;color:var(--text3)">${avEsc(a.color)}${a.km?' · '+avEsc(a.km)+' km':''}</div></td>
+        <td style="font-family:monospace">${avEsc(a.placa)||'—'}</td>
+        <td>${avEsc(a.dueno)||'—'}${a.tel?`<div style="font-size:10px;color:var(--text3)">${avEsc(a.tel)}</div>`:''}</td>
+        <td style="text-align:right">${a.pide?fmtD(avNum(a.pide)):'—'}</td>
+        <td style="text-align:right;font-weight:800;color:var(--green)">${a.oferta?fmtD(avNum(a.oferta)):'—'}</td>
+        <td>${avEsc(a.avaluadoPor)||'—'}</td>
+        <td><span style="font-size:11px;font-weight:700;color:${avColorEstado(a.estado)}">${avEsc(a.estado||'Pendiente')}</span></td>
+        <td><div class="tbl-actions">
+          <button class="btn btn-sm" title="Imprimir avalúo" onclick="imprimirAvaluo('${a.id}')"><i class="ti ti-printer"></i></button>
+          <button class="btn btn-sm" title="Editar" onclick="abrirAvaluo('${a.id}')"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" title="Eliminar" onclick="eliminarAvaluo('${a.id}')"><i class="ti ti-trash"></i></button>
+        </div></td></tr>`).join(''):`<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:1.5rem">No hay avalúos registrados. Presioná "Nuevo avalúo".</td></tr>`}</tbody>
+    </table></div></div>`;
+}
+function abrirAvaluo(id){
+  const a=id?avLista().find(x=>x.id===id):null;const v=k=>avEsc(a?a[k]:'');
+  const ant=document.getElementById('ov-avaluo');if(ant)ant.remove();
+  const ov=document.createElement('div');ov.id='ov-avaluo';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto';
+  const inp=(k,lbl,extra='')=>`<div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">${lbl}</label><input id="av-${k}" value="${v(k)}" ${extra} style="padding:7px"></div>`;
+  const sel=(k,lbl,ops)=>`<div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">${lbl}</label><select id="av-${k}" style="padding:7px">${ops.map(o=>`<option ${a&&a[k]===o?'selected':''}>${o}</option>`).join('')}</select></div>`;
+  const cond=a&&a.condicion||{};
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;max-width:760px;width:100%;padding:1.2rem;box-shadow:0 10px 40px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-weight:800;font-size:16px"><i class="ti ti-clipboard-check"></i> ${a?'Editar':'Nuevo'} avalúo de vehículo</div>
+      <button class="btn btn-sm" onclick="document.getElementById('ov-avaluo').remove()"><i class="ti ti-x"></i></button></div>
+    <div style="font-weight:700;font-size:12px;color:var(--blue);margin:6px 0">Datos del vehículo</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${inp('marca','Marca')}${inp('modelo','Modelo')}${inp('anio','Año','inputmode="numeric"')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${inp('color','Color')}${inp('placa','Placa')}${inp('km','Kilometraje','inputmode="numeric"')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${sel('trans','Transmisión',['','Automático','Mecánico'])}${sel('combustible','Combustible',['','Gasolina','Diésel','Híbrido','Eléctrico'])}${inp('motor','Motor (cc / cilindros)')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${inp('chasis','No. de chasis / VIN')}${sel('traccion','Tracción',['','4x2','4x4','AWD'])}${inp('duenos','Dueños anteriores','inputmode="numeric"')}</div>
+    <div style="font-weight:700;font-size:12px;color:var(--blue);margin:6px 0">Datos del dueño</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${inp('dueno','Nombre del dueño')}${inp('tel','Teléfono','inputmode="tel"')}${inp('cedula','Cédula')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${sel('papeles','Papeles',['','En regla','Prendado','Con pendientes'])}${inp('prenda','Si está prendado: banco / saldo')}</div>
+    <div style="font-weight:700;font-size:12px;color:var(--blue);margin:6px 0">Condición del vehículo</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px">${AV_COND.map(([k,l])=>`<div class="form-group" style="margin:0"><label style="font-size:11px">${l}</label><select id="av-c-${k}" style="padding:6px">${AV_NIVELES.map(n=>`<option ${cond[k]===n?'selected':''}>${n}</option>`).join('')}</select></div>`).join('')}</div>
+    <div class="form-group" style="margin:8px 0"><label style="font-size:11px">Daños / observaciones</label><textarea id="av-obs" rows="3" style="padding:7px;width:100%">${v('obs')}</textarea></div>
+    <div style="font-weight:700;font-size:12px;color:var(--blue);margin:6px 0">Valores</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${inp('pide','Precio que pide el dueño (US$)','inputmode="decimal" oninput="avCalc()"')}${inp('mercado','Valor de mercado / venta estimada (US$)','inputmode="decimal" oninput="avCalc()"')}${inp('reparaciones','Reparaciones estimadas (US$)','inputmode="decimal" oninput="avCalc()"')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">
+      <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px;font-weight:800;color:var(--green)">PRECIO DE OFERTA DE COMPRA (US$)</label><input id="av-oferta" value="${v('oferta')}" inputmode="decimal" oninput="avCalc()" style="padding:8px;font-weight:800;font-size:15px;border:2px solid var(--green)"></div>
+      <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">Margen estimado</label><div id="av-margen" style="padding:9px 4px;font-weight:700"></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0 10px">${inp('fecha','Fecha','type="date"')}${inp('avaluadoPor','Avaluado por')}${sel('estado','Estado',['Pendiente','Oferta enviada','Aceptada — comprado','Rechazada'])}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="document.getElementById('ov-avaluo').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarAvaluo('${a?a.id:''}')"><i class="ti ti-device-floppy"></i> Guardar</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  if(!a){document.getElementById('av-fecha').value=hoyLocal();document.getElementById('av-avaluadoPor').value=getNombreUsuario();}
+  avCalc();
+}
+function avCalc(){
+  const g=k=>avNum(document.getElementById('av-'+k)?.value);
+  const el=document.getElementById('av-margen');if(!el)return;
+  const mer=g('mercado'),of=g('oferta'),rep=g('reparaciones');
+  if(!mer||!of){el.textContent='—';el.style.color='var(--text3)';return;}
+  const m=mer-of-rep;
+  el.textContent=`${fmtD(m)} (${(m/mer*100).toFixed(1)}%)`;el.style.color=m>=0?'var(--green)':'var(--red)';
+}
+async function guardarAvaluo(id){
+  const g=k=>(document.getElementById('av-'+k)?.value||'').trim();
+  if(!g('marca')||!g('modelo')){alert('Marca y modelo son obligatorios.');return;}
+  if(!g('oferta')&&!confirm('No pusiste el precio de oferta de compra. ¿Guardar de todos modos?'))return;
+  const campos=['marca','modelo','anio','color','placa','km','trans','combustible','motor','chasis','traccion','duenos','dueno','tel','cedula','papeles','prenda','obs','pide','mercado','reparaciones','oferta','fecha','avaluadoPor','estado'];
+  const datos={};campos.forEach(k=>datos[k]=g(k));
+  datos.condicion={};AV_COND.forEach(([k])=>datos.condicion[k]=document.getElementById('av-c-'+k)?.value||'');
+  contData.avaluos=contData.avaluos||[];
+  if(id){const a=contData.avaluos.find(x=>x.id===id);if(a)Object.assign(a,datos);marcarEdicion(a);}
+  else{const a={id:uid(),...datos,registradoPor:getNombreUsuario()};marcarEdicion(a);contData.avaluos.push(a);}
+  await saveOne('contable',{id:'main',...contData});
+  document.getElementById('ov-avaluo')?.remove();renderAvaluos();
+}
+async function eliminarAvaluo(id){
+  const a=avLista().find(x=>x.id===id);if(!a)return;
+  if(!confirm(`¿Eliminar el avalúo de ${a.marca} ${a.modelo} ${a.anio||''}?`))return;
+  a.anulado=true;a.anuladoPor=getNombreUsuario();marcarEdicion(a);
+  await saveOne('contable',{id:'main',...contData});renderAvaluos();
+}
+function imprimirAvaluo(id){
+  const a=avLista().find(x=>x.id===id);if(!a)return;
+  // Versión para el dueño: NO muestra valor de mercado, reparaciones ni margen (son datos internos)
+  const paraDueno=confirm('¿Imprimir la versión para ENTREGAR AL DUEÑO?\n\nAceptar = versión para el dueño (sin valor de mercado, reparaciones ni margen).\nCancelar = versión INTERNA completa.');
+  const e=avEsc,n=x=>x?'$'+avNum(x).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+  const fila=(l,v)=>`<tr><td class="l">${l}</td><td>${v||'—'}</td></tr>`;
+  const cond=a.condicion||{};
+  const mer=avNum(a.mercado),of=avNum(a.oferta),rep=avNum(a.reparaciones);
+  const margen=mer&&of?mer-of-rep:null;
+  const fd=f=>{if(!f)return'—';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;};
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Avalúo ${e(a.marca)} ${e(a.modelo)} ${e(a.placa)}</title>
+  <style>@page{size:letter portrait;margin:14mm}body{font-family:Arial,sans-serif;color:#212529;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h1{font-size:20px;margin:0;letter-spacing:.06em}.sub{color:#868E96;font-size:11px}
+  .sec{background:#1971C2;color:#fff;font-weight:700;padding:4px 8px;margin-top:12px;font-size:12px}
+  table{width:100%;border-collapse:collapse}td{border:1px solid #DEE2E6;padding:5px 7px}td.l{background:#F1F3F5;font-weight:700;width:34%}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+  .oferta{margin-top:14px;border:3px solid #2B8A3E;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:800;color:#2B8A3E}
+  .firmas{display:flex;justify-content:space-between;margin-top:55px}.firmas div{width:42%;border-top:1px solid #212529;text-align:center;padding-top:4px;font-size:11px}</style></head><body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1971C2;padding-bottom:6px">
+    <div><h1>NICAUTO</h1><div class="sub">Avalúo de vehículo — oferta de compra${paraDueno?'':' · <b style="color:#C92A2A">USO INTERNO</b>'}</div></div>
+    <div style="text-align:right;font-size:11px">Fecha: <b>${fd(a.fecha)}</b><br>Avaluado por: <b>${e(a.avaluadoPor)||'—'}</b><br>Estado: <b>${e(a.estado||'Pendiente')}</b></div></div>
+  <div class="sec">DATOS DEL VEHÍCULO</div>
+  <div class="grid"><table>${fila('Marca',e(a.marca))}${fila('Modelo',e(a.modelo))}${fila('Año',e(a.anio))}${fila('Color',e(a.color))}${fila('Placa',e(a.placa))}${fila('Kilometraje',a.km?e(a.km)+' km':'')}</table>
+  <table>${fila('Transmisión',e(a.trans))}${fila('Combustible',e(a.combustible))}${fila('Motor',e(a.motor))}${fila('Tracción',e(a.traccion))}${fila('Chasis / VIN',e(a.chasis))}${fila('Dueños anteriores',e(a.duenos))}</table></div>
+  <div class="sec">DATOS DEL DUEÑO</div>
+  <div class="grid"><table>${fila('Nombre',e(a.dueno))}${fila('Teléfono',e(a.tel))}</table><table>${fila('Cédula',e(a.cedula))}${fila('Papeles',e(a.papeles)+(a.prenda?' — '+e(a.prenda):''))}</table></div>
+  <div class="sec">CONDICIÓN DEL VEHÍCULO</div>
+  <div class="grid"><table>${AV_COND.slice(0,4).map(([k,l])=>fila(l,e(cond[k]))).join('')}</table><table>${AV_COND.slice(4).map(([k,l])=>fila(l,e(cond[k]))).join('')}</table></div>
+  <table style="margin-top:6px"><tr><td class="l" style="width:22%">Daños / observaciones</td><td style="height:48px;vertical-align:top;white-space:pre-wrap">${e(a.obs)||'—'}</td></tr></table>
+  <div class="sec">VALORES</div>
+  <table>${fila('Precio que pide el dueño',n(a.pide))}${paraDueno?'':fila('Valor de mercado / venta estimada',n(a.mercado))+fila('Reparaciones estimadas',n(a.reparaciones))+(margen!==null?fila('Margen estimado',n(margen)+' ('+(margen/mer*100).toFixed(1)+'%)'):'')}</table>
+  <div class="oferta"><span>PRECIO DE OFERTA DE COMPRA</span><span>${n(a.oferta)}</span></div>
+  <div style="font-size:10px;color:#868E96;margin-top:6px">Oferta sujeta a revisión mecánica y verificación de documentos. Válida por 3 días a partir de la fecha del avalúo.</div>
+  <div class="firmas"><div>Avaluado por — NICAUTO</div><div>Dueño del vehículo</div></div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},200);};<\/script></body></html>`;
+  const w=window.open('','_blank');if(!w){alert('Permitir ventanas emergentes para imprimir.');return;}
+  w.document.open();w.document.write(html);w.document.close();
+}
 function showComprasTab(t){
   comprasTab=t;
-  document.querySelectorAll('#page-compras .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['todos','Norvin','Alonso','Gerencia','aprobado','validador'][i]===t));
+  document.querySelectorAll('#page-compras .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['todos','Norvin','Alonso','Gerencia','aprobado','validador','avaluos'][i]===t));
   const listaCont=document.getElementById('compras-lista-container');
   const validadorCont=document.getElementById('compras-validador');
+  const avCont=document.getElementById('compras-avaluos');
+  if(avCont)avCont.style.display=t==='avaluos'?'block':'none';
+  if(t==='avaluos'){listaCont.style.display='none';validadorCont.style.display='none';renderAvaluos();return;}
   if(t==='validador'){
     listaCont.style.display='none';
     validadorCont.style.display='block';
