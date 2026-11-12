@@ -2127,11 +2127,14 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
       </div>
       <div class="form-row">
         <div class="form-group"><label>Este monto bancario es…</label>
-          <select id="mvt-bancario-tipo">
+          <select id="mvt-bancario-tipo" onchange="mvtTerceroVer()">
             <option value="financiamiento">Financiamiento del banco (crea Cuenta por Cobrar — Bancos)</option>
+            <option value="tercero">Crédito con terceros (crea Cuenta por Cobrar — Terceros)</option>
             <option value="transferencia">Transferencia directa del cliente (ya recibido, NO crea Cuenta por Cobrar)</option>
           </select>
         </div>
+        <div class="form-group" id="mvt-tercero-wrap" style="display:none"><label>👤 Nombre del tercero que da el crédito</label>
+          <input id="mvt-tercero-credito" placeholder="Financiera, cooperativa o persona…"></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label>🏦 Banco del depósito (si aplica)</label>
@@ -11202,6 +11205,8 @@ function abrirModalVenta(id){
     const elRecAnt=document.getElementById('mvt-recibo-anticipo');if(elRecAnt)elRecAnt.value=v.reciboAnticipo||'';
     const elBanc=document.getElementById('mvt-bancario');if(elBanc)elBanc.value=parseFloat(v.bancario||0).toFixed(2);
     const elBancTipo=document.getElementById('mvt-bancario-tipo');if(elBancTipo)elBancTipo.value=v.bancarioTipo||'financiamiento';
+    const elTer=document.getElementById('mvt-tercero-credito');if(elTer)elTer.value=v.terceroCredito||'';
+    mvtTerceroVer();
     const elRecBanco=document.getElementById('mvt-recibo-banco');if(elRecBanco)elRecBanco.value=v.reciboBanco||'';
     const elCanjeDesc=document.getElementById('mvt-canje-desc');if(elCanjeDesc)elCanjeDesc.value=v.canjeDesc||'';
     const elCanjeValor=document.getElementById('mvt-canje-valor');if(elCanjeValor)elCanjeValor.value=parseFloat(v.canjeValor||0).toFixed(2);
@@ -11221,6 +11226,7 @@ function abrirModalVenta(id){
     if(document.getElementById('mvt-cash-dest'))document.getElementById('mvt-cash-dest').value='cajafuerte';
     if(document.getElementById('mvt-banco'))document.getElementById('mvt-banco').value='';
     if(document.getElementById('mvt-bancario-tipo'))document.getElementById('mvt-bancario-tipo').value='financiamiento';
+    {const t=document.getElementById('mvt-tercero-credito');if(t)t.value='';mvtTerceroVer();}
     mvtCargarDepositos(null);
     ['recibo-anticipo','recibo-banco','canje-desc','recibo','nombre-factura','cedula-factura'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
     if(document.getElementById('mvt-tel1'))document.getElementById('mvt-tel1').value='';
@@ -11622,7 +11628,30 @@ function alertaSiFueraDeMes(fecha,tipoOperacion){
 // anterior), solo se actualiza el monto "original" informativo — el saldo NUNCA se pisa acá,
 // porque ahí es donde vive el progreso real de los pagos ya recibidos (eso se maneja con
 // "Registrar pago" en Contable, no editando la venta).
+// Muestra la casilla del nombre del tercero cuando el monto financiado es "Crédito con terceros"
+function mvtTerceroVer(){
+  const t=document.getElementById('mvt-bancario-tipo')?.value;
+  const w=document.getElementById('mvt-tercero-wrap');if(w)w.style.display=t==='tercero'?'':'none';
+}
+// Crédito con terceros: crea / actualiza una CxC — Terceros a nombre del tercero, ligada a la venta
+async function sincronizarCxCTerceroDesdeVenta(v){
+  contData.cuentas=contData.cuentas||[];
+  const bancario=Number(v.bancario||0);
+  if(v.bancarioTipo!=='tercero'||bancario<=0||!v.terceroCredito)return;
+  const existente=contData.cuentas.find(c=>c.origenVentaId===v.id&&c.tipo==='CxC-Tercero');
+  const comp=clientes.find(x=>x.id===v.compradorId);
+  if(existente){
+    if(!(existente.historialPagos||[]).length&&existente.estado!=='Pagada')existente.saldo=bancario;
+    existente.monto=bancario;existente.persona=v.terceroCredito;
+  } else {
+    contData.cuentas.push({id:uid(),fecha:v.fecha,vence:'',tipo:'CxC-Tercero',estado:'Pendiente',
+      monto:bancario,saldo:bancario,persona:v.terceroCredito,vehId:v.vehiculoId,origenVentaId:v.id,
+      desc:`Crédito con terceros (${v.terceroCredito}) — Venta ${v.numeroControl||''} — ${v.nombreFactura||comp?.nombre||'Cliente'}`});
+  }
+  await saveOne('contable',{id:'main',...contData});
+}
 async function sincronizarCxCBancoDesdeVenta(v){
+  if(v.bancarioTipo==='tercero')return sincronizarCxCTerceroDesdeVenta(v);
   contData.cuentas=contData.cuentas||[];
   const existente=contData.cuentas.find(c=>c.origenVentaId===v.id&&c.tipo==='CxC-Banco');
   const bancario=Number(v.bancario||0);
@@ -11683,7 +11712,8 @@ async function guardarVenta(){
   const bancario=parseFloat(document.getElementById('mvt-bancario').value||0);
   const bancarioTipo=document.getElementById('mvt-bancario-tipo')?.value||'financiamiento';
   const reciboBanco=document.getElementById('mvt-recibo-banco').value;
-  const banco=document.getElementById('mvt-banco')?.value||'';
+  const banco=bancarioTipo==='tercero'?'':(document.getElementById('mvt-banco')?.value||'');
+  const terceroCredito=bancarioTipo==='tercero'?(document.getElementById('mvt-tercero-credito')?.value||'').trim():'';
   const canjeDesc=document.getElementById('mvt-canje-desc').value;
   const canjeValor=parseFloat(document.getElementById('mvt-canje-valor').value||0);
   const cash=parseFloat(document.getElementById('mvt-cash').value||0);
@@ -11702,7 +11732,8 @@ async function guardarVenta(){
   if(totDep>0&&bancario>0&&bancarioTipo==='transferencia'){
     if(!confirm(`⚠️ Tenés ${fmtD(bancario)} en "Monto Bancario" (transferencia) y además ${fmtD(totDep)} en Depósitos.\n\nSi es el mismo dinero, se va a contar DOBLE en Caja y Bancos. Lo correcto es dejar el Monto Bancario en 0 y usar solo los Depósitos.\n\n¿Guardar así de todos modos?`))return;
   }
-  if(bancario>0&&bancarioTipo!=='transferencia'&&!banco){alert('⚠️ Hay un monto financiado por banco: elegí el banco ("Banco del depósito") para que la Cuenta por Cobrar quede a nombre de ese banco.');return;}
+  if(bancario>0&&bancarioTipo==='tercero'&&!terceroCredito){alert('⚠️ Escribí el nombre del tercero que da el crédito, para que la Cuenta por Cobrar — Terceros quede a su nombre.');return;}
+  if(bancario>0&&bancarioTipo==='financiamiento'&&!banco){alert('⚠️ Hay un monto financiado por banco: elegí el banco ("Banco del depósito") para que la Cuenta por Cobrar quede a nombre de ese banco.');return;}
 
   // Handle consignacion vehicles
   const esConsig=vehiculoId.startsWith('CONSIG_');
@@ -11734,7 +11765,7 @@ async function guardarVenta(){
     precio:precio.toFixed(2),costo:costoInput.toFixed(2),pago,fecha,estado,
     comision:comision.toFixed(2),notas,recibo,contacto,
     anticipo:anticipo.toFixed(2),reciboAnticipo,
-    bancario:bancario.toFixed(2),bancarioTipo,reciboBanco,banco,
+    bancario:bancario.toFixed(2),bancarioTipo,reciboBanco,banco,terceroCredito,
     depositos:depositos.map(d=>({banco:d.banco,monto:Number(d.monto.toFixed(2)),ref:d.ref})),
     canjeDesc,canjeValor:canjeValor.toFixed(2),
     cash:cash.toFixed(2),cashDest:(document.getElementById('mvt-cash-dest')?.value==='cashjulio'?'cashjulio':'cajafuerte'),
@@ -11858,7 +11889,11 @@ async function guardarVenta(){
         desc:`DÉBITO BANCO ${d.banco}: ${descVeh} | Depósito: ${fmtD(d.monto)} | Ref: ${d.ref||''}`});
     });
     // 4. DÉBITO Banco — transferencia recibida
-    if(bancario>0){
+    if(bancario>0&&bancarioTipo==='tercero'){
+      contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Ingreso',medio:'CxC Terceros',
+        monto:bancario,cat:'Venta de vehículo',ref:reciboBanco||recibo,persona:terceroCredito,vehId:vehiculoId,
+        desc:`DÉBITO CxC TERCEROS: ${descVeh} | Crédito de ${terceroCredito}: ${fmtD(bancario)}`});
+    } else if(bancario>0){
       contData.recibos.push({id:uid(),comprobanteId,fecha,tipo:'Ingreso',medio:'Banco (transferencia)',
         monto:bancario,cat:'Venta de vehículo',ref:reciboBanco||recibo,
         persona:compNombre,vehId:vehiculoId,
