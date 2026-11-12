@@ -2122,7 +2122,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
         <div class="form-group"><label>No. Recibo anticipo</label><input id="mvt-recibo-anticipo" placeholder="REC-ANT-001…"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Monto Bancario / Financiado (USD $)</label><input class="calc-input" id="mvt-bancario" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()"></div>
+        <div class="form-group"><label>Monto Bancario / Financiado / Crédito terceros (USD $)</label><input class="calc-input" id="mvt-bancario" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()"></div>
         <div class="form-group"><label>No. Recibo banco / ref.</label><input id="mvt-recibo-banco" placeholder="TRF-001…"></div>
       </div>
       <div class="form-row">
@@ -2188,7 +2188,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
           <span style="color:var(--text2)">Precio de venta:</span><span id="liq-precio" style="font-weight:600;text-align:right"></span>
           <span style="color:var(--text2)">− Anticipo:</span><span id="liq-anticipo" style="color:var(--amber);text-align:right"></span>
-          <span style="color:var(--text2)">− Bancario:</span><span id="liq-bancario" style="color:var(--blue);text-align:right"></span>
+          <span style="color:var(--text2)" id="liq-bancario-lbl">− Bancario:</span><span id="liq-bancario" style="color:var(--blue);text-align:right"></span>
           <span style="color:var(--text2)">− Depósitos:</span><span id="liq-depositos" style="color:var(--blue);text-align:right"></span>
           <span style="color:var(--text2)">− Canje:</span><span id="liq-canje" style="color:var(--purple);text-align:right"></span>
           <span style="color:var(--text2)">= Cash a recibir:</span><span id="liq-saldo" style="font-weight:700;font-size:14px;text-align:right"></span>
@@ -11632,6 +11632,7 @@ function alertaSiFueraDeMes(fecha,tipoOperacion){
 function mvtTerceroVer(){
   const t=document.getElementById('mvt-bancario-tipo')?.value;
   const w=document.getElementById('mvt-tercero-wrap');if(w)w.style.display=t==='tercero'?'':'none';
+  const l=document.getElementById('liq-bancario-lbl');if(l)l.textContent=t==='tercero'?'− Crédito con terceros:':t==='transferencia'?'− Transferencia bancaria:':'− Financiado por banco:';
 }
 // Crédito con terceros: crea / actualiza una CxC — Terceros a nombre del tercero, ligada a la venta
 async function sincronizarCxCTerceroDesdeVenta(v){
@@ -11749,10 +11750,11 @@ async function guardarVenta(){
 
   // Determinar forma de pago
   let pago='Contado';
-  if(totDep>0&&(cash>0||bancario>0||canjeValor>0))pago='Mixto (Depósitos'+(cash>0?' + Cash':'')+(bancario>0?' + Banco':'')+(canjeValor>0?' + Canje':'')+')';
+  const lblBanc=bancarioTipo==='tercero'?'Crédito terceros':'Banco';
+  if(totDep>0&&(cash>0||bancario>0||canjeValor>0))pago='Mixto (Depósitos'+(cash>0?' + Cash':'')+(bancario>0?' + '+lblBanc:'')+(canjeValor>0?' + Canje':'')+')';
   else if(totDep>0)pago='Depósito / Transferencia';
-  else if(bancario>0&&cash>0)pago='Mixto (Cash + Banco)';
-  else if(bancario>0)pago='Financiado/Banco';
+  else if(bancario>0&&cash>0)pago='Mixto (Cash + '+lblBanc+')';
+  else if(bancario>0)pago=bancarioTipo==='tercero'?'Crédito con terceros':'Financiado/Banco';
   else if(canjeValor>0&&cash>0)pago='Mixto (Cash + Canje)';
   else if(canjeValor>0)pago='Canje';
   else if(anticipo>0&&cash===0&&bancario===0)pago='Solo anticipo';
@@ -19007,7 +19009,7 @@ function abrirLiquidacion(ventaId){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
         <span>Forma de pago:</span><span style="font-weight:600">${v.pago||'—'}</span>
         ${Number(v.anticipo)>0?`<span>Anticipo recibido:</span><span style="font-weight:600;color:#E67700">${fmtD(v.anticipo)} ${v.reciboAnticipo?'('+v.reciboAnticipo+')':''}</span>`:''}
-        ${Number(v.bancario)>0?`<span>Monto bancario:</span><span style="font-weight:600;color:#1971C2">${fmtD(v.bancario)} ${v.reciboBanco?'('+v.reciboBanco+')':''}</span>`:''}
+        ${Number(v.bancario)>0?`<span>${v.bancarioTipo==='tercero'?'Crédito con terceros'+(v.terceroCredito?' ('+v.terceroCredito+')':''):v.bancarioTipo==='transferencia'?'Transferencia bancaria':'Financiado por banco'+(v.banco?' ('+v.banco+')':'')}:</span><span style="font-weight:600;color:#1971C2">${fmtD(v.bancario)} ${v.reciboBanco?'('+v.reciboBanco+')':''}</span>`:''}
         ${(Array.isArray(v.depositos)?v.depositos:[]).map((d,i)=>`<span>Depósito ${i+1} — ${d.banco||''}:</span><span style="font-weight:600;color:#1971C2">${fmtD(d.monto)} ${d.ref?'(Recibo/Ref. '+d.ref+')':''}</span>`).join('')}
         ${Number(v.canjeValor)>0?`<span>Canje (${v.canjeDesc||'vehículo'}):</span><span style="font-weight:600;color:#6741D9">${fmtD(v.canjeValor)}</span>`:''}
         ${Number(v.cash)>0?`<span>Efectivo recibido:</span><span style="font-weight:600;color:#2F9E44">${fmtD(v.cash)}</span>`:''}
