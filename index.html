@@ -2895,6 +2895,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
       </div>
     </div>
     <!-- Lista reparaciones -->
+    <div id="mrep-resumen"></div>
     <div id="mrep-lista" style="max-height:240px;overflow-y:auto"></div>
     <!-- Formulario nueva reparación -->
     <div style="padding:1.25rem;border-top:1px solid var(--border);background:var(--surface2)">
@@ -10336,6 +10337,7 @@ function renderListaRep(v){
   document.getElementById('mrep-precio').textContent=fmtD(precioCompra);
   document.getElementById('mrep-totrep').textContent=fmtD(totRep);
   document.getElementById('mrep-total').textContent=fmtD(precioCompra+totRep);
+  const rs=document.getElementById('mrep-resumen');if(rs)rs.innerHTML=repResumenHTML(v,false);
   const lista=document.getElementById('mrep-lista');
   if(!reps.length){
     lista.innerHTML=`<div class="empty" style="padding:2rem"><i class="ti ti-tool"></i><p>Sin reparaciones registradas</p></div>`;
@@ -10365,6 +10367,63 @@ function renderListaRep(v){
       <td style="padding:8px 14px;font-weight:700;color:var(--amber)">${fmtD(totRep)}</td><td></td>
     </tr></tfoot>
   </table>`;
+}
+// Cuadro resumen de reparaciones: total por tipo, cuántas, % del total, y si el carro ya se vendió,
+// precio de venta y ganancia. Sirve para constatar lo cargado a un carro ya facturado.
+function repResumenData(v){
+  const reps=v.reparaciones||[];
+  const porTipo={};reps.forEach(r=>{const t=r.tipo||((r.origen==='rendicion'||r.origen==='gasto')?'Conectado (Rendición / Gastos)':'Sin tipo');porTipo[t]=porTipo[t]||{n:0,tot:0};porTipo[t].n++;porTipo[t].tot+=Number(r.costo||0);});
+  const totRep=reps.reduce((s,r)=>s+Number(r.costo||0),0);
+  const compra=Number(v.costo||v.preciopactado||v.precio||v.precioA||0);
+  const vid=repVehId;
+  const vta=(ventas||[]).find(x=>x.estado==='Completada'&&(x.vehiculoId===vid||x.vehiculoId==='CONSIG_'+vid||'CONSIG_'+x.vehiculoId===vid));
+  return{reps,porTipo,totRep,compra,vta};
+}
+function repResumenHTML(v,paraImprimir){
+  const d=repResumenData(v);
+  if(!d.reps.length&&!d.vta)return'';
+  const filas=Object.entries(d.porTipo).sort((a,b)=>b[1].tot-a[1].tot);
+  const td='padding:4px 8px;border-bottom:1px solid #E9ECEF';
+  const inv=d.compra+d.totRep;
+  const precioV=d.vta?Number(d.vta.precio||0):0,com=d.vta?Number(d.vta.comision||0):0;
+  const gan=d.vta?precioV-inv-com:0;
+  return`<div style="border:1px solid #FFD8A8;background:#FFF9DB;border-radius:8px;padding:8px 10px;margin:8px 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px">
+      <b style="font-size:12.5px;color:#E67700">📋 Resumen de reparaciones</b>
+      ${paraImprimir?'':`<button class="btn btn-sm" onclick="imprimirResumenReparaciones()"><i class="ti ti-printer"></i> Imprimir</button>`}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+    <table style="border-collapse:collapse;font-size:12px;flex:1;min-width:240px">
+      <thead><tr style="color:#868E96;font-size:10.5px;text-align:left"><th style="${td}">Tipo</th><th style="${td};text-align:center">Cant.</th><th style="${td};text-align:right">Total</th><th style="${td};text-align:right">%</th></tr></thead>
+      <tbody>${filas.length?filas.map(([t,x])=>`<tr><td style="${td}">${t}</td><td style="${td};text-align:center">${x.n}</td><td style="${td};text-align:right;font-weight:700">${fmtD(x.tot)}</td><td style="${td};text-align:right;color:#868E96">${d.totRep?(x.tot/d.totRep*100).toFixed(0):0}%</td></tr>`).join(''):`<tr><td colspan="4" style="${td};color:#868E96">Sin reparaciones</td></tr>`}</tbody>
+      <tfoot><tr style="font-weight:800"><td style="padding:5px 8px">TOTAL</td><td style="padding:5px 8px;text-align:center">${d.reps.length}</td><td style="padding:5px 8px;text-align:right;color:#E67700">${fmtD(d.totRep)}</td><td></td></tr></tfoot>
+    </table>
+    <table style="border-collapse:collapse;font-size:12px;min-width:220px">
+      <tr><td style="${td}">Precio de compra</td><td style="${td};text-align:right">${fmtD(d.compra)}</td></tr>
+      <tr><td style="${td}">+ Reparaciones</td><td style="${td};text-align:right">${fmtD(d.totRep)}</td></tr>
+      <tr style="font-weight:800"><td style="${td}">= Total invertido</td><td style="${td};text-align:right">${fmtD(inv)}</td></tr>
+      ${d.vta?`<tr><td style="${td}">Precio de venta <span style="font-size:10px;color:#868E96">(${d.vta.fecha||''})</span></td><td style="${td};text-align:right;color:#1971C2;font-weight:700">${fmtD(precioV)}</td></tr>
+      ${com?`<tr><td style="${td}">− Comisión</td><td style="${td};text-align:right">${fmtD(com)}</td></tr>`:''}
+      <tr style="font-weight:800"><td style="padding:5px 8px">Ganancia</td><td style="padding:5px 8px;text-align:right;color:${gan>=0?'#2B8A3E':'#C92A2A'}">${fmtD(gan)}${precioV?' ('+(gan/precioV*100).toFixed(1)+'%)':''}</td></tr>
+      <tr><td colspan="2" style="padding:3px 8px;font-size:10.5px;color:#868E96">Reparaciones = ${precioV?(d.totRep/precioV*100).toFixed(1):0}% del precio de venta</td></tr>`:''}
+    </table></div></div>`;
+}
+function imprimirResumenReparaciones(){
+  const r=_repObjeto(repVehId);if(!r)return;const v=r.obj,d=repResumenData(v);
+  const filas=[...d.reps].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reparaciones ${v.marca||''} ${v.modelo||''} ${v.placa||''}</title>
+  <style>@page{size:letter portrait;margin:14mm}body{font-family:Arial,sans-serif;font-size:12px;color:#212529;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  table.det{width:100%;border-collapse:collapse;margin-top:10px}table.det th{background:#E67700;color:#fff;padding:5px;font-size:11px;text-align:left}table.det td{border-bottom:1px solid #DEE2E6;padding:4px 5px}</style></head><body>
+  <div style="display:flex;justify-content:space-between;border-bottom:3px solid #E67700;padding-bottom:6px;margin-bottom:6px">
+    <div><div style="font-size:20px;font-weight:800;letter-spacing:.05em">NICAUTO</div><div style="color:#868E96;font-size:11px">Resumen de reparaciones${r.esConsig?' — Consignación':''}</div></div>
+    <div style="text-align:right"><b>${v.marca||''} ${v.modelo||''} ${v.anio||''}</b><br>Placa: ${v.placa||'—'} · ${v.color||''}</div></div>
+  ${repResumenHTML(v,true)}
+  <table class="det"><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Taller</th><th>Factura</th><th style="text-align:right">Costo</th></tr></thead>
+  <tbody>${filas.map(x=>`<tr><td style="white-space:nowrap">${x.fecha||'—'}</td><td>${x.tipo||'—'}</td><td>${String(x.desc||'—').replace(/</g,'&lt;')}</td><td>${x.taller||'—'}</td><td>${x.factura||'—'}</td><td style="text-align:right;font-weight:700">${fmtD(x.costo)}</td></tr>`).join('')}</tbody>
+  <tfoot><tr><td colspan="5" style="text-align:right;font-weight:800;padding:6px">TOTAL REPARACIONES</td><td style="text-align:right;font-weight:800;padding:6px;color:#E67700">${fmtD(d.totRep)}</td></tr></tfoot></table>
+  <script>window.onload=function(){setTimeout(function(){window.print();},200);};<\/script></body></html>`;
+  const w=window.open('','_blank');if(!w){alert('Permitir ventanas emergentes para imprimir.');return;}
+  w.document.open();w.document.write(html);w.document.close();
 }
 // Cargar una reparación existente en el formulario para poder corregirla (antes solo se podía borrar)
 function editarReparacion(rid){
