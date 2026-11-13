@@ -2895,7 +2895,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
       </div>
     </div>
     <!-- Lista reparaciones -->
-    <div id="mrep-resumen"></div>
+    <div id="mrep-resumen-tipos"></div>
     <div id="mrep-lista" style="max-height:240px;overflow-y:auto"></div>
     <!-- Formulario nueva reparación -->
     <div style="padding:1.25rem;border-top:1px solid var(--border);background:var(--surface2)">
@@ -10337,7 +10337,7 @@ function renderListaRep(v){
   document.getElementById('mrep-precio').textContent=fmtD(precioCompra);
   document.getElementById('mrep-totrep').textContent=fmtD(totRep);
   document.getElementById('mrep-total').textContent=fmtD(precioCompra+totRep);
-  const rs=document.getElementById('mrep-resumen');if(rs)rs.innerHTML=repResumenHTML(v,false);
+  const rs=document.getElementById('mrep-resumen-tipos');if(rs)rs.innerHTML=repResumenHTML(v,false);
   const lista=document.getElementById('mrep-lista');
   if(!reps.length){
     lista.innerHTML=`<div class="empty" style="padding:2rem"><i class="ti ti-tool"></i><p>Sin reparaciones registradas</p></div>`;
