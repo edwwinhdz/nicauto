@@ -11243,6 +11243,25 @@ function abrirModalVenta(id){
   if(chkVenta)chkVenta.checked=v?!!v.ventaConfirmada:true;
   openOv('ov-venta');
 }
+// Suma los adelantos de TODAS las reservas de un vehículo (propio o de consignación) — igual que el
+// cuadro de Reservados de Lista de Precios — y los pone como Anticipo en la venta.
+function mvtAplicarReservas(veh){
+  const res=(veh&&veh.reservas)||[];
+  if(!res.length)return null;
+  const ads=[];res.forEach(r=>{const a=(r.adelantos&&r.adelantos.length)?r.adelantos:(r.monto?[{recibo:r.recibo||'',monto:r.monto}]:[]);ads.push(...a);});
+  const total=ads.reduce((s,a)=>s+Number(a.monto||0),0);
+  if(!(total>0))return null;
+  document.getElementById('mvt-anticipo').value=total.toFixed(2);
+  document.getElementById('mvt-recibo-anticipo').value=[...new Set(ads.map(a=>a.recibo).filter(Boolean))].join(', ');
+  const r0=res.find(r=>r.cliente)||res[0];
+  if(r0&&r0.cliente){
+    const nf=document.getElementById('mvt-nombre-factura');if(nf&&!nf.value)nf.value=r0.cliente;
+    const comp=clientes.find(x=>x.nombre===r0.cliente);if(comp)document.getElementById('mvt-comprador').value=comp.id;
+  }
+  const pv=(res.find(r=>Number(r.precioVenta)>0)||{}).precioVenta;
+  if(Number(pv)>0)document.getElementById('mvt-precio').value=Number(pv).toFixed(2);
+  return{total,cliente:r0&&r0.cliente||'',n:ads.length,precio:Number(pv)||0};
+}
 function autoFill(){
   const vid=document.getElementById('mvt-vehiculo').value;
   if(!vid)return;
@@ -11254,6 +11273,7 @@ function autoFill(){
     if(!cs)return;
     document.getElementById('mvt-precio').value=parseFloat(cs.precioA||0).toFixed(2);
     document.getElementById('mvt-costo').value=parseFloat(cs.preciopactado||0).toFixed(2);
+    const resC=mvtAplicarReservas(cs);
     const ref=document.getElementById('mvt-rep-ref');
     if(ref){
       ref.style.display='block';
@@ -11261,7 +11281,8 @@ function autoFill(){
       <br><span style="color:var(--green)">Lista A: <b>${fmtD(cs.precioA||0)}</b></span>
       ${cs.precioB?`<span style="color:var(--blue);margin-left:12px">Lista B: <b>${fmtD(cs.precioB||0)}</b></span>`:''}
       ${cs.preciopactado?`<br><span style="color:var(--text2)">Precio pactado dueño: <b>${fmtD(cs.preciopactado)}</b></span>`:''}
-      ${cs.comision?`<span style="color:var(--purple);margin-left:12px">Comisión NICAUTO: <b>${fmtD(cs.comision)}</b></span>`:''}`;
+      ${cs.comision?`<span style="color:var(--purple);margin-left:12px">Comisión NICAUTO: <b>${fmtD(cs.comision)}</b></span>`:''}
+      ${resC?`<br><span style="color:var(--amber)">⭐ Reservado${resC.cliente?' por <b>'+resC.cliente+'</b>':''}: anticipo <b>${fmtD(resC.total)}</b> (${resC.n} pago${resC.n===1?'':'s'})${resC.precio?' · precio de cierre <b>'+fmtD(resC.precio)+'</b>':''}</span>`:''}`;
     }
     calcLiquidacion();
     return;
@@ -11294,16 +11315,10 @@ function autoFill(){
   // Caja y Banco como respaldo.
   const reservaPrincipal=(v.reservas||[])[0];
   let reserva=null; // se usa más abajo en el resumen; antes estaba fuera de alcance y daba error
-  if(reservaPrincipal){
-    const adelantos=(reservaPrincipal.adelantos&&reservaPrincipal.adelantos.length)?reservaPrincipal.adelantos:(reservaPrincipal.monto?[{recibo:reservaPrincipal.recibo||'',monto:reservaPrincipal.monto}]:[]);
-    const totalAdelantos=adelantos.reduce((s,a)=>s+Number(a.monto||0),0);
-    document.getElementById('mvt-anticipo').value=totalAdelantos.toFixed(2);
-    document.getElementById('mvt-recibo-anticipo').value=adelantos.map(a=>a.recibo).filter(Boolean).join(', ');
-    if(reservaPrincipal.cliente){
-      const comp=clientes.find(x=>x.nombre===reservaPrincipal.cliente);
-      if(comp)document.getElementById('mvt-comprador').value=comp.id;
-    }
-  } else {
+  const resV=reservaPrincipal?mvtAplicarReservas(v):null;
+  if(resV){reserva={monto:resV.total};}
+  else if(reservaPrincipal){/* reserva sin montos */}
+  else {
     reserva=(contData.recibos||[]).find(r=>r.vehId===vid&&r.cat==='Reserva de cliente')||null;
     if(reserva){
       document.getElementById('mvt-anticipo').value=parseFloat(reserva.monto||0).toFixed(2);
