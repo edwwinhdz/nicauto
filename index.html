@@ -12460,7 +12460,7 @@ function renderFondoPersonalGenerico(clave,titulo,soloLecturaPara){
   const totalIngresos=filas.filter(f=>f.tipo==='Ingreso').reduce((s,f)=>s+Number(f.monto||0),0);
   const totalEgresos=filas.filter(f=>f.tipo==='Egreso').reduce((s,f)=>s+Number(f.monto||0),0);
   document.getElementById('cont-'+clave.toLowerCase()).innerHTML=`
-  <div style="background:var(--amber-light);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;font-size:13px">
+  <div style="background:var(--amber-light);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;font-size:13px;${clave==='fondosJM'?'display:none':''}">
     <i class="ti ti-info-circle"></i> Esta hoja es un <b>auxiliar de control personal</b> — no está conectada al resto de la contabilidad (Caja, Banco, Gastos). Solo ${soloLecturaPara} puede ingresar y modificar datos aquí. Moneda: <b>${simbolo==='$'?'Dólares (US$)':'Córdobas (C$)'}</b>.
   </div>
   <div class="stats-grid" style="margin-bottom:1rem">
@@ -12510,23 +12510,67 @@ async function reiniciarFondoPersonalConHistorial(clave,titulo){
 }
 function abrirHistorialFondoPersonal(clave){
   const claveHist=clave+'Historial';
-  const hist=(contData[claveHist]||[]).slice().sort((a,b)=>b.fechaCierre.localeCompare(a.fechaCierre));
+  const hist=(contData[claveHist]||[]).filter(h=>h&&!h.anulado).slice().sort((a,b)=>(b.fechaCierre||'').localeCompare(a.fechaCierre||''));
   const simbolo=clave==='fondosJM'?'US$':'C$';
-  const div=document.createElement('div');
+  const ultimoId=hist.length?hist[0].id:'';
+  const div=document.createElement('div');div.id='ov-hist-fondo';
   div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
-  div.innerHTML=`<div style="background:#fff;border-radius:var(--radius);max-width:700px;width:92%;max-height:80vh;overflow-y:auto;padding:1.25rem">
-    <h3 style="margin-bottom:.75rem"><i class="ti ti-history"></i> Historial de cuentas cerradas</h3>
+  div.innerHTML=`<div style="background:#fff;border-radius:var(--radius);max-width:900px;width:94%;max-height:85vh;overflow-y:auto;padding:1.25rem">
+    <h3 style="margin-bottom:.25rem"><i class="ti ti-history"></i> Historial de cuentas cerradas</h3>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:.75rem">Clic en una cuenta para ver sus movimientos.</div>
     ${hist.length?hist.map(h=>{
-      const tot=h.movimientos.reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
-      return`<div style="border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:.5rem">
-        <div style="display:flex;justify-content:space-between;font-weight:700"><span>Cerrado el ${h.fechaCierre}</span><span>Saldo final: ${simbolo} ${fmtNio(tot)}</span></div>
-        <div style="font-size:11px;color:var(--text3)">${h.movimientos.length} movimiento(s) — por ${h.cerradoPor}</div>
+      const movs=(h.movimientos||[]).slice().sort((a,b)=>(a.fechaIngreso||'').localeCompare(b.fechaIngreso||''));
+      const tot=movs.reduce((s,f)=>s+Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1),0);
+      let sal=0;
+      return`<div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.5rem">
+        <div style="padding:.75rem 1rem;cursor:pointer" onclick="const d=document.getElementById('hfp-${h.id}');d.style.display=d.style.display==='none'?'':'none'">
+          <div style="display:flex;justify-content:space-between;font-weight:700;gap:8px"><span><i class="ti ti-chevron-down"></i> Cerrado el ${h.fechaCierre}</span><span>Saldo final: ${simbolo} ${fmtNio(tot)}</span></div>
+          <div style="font-size:11px;color:var(--text3)">${movs.length} movimiento(s) — por ${h.cerradoPor||'—'}</div>
+        </div>
+        <div id="hfp-${h.id}" style="display:none;padding:0 1rem 1rem">
+          <div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px">
+            <button class="btn btn-sm" onclick="imprimirHistorialFondo('${clave}','${h.id}')"><i class="ti ti-printer"></i> Imprimir</button>
+            ${MODO==='admin'&&h.id===ultimoId?`<button class="btn btn-sm" style="color:var(--amber);border-color:var(--amber)" onclick="deshacerCierreFondo('${clave}','${h.id}')" title="Devuelve estos movimientos a la hoja y quita este cierre"><i class="ti ti-arrow-back-up"></i> Deshacer este cierre</button>`:''}
+          </div>
+          <div style="overflow-x:auto"><table class="tbl" style="font-size:12px;min-width:640px">
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Clasificación</th><th>Placa</th><th>Forma</th><th style="text-align:right">Monto</th><th style="text-align:right">Saldo</th></tr></thead>
+            <tbody>${movs.map(f=>{sal+=Number(f.monto||0)*(f.tipo==='Ingreso'?1:-1);return`<tr>
+              <td style="white-space:nowrap">${f.fechaIngreso||'—'}</td><td style="color:${f.tipo==='Ingreso'?'var(--green)':'var(--red)'};font-weight:600">${f.tipo||''}</td>
+              <td>${String(f.detalle||'—').replace(/</g,'&lt;')}</td><td>${f.clasificacion||'—'}</td><td>${f.placa||'—'}</td><td>${f.formaPago||'—'}</td>
+              <td style="text-align:right">${simbolo} ${fmtNio(f.monto)}</td><td style="text-align:right;font-weight:700">${simbolo} ${fmtNio(sal)}</td></tr>`;}).join('')}</tbody>
+          </table></div>
+        </div>
       </div>`;
     }).join(''):'<p style="text-align:center;color:var(--text3);padding:1rem">Todavía no hay ninguna cuenta cerrada en el historial.</p>'}
-    <button class="btn" style="width:100%;margin-top:.5rem" onclick="this.closest('div[style*=fixed]').remove()">Cerrar</button>
+    <button class="btn" style="width:100%;margin-top:.5rem" onclick="document.getElementById('ov-hist-fondo').remove()">Cerrar</button>
   </div>`;
   div.onclick=e=>{if(e.target===div)div.remove();};
   document.body.appendChild(div);
+}
+function imprimirHistorialFondo(clave,hid){
+  const h=(contData[clave+'Historial']||[]).find(x=>x.id===hid);if(!h)return;
+  const simbolo=clave==='fondosJM'?'US$':'C$',titulo=clave==='fondosJM'?'Fondos JM':'Fondos GO';
+  const movs=(h.movimientos||[]).slice().sort((a,b)=>(a.fechaIngreso||'').localeCompare(b.fechaIngreso||''));
+  let sal=0,ing=0,egr=0;
+  const filas=movs.map(f=>{const m=Number(f.monto||0);if(f.tipo==='Ingreso')ing+=m;else egr+=m;sal+=f.tipo==='Ingreso'?m:-m;
+    return`<tr><td>${f.fechaIngreso||''}</td><td>${f.tipo||''}</td><td>${String(f.detalle||'').replace(/</g,'&lt;')}</td><td>${f.clasificacion||''}</td><td>${f.placa||''}</td><td style="text-align:right">${fmtNio(m)}</td><td style="text-align:right">${fmtNio(sal)}</td></tr>`;}).join('');
+  const w=window.open('','_blank');if(!w){alert('Permitir ventanas emergentes para imprimir.');return;}
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo} — cierre ${h.fechaCierre}</title><style>@page{size:letter landscape;margin:12mm}body{font-family:Arial,sans-serif;font-size:11px}table{width:100%;border-collapse:collapse}th{background:#1971C2;color:#fff;padding:4px;text-align:left}td{border-bottom:1px solid #DEE2E6;padding:3px 4px}</style></head><body>
+  <h2 style="margin:0">NICAUTO — ${titulo}</h2><div>Cuenta cerrada el ${h.fechaCierre} por ${h.cerradoPor||''} · Ingresos ${simbolo} ${fmtNio(ing)} · Egresos ${simbolo} ${fmtNio(egr)} · <b>Saldo final ${simbolo} ${fmtNio(sal)}</b></div><br>
+  <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Clasificación</th><th>Placa</th><th style="text-align:right">Monto</th><th style="text-align:right">Saldo</th></tr></thead><tbody>${filas}</tbody></table>
+  <script>window.onload=function(){window.print();}<\/script></body></html>`);w.document.close();
+}
+async function deshacerCierreFondo(clave,hid){
+  if(MODO!=='admin'){alert('⛔ Solo el Administrador.');return;}
+  const hist=contData[clave+'Historial']||[];const h=hist.find(x=>x.id===hid);if(!h)return;
+  if(!confirm(`¿Deshacer el cierre del ${h.fechaCierre}?\n\nLos ${(h.movimientos||[]).length} movimientos vuelven a la hoja (junto con lo que se haya agregado después) y este cierre se quita del historial.`))return;
+  const actuales=ensureFondoPersonal(clave);const ids=new Set(actuales.map(x=>x.id));
+  contData[clave]=[...(h.movimientos||[]).filter(x=>!ids.has(x.id)),...actuales];
+  h.anulado=true;h.anuladoPor=getNombreUsuario();h.anuladoFecha=hoyLocal(); // se marca (no se borra) para que otra pestaña no lo reviva
+  await saveOne('contable',{id:'main',...contData});
+  document.getElementById('ov-hist-fondo')?.remove();
+  renderFondoPersonalGenerico(clave,clave==='fondosJM'?'Fondos JM':'Fondos GO',clave==='fondosJM'?'Julio Mendoza':'Gisselle Ortega');
+  alert('✅ Cierre deshecho — los movimientos volvieron a la hoja.');
 }
 function renderFondosJM(){renderFondoPersonalGenerico('fondosJM','Fondos JM','Julio Mendoza');}
 function renderFondosGO(){renderFondoPersonalGenerico('fondosGO','Fondos GO','Gisselle Ortega');}
@@ -13627,7 +13671,7 @@ function cajaFuerte1Saldo(hasta){
 // Egresos automáticos en Fondos JM por compras de vehículos pagadas con "Fondo JM".
 // Solo cuentan las compras desde el último reinicio de la hoja (para no arrastrar cuentas cerradas).
 function fondosJMMovsCompras(){
-  const hist=contData.fondosJMHistorial||[];
+  const hist=(contData.fondosJMHistorial||[]).filter(h=>h&&!h.anulado);
   const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
   const res=[];
   (vehiculos||[]).forEach(v=>{
@@ -13648,7 +13692,7 @@ function fondosJMMovsCompras(){
 // No se guardan aparte: se calculan del registro original, así que si se corrige o borra el
 // cobro o la reserva, Fondos JM se actualiza solo.
 function fondosJMMovsIngresosAuto(){
-  const hist=contData.fondosJMHistorial||[];
+  const hist=(contData.fondosJMHistorial||[]).filter(h=>h&&!h.anulado);
   const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
   const res=[];
   (contData.cuentas||[]).forEach(c=>{
@@ -13686,7 +13730,7 @@ function fondosJMMovsIngresosAuto(){
 }
 // Egresos automáticos en Fondos JM por reparaciones pagadas con Cash JM
 function fondosJMMovsReparaciones(){
-  const hist=contData.fondosJMHistorial||[];
+  const hist=(contData.fondosJMHistorial||[]).filter(h=>h&&!h.anulado);
   const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
   return reparacionesConPago().filter(x=>x.rep.fuentePago==='fondojm').filter(x=>!(desde&&x.rep.fecha&&x.rep.fecha<=desde)).map(x=>({
     id:'FJP_'+x.rep.id,auto:true,autoTipo:'reparacion',vehId:x.veh.id,repVid:x.origen==='Consignación'?'CONSIG_'+x.veh.id:x.origen==='Gerencia'?'VGER_'+x.veh.id:x.veh.id,
@@ -13694,7 +13738,7 @@ function fondosJMMovsReparaciones(){
 }
 // Egresos automáticos en Fondos JM por gastos del Registro Directo pagados con Cash JM
 function fondosJMMovsRegistroDirecto(){
-  const hist=contData.fondosJMHistorial||[];
+  const hist=(contData.fondosJMHistorial||[]).filter(h=>h&&!h.anulado);
   const desde=hist.length?hist.map(h=>h.fechaCierre||'').sort().pop():'';
   return(contData.registroDirectoGastos||[]).filter(r=>r&&r.salioDe==='fondojm'&&Number(r.monto)>0).filter(r=>!(desde&&r.fecha&&r.fecha<=desde)).map(r=>({
     id:'FJG_'+r.id,auto:true,autoTipo:'gasto',tipo:'Egreso',monto:Number(r.monto),fechaIngreso:r.fecha||'',fechaPago:r.fecha||'',
