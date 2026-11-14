@@ -865,7 +865,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
     <div class="section-header" style="margin-top:.5rem">
       <h3 style="font-size:15px;font-weight:600"><i class="ti ti-key"></i> Vehículos en Consignación</h3>
       <div style="display:flex;gap:8px">
-        <button class="btn" onclick="generarCatalogoLP('consig')" style="color:#0B6E6E;border-color:#0B6E6E"><i class="ti ti-book"></i>Catálogo</button>
+        <button class="btn" onclick="catalogoConsigPaginas()" style="color:#0B6E6E;border-color:#0B6E6E"><i class="ti ti-book"></i>Catálogo</button>
         <button class="btn" onclick="exportExcelConsig()"><i class="ti ti-download"></i>Excel</button>
         <button class="btn btn-primary" onclick="abrirModalConsig()"><i class="ti ti-plus"></i>Agregar</button>
       </div>
@@ -3797,6 +3797,18 @@ const sb=async(method,table,body)=>{
 };
 // Trae ESPECÍFICAMENTE la fila 'main' de la tabla contable (nunca un respaldo, aunque
 // haya varias filas en la misma tabla). Usar SIEMPRE esta función en vez de sbGet('contable')[0].
+// Lectura de la fila contable 'main' SOLO para los sondeos automáticos (sincronización, Taller):
+// si ya se bajó hace menos de 20 s se reutiliza, así un mismo ciclo no la descarga 3 veces
+// (pesa más de 1 MB). Los guardados siguen leyendo siempre la versión fresca.
+let _mainCache={t:0,p:null};
+function sbGetMainContablePoll(){
+  const ahora=Date.now();
+  if(_mainCache.p&&ahora-_mainCache.t<20000)return _mainCache.p;
+  _mainCache={t:ahora,p:sbGetMainContable().then(r=>{if(!r)_mainCache.t=0;return r;}).catch(()=>{_mainCache.t=0;return null;})};
+  return _mainCache.p;
+}
+// Pestaña en segundo plano (minimizada o detrás de otra): no se sondea el servidor.
+function pestanaOculta(){try{return document.visibilityState==='hidden';}catch(e){return false;}}
 const sbGetMainContable=async()=>{
   try{
     const r=await fetch(`${SB_URL}/rest/v1/contable?id=eq.main&select=data`,{
@@ -5046,7 +5058,7 @@ async function chequearBloqueoPeriodico(){
   // el bloqueo mientras está adentro) — nunca debe correr antes de loguearse, porque si no,
   // taparía la pantalla de login para todos, incluido el propio Administrador, dejándolo sin
   // poder entrar nunca a desbloquearlo. Ese fue justo el bug que causaba "no me deja entrar".
-  if(!MODO||MODO==='admin')return;
+  if(!MODO||MODO==='admin'||pestanaOculta())return;
   const actual=await verificarBloqueoSistema();
   if(actual&&actual.bloqueado){
     document.getElementById('bloqueo-info').textContent=`Bloqueado por ${actual.activadoPor||'el Administrador'} — ${actual.fecha||''}`;
@@ -5059,6 +5071,7 @@ async function chequearBloqueoPeriodico(){
 // cargada en este momento — si hay una diferencia, muestra un aviso flotante con un botón
 // para actualizar al toque, sin tener que acordarse de recargar por su cuenta.
 async function chequearActualizacionDisponible(){
+  if(pestanaOculta())return;
   try{
     const resp=await fetch(location.pathname+'?_v='+Date.now(),{cache:'no-store'});
     if(!resp.ok)return;
@@ -5403,7 +5416,7 @@ async function intentarLogin(){
         lastMensajesHash=hashArr(mensajes);
         lastContableHash=JSON.stringify(contData).length+'_'+(contData.compras?.length||0);
         try{updatePermisosBadge();}catch(e){}
-        setInterval(realtimeSync,60000); // Subido de 20s a 60s el 2026-10-02 para bajar el consumo de Egress de Supabase (estaba al 151% del límite del plan)
+        iniciarSincronizacionPeriodica(); // cada 2 min y solo con la pestaña visible (nov 2026: el servidor se saturaba)
       },1000);
     }).catch(e=>console.error('Load error:',e));
   }catch(err){
@@ -5540,11 +5553,13 @@ function hashArr(arr){
 }
 
 async function realtimeSync(){
+  if(pestanaOculta()||window._rtsCorriendo)return;
+  window._rtsCorriendo=true;
   try{
     // Revisar si el Administrador forzó el cierre de sesión de todos — así se garantiza que
     // ninguna pestaña vieja (con código desactualizado) siga guardando datos en segundo plano.
     try{
-      const co=await sbGetMainContable();
+      const co=await sbGetMainContablePoll();
       const miLoginTs=Number(safeStorage.getItem('nicauto_login_ts')||0);
       if(co&&co.forzarLogoutDesde&&Number(co.forzarLogoutDesde)>miLoginTs){
         alert('🔒 El Administrador cerró todas las sesiones para aplicar una actualización del sistema.\n\nLa página se va a recargar — por favor vuelve a iniciar sesión.');
@@ -5561,7 +5576,7 @@ async function realtimeSync(){
     // todos los demás — así ninguna pestaña vieja olvidada puede seguir usando código
     // desactualizado, sin depender de que un administrador se acuerde de hacerlo a mano.
     try{
-      const co2=await sbGetMainContable();
+      const co2=await sbGetMainContablePoll();
       if(co2&&co2.buildIdConocido!==BUILD_ID){
         const nuevoTs=Date.now();
         contData.buildIdConocido=BUILD_ID;
@@ -5677,7 +5692,7 @@ async function realtimeSync(){
     }
 
     // Sync contable (incluye compras, legales, gastos, recibos, etc.)
-    const coRow=await sbGetMainContable();
+    const coRow=await sbGetMainContablePoll();
     const newCoHash=coRow?JSON.stringify(coRow).length+'_'+(coRow.compras?.length||0)+'_'+(coRow.legales?.length||0)+'_'+(coRow.recibos?.length||0):'0';
     if(newCoHash!==lastContableHash&&lastContableHash!==''){
       // IMPORTANTE: rendicionHistorial, historialChequeoFisico, papeleraBorrados, gastos,
@@ -5761,7 +5776,20 @@ async function realtimeSync(){
       } else if(!lastTallerDataHash){lastTallerDataHash=newTallerHash;}
     }catch(e){}
   }catch(e){console.log('sync:',e);}
+  finally{window._rtsCorriendo=false;}
 }
+// Una sola sincronización periódica por pestaña (antes se podía registrar dos veces), cada 2 min.
+// Al volver a una pestaña que estaba en segundo plano se sincroniza de inmediato.
+function iniciarSincronizacionPeriodica(){
+  if(window._rtsIntervalo)return;
+  window._rtsIntervalo=setInterval(realtimeSync,120000);
+}
+document.addEventListener('visibilitychange',()=>{
+  if(!pestanaOculta()&&window._rtsIntervalo){
+    const ultimo=window._rtsUltimoVisible||0;
+    if(Date.now()-ultimo>60000){window._rtsUltimoVisible=Date.now();setTimeout(realtimeSync,500);}
+  }
+});
 
 function updateChatBadge(){
   const btn=document.getElementById('nb-chat');if(!btn)return;
@@ -6279,12 +6307,12 @@ function showPage(p){
 // tener que recordar recargar la página a mano.
 async function autoRefrescarTallerSiActivo(){
   try{
-    if(safeStorage.getItem('nicauto_page')!=='taller')return;
+    if(safeStorage.getItem('nicauto_page')!=='taller'||pestanaOculta())return;
     // Si ya eligió un vehículo en "Registrar avance" (está llenando el formulario ahí mismo),
     // no lo interrumpimos — si no, cada 15 segundos se le reseteaba el vehículo elegido y las
     // casillas de "Jordan clasifica" volvían todas a marcadas, aunque las hubiera desmarcado.
     if(document.getElementById('tlr-vehiculo')?.value)return;
-    const [v,co]=await Promise.all([sbGet('vehiculos'),sbGetMainContable()]);
+    const [v,co]=await Promise.all([sbGet('vehiculos'),sbGetMainContablePoll()]);
     if(v){vehiculos=v;setBase3vVehiculos(vehiculos);}
     if(co){
       // IMPORTANTE: preservar los 8 datos que ya viven en filas separadas (rendicionHistorial,
@@ -6306,7 +6334,7 @@ async function autoRefrescarTallerSiActivo(){
     if(safeStorage.getItem('nicauto_page')==='taller')renderTaller();
   }catch(e){console.warn('No se pudo auto-refrescar Taller:',e);}
 }
-setInterval(autoRefrescarTallerSiActivo,15000);
+setInterval(autoRefrescarTallerSiActivo,60000); // antes 15 s — bajaba la fila contable (+1 MB) 4 veces por minuto
 
 // ======================== LISTA DE PRECIOS TABS ========================
 let lpTab='precios';
@@ -9408,24 +9436,38 @@ function renderDash(){
   const ingresosMes=vtasMes.reduce((s,v)=>s+Number(v.precio),0);
   const costosMes=vtasMes.reduce((s,v)=>s+Number(v.costo||0),0);
   const utilidadMes=ingresosMes-costosMes-vtasMes.reduce((s,v)=>s+Number(v.comision||0),0);
-  // ⚠️ DASHBOARD EN CERO TEMPORAL (pedido explícito) — los cálculos de arriba (disp, vend,
-  // ingresos, utilidad, capitalContable, ingresosMes, utilidadMes, saldoCaja, saldoBanco,
-  // cxcPend) siguen corriendo normalmente, solo que las tarjetas de abajo muestran 0 en vez
-  // de esos valores. Para "reconectar" una tarjeta, reemplazá el 0 correspondiente por la
-  // variable que aparece comentada al lado de cada línea.
+  // ── DASHBOARD DEL MES EN CURSO (nov 2026) ──
+  // Todo se calcula con los datos del mes actual, así que al cambiar de mes arranca de nuevo solo.
+  const consigVivos=(contData.consignacion||[]).filter(c=>c&&c.estado!=='Vendido'&&!c.anulado);
+  const invPropio=vehiculos.filter(v=>v.estado!=='Vendido').length;
+  let invGer=0;try{invGer=inventarioGerTaller().n;}catch(e){}
+  const invTotal=invPropio+invGer; // sin consignación (pedido nov 2026), con Gerencia/Taller
+  const dispConsig=consigVivos.filter(c=>c.estado==='Disponible').length;
+  const dispTotal=disp+dispConsig;
+  const vendidosMes=vtasMes.length;
+  const ventasBrutasMes=ingresosMes;
+  const primerDia=mesActual+'-01';
+  let erMes=null;try{erMes=renderEstado({desde:primerDia,hasta:hoyLocal()});}catch(e){console.warn('ER dashboard',e);}
+  const margenMes=erMes?erMes.margenVentas:utilidadMes;
+  const utilNetaMes=erMes?erMes.utilNeta:0;
+  let cajaFin=0,cf1=0,cf2=0;try{cf1=cajaFuerte1Saldo();cf2=cajaFuerte2Saldo();cajaFin=cf1+cf2;}catch(e){console.warn('Caja dashboard',e);}
+  const cxcBancos=(contData.cuentas||[]).filter(ct=>ct&&ct.tipo==='CxC-Banco'&&ct.estado!=='Pagada'&&!ct.anulado).reduce((s,ct)=>s+Number(ct.saldo||0),0);
+  const nCxcBancos=(contData.cuentas||[]).filter(ct=>ct&&ct.tipo==='CxC-Banco'&&ct.estado!=='Pagada'&&!ct.anulado).length;
+  const nombreMes=hoy.toLocaleDateString('es-NI',{month:'long',year:'numeric'});
+  const sub=t=>`<div style="font-size:10.5px;color:var(--text3);margin-top:2px">${t}</div>`;
   document.getElementById('dash-stats').innerHTML=`
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-car"></i>Inventario total</div><div class="stat-value stat-blue">0</div></div><!-- vehiculos.length -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-check"></i>Disponibles</div><div class="stat-value stat-green">0</div></div><!-- disp -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-shopping-cart"></i>Vendidos</div><div class="stat-value stat-amber">0</div></div><!-- vend -->
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('inventario')"><div class="stat-label"><i class="ti ti-car"></i>Inventario total</div><div class="stat-value stat-blue">${invTotal}</div>${sub(invPropio+' inventario · '+invGer+' Gerencia/Taller')}</div>
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('listaprecios')"><div class="stat-label"><i class="ti ti-check"></i>Disponibles</div><div class="stat-value stat-green">${dispTotal}</div>${sub(disp+' propios · '+dispConsig+' consignación')}</div>
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('ventas')"><div class="stat-label"><i class="ti ti-shopping-cart"></i>Vendidos (mes)</div><div class="stat-value stat-amber">${vendidosMes}</div>${sub('Ventas completadas de '+nombreMes)}</div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-users"></i>Clientes</div><div class="stat-value stat-blue">0</div></div><!-- clientes.length -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-currency-dollar"></i>Ingresos totales</div><div class="stat-value stat-green">${fmtD(0)}</div></div><!-- fmtD(ingresos) -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-trending-up"></i>Utilidad acumulada</div><div class="stat-value stat-purple">${fmtD(0)}</div></div><!-- fmtD(utilidad) -->
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-currency-dollar"></i>Ingresos totales (mes)</div><div class="stat-value stat-green">${fmtD(ventasBrutasMes)}</div>${sub('Ventas brutas a precio de venta')}</div>
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-trending-up"></i>Utilidad acumulada (mes)</div><div class="stat-value ${utilNetaMes>=0?'stat-purple':'stat-red'}">${fmtD(utilNetaMes)}</div>${sub('Utilidad neta del Estado de Resultado')}</div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-building-bank"></i>Capital contable</div><div class="stat-value stat-blue">${fmtD(0)}</div></div><!-- fmtD(capitalContable) -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-calendar"></i>Ventas este mes</div><div class="stat-value stat-green">${fmtD(0)}</div></div><!-- fmtD(ingresosMes) -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-chart-arrows"></i>Utilidad este mes</div><div class="stat-value stat-green">${fmtD(0)}</div></div><!-- fmtD(utilidadMes), clase ${utilidadMes>=0?'stat-green':'stat-red'} -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-cash"></i>Caja Finanzas</div><div class="stat-value stat-green">${fmtD(0)}</div></div><!-- fmtD(saldoCaja) -->
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-calendar"></i>Ventas este mes</div><div class="stat-value ${margenMes>=0?'stat-green':'stat-red'}">${fmtD(margenMes)}</div>${sub('Margen de ventas acumulado'+(ventasBrutasMes?' ('+(margenMes/ventasBrutasMes*100).toFixed(1)+'%)':''))}</div>
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-chart-arrows"></i>Utilidad este mes</div><div class="stat-value stat-green">${fmtD(0)}</div></div><!-- fmtD(utilidadMes) -->
+    <div class="stat-card"><div class="stat-label"><i class="ti ti-cash"></i>Caja Finanzas</div><div class="stat-value stat-green">${fmtD(cajaFin)}</div>${sub('Caja fuerte '+fmtD(cf1)+' + Fondos JM '+fmtD(cf2))}</div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-building-bank"></i>Bancos totales</div><div class="stat-value stat-blue">${fmtD(0)}</div></div><!-- fmtD(saldoBanco) -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-arrows-exchange"></i>CxC Bancos</div><div class="stat-value stat-amber">${fmtD(0)}</div></div><!-- fmtD(cxcPend) -->
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('contable')"><div class="stat-label"><i class="ti ti-arrows-exchange"></i>CxC Bancos</div><div class="stat-value stat-amber">${fmtD(cxcBancos)}</div>${sub(nCxcBancos+' cuenta'+(nCxcBancos===1?'':'s')+' pendiente'+(nCxcBancos===1?'':'s')+' (Contable)')}</div>
   `;
   const ultV=ventas.slice(-5).reverse();
   document.getElementById('dash-ventas-tbl').innerHTML=ultV.length?ultV.map(v=>{
@@ -9448,9 +9490,9 @@ function renderDash(){
   const unidadesCompradasMes=Object.values(datosPizarraDash).reduce((s,d)=>s+(d.compras||0),0);
   const unidadesReservadasMes=Object.values(datosPizarraDash).reduce((s,d)=>s+(d.reservas||0),0);
   document.getElementById('dash-stats').innerHTML+=`
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-car-suv"></i>Unidades Vendidas (mes)</div><div class="stat-value stat-green">0</div></div><!-- unidadesVendidasMes -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-shopping-cart-plus"></i>Unidades Compradas (mes)</div><div class="stat-value stat-blue">0</div></div><!-- unidadesCompradasMes -->
-    <div class="stat-card"><div class="stat-label"><i class="ti ti-bookmark"></i>Reservas (mes)</div><div class="stat-value stat-amber">0</div></div><!-- unidadesReservadasMes -->
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('pizarras')"><div class="stat-label"><i class="ti ti-car-suv"></i>Unidades Vendidas (mes)</div><div class="stat-value stat-green">${unidadesVendidasMes}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">Total ventas en Pizarra</div></div>
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('pizarras')"><div class="stat-label"><i class="ti ti-shopping-cart-plus"></i>Unidades Compradas (mes)</div><div class="stat-value stat-blue">${unidadesCompradasMes}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">Total compras en Pizarra</div></div>
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('pizarras')"><div class="stat-label"><i class="ti ti-bookmark"></i>Reservados (mes)</div><div class="stat-value stat-amber">${unidadesReservadasMes}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">Reservas en Pizarra</div></div>
   `;
   const vInfo=Object.values(datosPizarraDash).filter(d=>d.ventas>0).map(d=>({
     nombre:d.nombre.split(' ')[0],
@@ -14829,20 +14871,22 @@ function cuadreRendicionHTML(desde,hasta,totalesER){
   </div></div>`;
 }
 
-function renderEstado(){
+function renderEstado(calc){
+  // calc={desde,hasta}: solo calcula y devuelve los totales (lo usa el Dashboard), sin dibujar.
+  const soloCalculo=!!(calc&&calc.desde);
   const hoy=hoyLocal();
   const primerDiaMes=hoy.slice(0,8)+'01';
-  const desde=document.getElementById('estado-fecha-desde')?.value||primerDiaMes;
-  const hasta=document.getElementById('estado-fecha-hasta')?.value||hoy;
+  const desde=soloCalculo?calc.desde:(document.getElementById('estado-fecha-desde')?.value||primerDiaMes);
+  const hasta=soloCalculo?calc.hasta:(document.getElementById('estado-fecha-hasta')?.value||hoy);
   // El Estado de Resultado siempre se emite DE una fecha A otra — todos los movimientos se
   // filtran para que caigan dentro de ese rango exacto.
   const enRango=fecha=>!fecha||(fecha>=desde&&fecha<=hasta);
   const vtasC=ventas.filter(v=>v.estado==='Completada'&&enRango(v.fecha));
-  const vistaComision=!!window._erVistaComision;
+  const vistaComision=soloCalculo?false:!!window._erVistaComision;
   // Nivel de detalle: cuando está activo, cada cuenta muestra debajo cada transacción que la
   // compone (fecha, descripción, proveedor, forma de pago, monto), en vez de solo el subtotal.
   // El clic en la cuenta sigue abriendo el auxiliar completo igual que siempre.
-  const nivelDetalle=!!document.getElementById('estado-nivel-detalle')?.checked;
+  const nivelDetalle=soloCalculo?false:!!document.getElementById('estado-nivel-detalle')?.checked;
   // Cada cuenta, cuando el nivel de detalle está activo, se puede ocultar individual con la
   // flechita — sin afectar el clic normal de la fila, que sigue abriendo el auxiliar completo.
   window._erColapsados=window._erColapsados||new Set();
@@ -14931,6 +14975,7 @@ function renderEstado(){
   const utilOp=utilBruta-(vistaComision?0:comisiones)-totAdmin;
   const utilFinanciera=utilOp-totFinanciero;
   const utilNeta=utilFinanciera-totNoOp-totReclamo;
+  if(soloCalculo)return{ingresos,utilBruta,comisiones,margenVentas:utilBruta-comisiones,utilOp,utilNeta};
   const mb=ingresos>0?((utilBruta/ingresos)*100).toFixed(1):0;
   const mn=ingresos>0?((utilNeta/ingresos)*100).toFixed(1):0;
   const r=(l,v,cls='')=>`<div class="contable-row ${cls}"><span>${l}</span><span>${v}</span></div>`;
@@ -15881,6 +15926,14 @@ function catalogoElegirEstados(){
     <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Marcá los estados de los carros que querés en el catálogo.</div>
     <div id="cat-est-lista" style="max-height:50vh;overflow:auto">${estados.map(e=>`<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 2px;cursor:pointer;border-bottom:1px solid var(--border)">
       <input type="checkbox" value="${e}" ${pre.includes(e)?'checked':''} onchange="catEstContar()" style="width:16px;height:16px"> ${e} <span style="color:var(--text3);margin-left:auto">${cuenta(e)}</span></label>`).join('')}</div>
+    <div style="margin:10px 0 4px;font-size:12px;font-weight:700">Tamaño del catálogo</div>
+    <select id="cat-paginas" onchange="catEstContar()" style="width:100%;padding:7px">
+      <option value="0">Normal — 5 carros por hoja (tarjetas grandes)</option>
+      <option value="1">Resumir en 1 página</option>
+      <option value="2">Resumir en 2 páginas</option>
+      <option value="3">Resumir en 3 páginas</option>
+      <option value="4">Resumir en 4 páginas</option>
+    </select>
     <div style="display:flex;gap:6px;margin:10px 0">
       <button type="button" class="btn btn-sm" onclick="document.querySelectorAll('#cat-est-lista input').forEach(c=>c.checked=true);catEstContar()">Marcar todos</button>
       <button type="button" class="btn btn-sm" onclick="document.querySelectorAll('#cat-est-lista input').forEach(c=>c.checked=false);catEstContar()">Ninguno</button></div>
@@ -15891,14 +15944,24 @@ function catalogoElegirEstados(){
   ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
   document.body.appendChild(ov);catEstContar();
 }
+function catalogoConsigPaginas(){
+  const r=prompt('Catálogo de Consignación — ¿en cuántas páginas?\n\n0 = Normal (5 carros por hoja, tarjetas grandes)\n1, 2, 3 o 4 = resumirlo en esa cantidad de páginas','0');
+  if(r===null)return;
+  window._catPaginas=Math.max(0,Math.min(4,parseInt(r,10)||0));
+  try{generarCatalogoLP('consig');}finally{window._catPaginas=0;}
+}
 function catEstElegidos(){return[...document.querySelectorAll('#cat-est-lista input:checked')].map(c=>c.value);}
-function catEstContar(){const el=document.getElementById('cat-est-total');if(!el)return;const el2=catEstElegidos();const n=vehiculos.filter(v=>v.estado!=='Vendido'&&el2.includes(v.estado)).length;el.textContent=n+' vehículo'+(n===1?'':'s');}
+function catEstContar(){const el=document.getElementById('cat-est-total');if(!el)return;const el2=catEstElegidos();const n=vehiculos.filter(v=>v.estado!=='Vendido'&&el2.includes(v.estado)).length;
+  const pg=Number(document.getElementById('cat-paginas')?.value||0);
+  const pres=[5,10,16,24,30,40];const per=pg>0?(pres.find(x=>x>=Math.ceil(n/pg))||40):5;
+  el.textContent=n+' vehículo'+(n===1?'':'s')+' · '+Math.max(1,Math.ceil(n/per))+' pág.';}
 function catEstGenerar(){
   const el=catEstElegidos();
   if(!el.length){alert('Marcá al menos un estado.');return;}
+  window._catPaginas=Number(document.getElementById('cat-paginas')?.value||0);
   document.getElementById('cat-estados-ov')?.remove();
   const prev=lpEstadosSel;lpEstadosSel=el;
-  try{generarCatalogoLP();}finally{lpEstadosSel=prev;}
+  try{generarCatalogoLP();}finally{lpEstadosSel=prev;window._catPaginas=0;}
 }
 function generarCatalogoLP(origen){
   const esc=x=>String(x==null?'':x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -15946,7 +16009,12 @@ function generarCatalogoLP(origen){
         <div><span class="k">COLOR</span>${esc(String(v.color||'—').trim().toLowerCase().replace(/(^|\s)\S/g,x=>x.toUpperCase()))}</div>
       </div></div>`;
   };
-  const POR_HOJA=5, paginas=Math.ceil(veh.length/POR_HOJA);
+  // Tamaño: 5 por hoja (tarjetas grandes) o ajustado a N páginas (tarjetas más pequeñas, en columnas)
+  const PRESETS=[{per:5,cols:1,rows:5,s:1},{per:10,cols:2,rows:5,s:.74},{per:16,cols:2,rows:8,s:.6},{per:24,cols:3,rows:8,s:.5},{per:30,cols:3,rows:10,s:.45},{per:40,cols:4,rows:10,s:.38}];
+  const objPag=Number(window._catPaginas||0);
+  let LAY=PRESETS[0];
+  if(objPag>0){const need=Math.ceil(veh.length/objPag);LAY=PRESETS.find(p=>p.per>=need)||PRESETS[PRESETS.length-1];}
+  const POR_HOJA=LAY.per, paginas=Math.ceil(veh.length/POR_HOJA);
   let hojas='';
   for(let p=0;p<paginas;p++){
     const ini=p*POR_HOJA, grupo=veh.slice(ini,ini+POR_HOJA);
@@ -15954,7 +16022,7 @@ function generarCatalogoLP(origen){
       <header><div><div class="marca">NICAUTO</div><div class="tit">CATÁLOGO PARA VENDEDORES${esConsig?' · CONSIGNACIÓN':''}</div></div>
         <div class="dr"><div class="fecha">${fechaTxt}</div><div class="lista">LISTA A / USD</div></div></header>
       <div class="res">${resumen}</div>
-      <div class="cards">${grupo.map((v,k)=>tarjeta(v,ini+k)).join('')}</div>
+      <div class="cards" style="--s:${LAY.s};grid-template-columns:repeat(${LAY.cols},1fr);grid-template-rows:repeat(${LAY.rows},1fr)">${grupo.map((v,k)=>tarjeta(v,ini+k)).join('')}</div>
       <footer><div class="f1"><span>Referencias ${pad(ini+1)} a ${pad(ini+grupo.length)}</span><span>Página ${p+1} de ${paginas}</span></div>
         <div class="f2">Uso comercial interno. Vehículos ordenados por tipo de vehículo.</div></footer>
     </section>`;
@@ -15973,19 +16041,19 @@ function generarCatalogoLP(origen){
     .dr{text-align:right}.fecha{font-size:12.5px;color:#5B6B80;margin-top:6px}
     .lista{font-size:12.5px;font-weight:800;color:#0B6E6E;letter-spacing:.04em;margin-top:9px}
     .res{font-size:11.5px;color:#5B6B80;margin:12px 0 14px}
-    .cards{display:flex;flex-direction:column;gap:13px;flex:1}
-    .card{background:#fff;border:1px solid #DCE3EC;border-radius:12px;padding:12px 16px 10px;height:1.57in;display:flex;flex-direction:column;justify-content:space-between}
-    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #DCE3EC;padding-bottom:7px}
-    .izq{display:flex;gap:11px;align-items:flex-start}
-    .num{display:inline-block;color:#fff;font-weight:800;font-size:12px;border-radius:5px;padding:4px 7px;margin-top:3px;min-width:30px;text-align:center}
-    .nom{font-size:19px;font-weight:800;color:#14294B}
-    .sub{font-size:13px;color:#5B6B80;margin-top:3px}
-    .der{text-align:right}
-    .plbl{font-size:10px;font-weight:800;color:#5B6B80;letter-spacing:.06em}
-    .precio{font-size:28px;font-weight:800;color:#0B6E6E;line-height:1.15}
-    .est{display:inline-block;font-size:11px;font-weight:800;border-radius:6px;padding:2px 9px;margin-top:2px}
-    .det{display:grid;grid-template-columns:1fr 1fr;row-gap:3px;font-size:13.5px;padding-top:7px}
-    .det .k{display:inline-block;width:52px;font-size:10.5px;color:#5B6B80;letter-spacing:.03em}
+    .cards{display:grid;gap:calc(13px*var(--s,1)) calc(12px*var(--s,1));flex:1;min-height:0}
+    .card{background:#fff;border:1px solid #DCE3EC;border-radius:calc(12px*var(--s,1));padding:calc(12px*var(--s,1)) calc(16px*var(--s,1)) calc(10px*var(--s,1));min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #DCE3EC;padding-bottom:calc(7px*var(--s,1));gap:6px}
+    .izq{display:flex;gap:calc(11px*var(--s,1));align-items:flex-start;min-width:0}
+    .num{display:inline-block;color:#fff;font-weight:800;font-size:calc(12px*var(--s,1));border-radius:5px;padding:calc(4px*var(--s,1)) calc(7px*var(--s,1));margin-top:3px;min-width:calc(30px*var(--s,1));text-align:center}
+    .nom{font-size:calc(19px*var(--s,1));font-weight:800;color:#14294B;line-height:1.15}
+    .sub{font-size:calc(13px*var(--s,1));color:#5B6B80;margin-top:2px}
+    .der{text-align:right;white-space:nowrap}
+    .plbl{font-size:calc(10px*var(--s,1));font-weight:800;color:#5B6B80;letter-spacing:.06em}
+    .precio{font-size:calc(28px*var(--s,1));font-weight:800;color:#0B6E6E;line-height:1.15}
+    .est{display:inline-block;font-size:calc(11px*var(--s,1));font-weight:800;border-radius:6px;padding:1px calc(9px*var(--s,1));margin-top:2px}
+    .det{display:grid;grid-template-columns:1fr 1fr;row-gap:2px;font-size:calc(13.5px*var(--s,1));padding-top:calc(7px*var(--s,1))}
+    .det .k{display:inline-block;width:calc(52px*var(--s,1));font-size:calc(10.5px*var(--s,1));color:#5B6B80;letter-spacing:.03em}
     footer{margin-top:10px}
     .f1{display:flex;justify-content:space-between;font-size:11.5px;color:#5B6B80}
     .f2{font-size:10px;color:#5B6B80;margin-top:6px}
@@ -18585,7 +18653,7 @@ function renderChat(){
   try{if('Notification' in window && Notification.permission==='default')Notification.requestPermission();}catch(e){}
   if(chatInterval)clearInterval(chatInterval);
   // Sondeo más frecuente mientras el chat está abierto para sentirse instantáneo (req #30)
-  chatInterval=setInterval(()=>{cargarMensajes();actualizarPresencia();},6000); // Ajustado para reducir consumo de datos (egress) de Supabase
+  chatInterval=setInterval(()=>{if(pestanaOculta()||safeStorage.getItem('nicauto_page')!=='chat')return;cargarMensajes();actualizarPresencia();},12000); // 12 s y solo con el Chat abierto y visible
 }
 
 // Presencia global — se guarda sin importar qué pantalla esté viendo el usuario, para que
@@ -18675,7 +18743,7 @@ async function abrirUsuariosConectados(){
   try{
     const msgs=await sbGet('mensajes');
     const ahora=Date.now();
-    const onlineThreshold=45000; // 45 segundos, igual que en el Chat
+    const onlineThreshold=300000; // 5 min (la presencia se actualiza cada 2 min con la pestaña visible)
     const presencias=(msgs||[]).filter(m=>m.tipo==='presence');
     const nombresUnicos=[...new Set(TODOS_USUARIOS.map(u=>u.nombre))];
     const filas=nombresUnicos.map(nombre=>{
@@ -18720,7 +18788,7 @@ let chatCanalActivo=null; // {tipo:'dm'|'group', id, nombre}
 function renderUsuariosLista(){
   const miNombre=getMiNombre();
   const ahora=Date.now();
-  const onlineThreshold=45000; // 45 seconds
+  const onlineThreshold=300000; // 5 min
   const presences=mensajes.filter(m=>m.tipo==='presence'&&m.nombre!==miNombre);
   const onlineSet=new Set(presences.filter(p=>{
     // Handle both numeric ts and string tsStr
@@ -29967,11 +30035,11 @@ function actualizarReloj(){
   if(fechaEl)fechaEl.textContent=ahora.toLocaleDateString('es-NI',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
 }
 setInterval(actualizarReloj,1000);
-setInterval(chequearBloqueoPeriodico,20000);
+setInterval(chequearBloqueoPeriodico,60000);
 // Revisa cada 3 minutos si hay una versión más nueva publicada — a los 15 segundos de abrir
 // también, por si ya había una actualización esperando.
 setTimeout(chequearActualizacionDisponible,15000);
-setInterval(chequearActualizacionDisponible,180000);
+setInterval(chequearActualizacionDisponible,600000);
 actualizarReloj();
 
 // ======================== RESTAURAR SESIÓN AL REFRESCAR (req #26) ========================
@@ -30023,7 +30091,7 @@ function restaurarSesionSiExiste(){
         lastMensajesHash=hashArr(mensajes);
         lastContableHash=JSON.stringify(contData).length+'_'+(contData.compras?.length||0);
         try{updatePermisosBadge();}catch(e){}
-        setInterval(realtimeSync,60000); // Subido de 20s a 60s el 2026-10-02 para bajar el consumo de Egress de Supabase (estaba al 151% del límite del plan)
+        iniciarSincronizacionPeriodica(); // cada 2 min y solo con la pestaña visible (nov 2026: el servidor se saturaba)
       },1000);
     }).catch(e=>{console.error('Load error al restaurar sesión:',e);try{mostrarLogin();}catch(e2){}});
   }catch(err){
