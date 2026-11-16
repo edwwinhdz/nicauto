@@ -2200,6 +2200,11 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
         <div class="form-group"><label>Canje — vehículo recibido</label><input id="mvt-canje-desc" placeholder="Marca, modelo, año del vehículo en canje…"></div>
         <div class="form-group"><label>Valor del canje (USD $)</label><input class="calc-input" id="mvt-canje-valor" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()"></div>
       </div>
+      <div class="form-row" id="mvt-directo-wrap" style="display:none;background:#FFF4E6;border-radius:8px;padding:.5rem .6rem;margin-bottom:.5rem">
+        <div class="form-group" style="margin:0"><label style="font-weight:700">🤝 Pagado DIRECTO al dueño del carro (USD $)</label>
+          <input class="calc-input" id="mvt-directo-dueno" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()">
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Solo consignación. Este dinero <b>NO entra</b> a Caja, Fondos JM ni Bancos de NICAUTO: el comprador se lo pagó al dueño.</div></div>
+      </div>
       <div class="form-row">
         <div class="form-group"><label>Cash recibido (USD $)</label><div style="display:flex;gap:6px"><input class="calc-input" id="mvt-cash" type="text" inputmode="decimal" step="0.01" placeholder="0.00" oninput="calcLiquidacion()" style="flex:1;min-width:90px">
           <select id="mvt-cash-dest" title="¿Dónde entró el efectivo?" style="flex:1;min-width:150px"><option value="cajafuerte">💵 Cash — Caja fuerte</option><option value="cashjulio">💵 Cash JM (lo recibió Don Julio)</option></select></div>
@@ -2214,6 +2219,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
           <span style="color:var(--text2)" id="liq-bancario-lbl">− Bancario:</span><span id="liq-bancario" style="color:var(--blue);text-align:right"></span>
           <span style="color:var(--text2)">− Depósitos:</span><span id="liq-depositos" style="color:var(--blue);text-align:right"></span>
           <span style="color:var(--text2)">− Canje:</span><span id="liq-canje" style="color:var(--purple);text-align:right"></span>
+          <span style="color:var(--text2)" id="liq-directo-lbl">− Directo al dueño:</span><span id="liq-directo" style="color:#E8590C;text-align:right"></span>
           <span style="color:var(--text2)">= Cash a recibir:</span><span id="liq-saldo" style="font-weight:700;font-size:14px;text-align:right"></span>
         </div>
         <div style="margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:4px">
@@ -11371,6 +11377,7 @@ function abrirModalVenta(id){
     const elRecBanco=document.getElementById('mvt-recibo-banco');if(elRecBanco)elRecBanco.value=v.reciboBanco||'';
     const elCanjeDesc=document.getElementById('mvt-canje-desc');if(elCanjeDesc)elCanjeDesc.value=v.canjeDesc||'';
     const elCanjeValor=document.getElementById('mvt-canje-valor');if(elCanjeValor)elCanjeValor.value=parseFloat(v.canjeValor||0).toFixed(2);
+    const elDirecto=document.getElementById('mvt-directo-dueno');if(elDirecto)elDirecto.value=Number(v.pagoDirectoDueno||0)?Number(v.pagoDirectoDueno).toFixed(2):'';
     const elCash=document.getElementById('mvt-cash');if(elCash)elCash.value=parseFloat(v.cash||0).toFixed(2);
     const elCashDest=document.getElementById('mvt-cash-dest');if(elCashDest)elCashDest.value=v.cashDest==='cashjulio'?'cashjulio':'cajafuerte';
     mvtCargarDepositos(v);
@@ -11383,7 +11390,7 @@ function abrirModalVenta(id){
     ['precio','costo','comision','notas','recibo'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
     document.getElementById('mvt-estado').value='Completada';
     if(document.getElementById('mvt-contacto'))document.getElementById('mvt-contacto').value='';
-    ['anticipo','bancario','canje-valor','cash','comision'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
+    ['anticipo','bancario','canje-valor','cash','comision','directo-dueno'].forEach(f=>{const el=document.getElementById('mvt-'+f);if(el)el.value='';});
     if(document.getElementById('mvt-cash-dest'))document.getElementById('mvt-cash-dest').value='cajafuerte';
     if(document.getElementById('mvt-banco'))document.getElementById('mvt-banco').value='';
     if(document.getElementById('mvt-bancario-tipo'))document.getElementById('mvt-bancario-tipo').value='financiamiento';
@@ -11553,8 +11560,12 @@ function calcLiquidacion(){
   const canje=parseFloat(document.getElementById('mvt-canje-valor').value)||0;
   const comision=parseFloat(document.getElementById('mvt-comision').value)||0;
   const depositos=mvtLeerDepositos().reduce((s,d)=>s+d.monto,0);
-  const saldo=precio-anticipo-bancario-canje-depositos;
   const vid=document.getElementById('mvt-vehiculo').value;
+  const esConsigV=String(vid||'').startsWith('CONSIG_');
+  {const w=document.getElementById('mvt-directo-wrap');if(w)w.style.display=esConsigV?'':'none';}
+  const directo=esConsigV?(parseFloat(document.getElementById('mvt-directo-dueno')?.value)||0):0;
+  {const l=document.getElementById('liq-directo');const ll=document.getElementById('liq-directo-lbl');if(l){l.style.display=esConsigV?'':'none';ll.style.display=esConsigV?'':'none';l.textContent=directo>0?'-'+fmtD(directo):'$0.00';}}
+  const saldo=precio-anticipo-bancario-canje-depositos-directo;
   const v=buscarVehiculoPropioOGer(vid);
   const reps=v?(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo),0):0;
   const costoTotal=costo+reps;
@@ -11766,10 +11777,34 @@ async function marcarAjusteContableVenta(id){
 // un anticipo, ese dinero sigue siendo de ellos. En vez de perder el dato al anular su reserva,
 // se crea una Cuenta por Pagar — Reserva Flotante, para reembolsarles o reasignarles el anticipo
 // a otro vehículo.
+// ¿La reserva es del MISMO cliente que compró? (entonces se convirtió en la venta, no queda flotante)
+function _normNom(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,' ').split(/\s+/).filter(w=>w.length>2);}
+function reservaEsDelComprador(reserva,venta){
+  if(!reserva||!venta)return false;
+  if(reserva.compradorId&&venta.compradorId&&reserva.compradorId===venta.compradorId)return true;
+  const recA=String(venta.reciboAnticipo||'').split(/[,\s]+/).map(x=>x.replace(/^0+/,'')).filter(Boolean);
+  const recR=String(reserva.recibo||'').replace(/^0+/,'');
+  if(recR&&recA.includes(recR))return true;
+  const nomV=venta.nombreFactura||(clientes.find(c=>c.id===venta.compradorId)||{}).nombre||'';
+  const a=_normNom(reserva.nombreFactura),b=_normNom(nomV);
+  if(!a.length||!b.length)return false;
+  const comunes=a.filter(w=>b.includes(w)).length;
+  return comunes>=2||(comunes>=1&&Math.min(a.length,b.length)===1);
+}
 async function cancelarOtrasReservasDelVehiculo(vehiculoId,ventaGanadoraId){
+  const ganadora=ventas.find(v=>v.id===ventaGanadoraId);
   const otras=ventas.filter(v=>v.vehiculoId===vehiculoId&&v.estado==='Pendiente'&&v.id!==ventaGanadoraId);
   for(const otra of otras){
     otra.estado='Anulada';
+    // El dinero de la reserva SÍ se recibió: su ingreso sigue en el Cash in Hand / Bancos del día
+    // en que se cobró (antes desaparecía del reporte de caja al facturar).
+    otra.anticipoRetenido=true;
+    if(reservaEsDelComprador(otra,ganadora)){
+      otra.motivoCancelacion='Reserva convertida en venta';
+      otra.convertidaEnVenta=ventaGanadoraId;
+      await saveOne('ventas',otra);
+      continue; // es el mismo cliente: el anticipo ya va aplicado en su venta, no es Reserva Flotante
+    }
     otra.motivoCancelacion='El vehículo se vendió a otro comprador/reserva';
     await saveOne('ventas',otra);
     const anticipoPerdido=Number(otra.anticipo||0);
@@ -11786,7 +11821,7 @@ async function cancelarOtrasReservasDelVehiculo(vehiculoId,ventaGanadoraId){
         origenVentaId:otra.id});
     }
   }
-  if(otras.some(o=>Number(o.anticipo||0)>0))await saveOne('contable',{id:'main',...contData});
+  if(otras.some(o=>Number(o.anticipo||0)>0&&!o.convertidaEnVenta))await saveOne('contable',{id:'main',...contData});
 }
 // Avisa (sin bloquear) si la fecha que se está registrando NO corresponde al mes calendario
 // actual — para detectar a tiempo fechas mal escritas o operaciones cargadas fuera de tiempo.
@@ -11893,6 +11928,7 @@ async function guardarVenta(){
   const terceroCredito=bancarioTipo==='tercero'?(document.getElementById('mvt-tercero-credito')?.value||'').trim():'';
   const canjeDesc=document.getElementById('mvt-canje-desc').value;
   const canjeValor=parseFloat(document.getElementById('mvt-canje-valor').value||0);
+  const pagoDirectoDueno=String(document.getElementById('mvt-vehiculo')?.value||'').startsWith('CONSIG_')?(parseFloat(document.getElementById('mvt-directo-dueno')?.value||0)||0):0;
   const cash=parseFloat(document.getElementById('mvt-cash').value||0);
   const nombreFactura=document.getElementById('mvt-nombre-factura').value;
   const cedulaFactura=document.getElementById('mvt-cedula-factura').value;
@@ -11934,6 +11970,7 @@ async function guardarVenta(){
   else if(canjeValor>0&&cash>0)pago='Mixto (Cash + Canje)';
   else if(canjeValor>0)pago='Canje';
   else if(anticipo>0&&cash===0&&bancario===0)pago='Solo anticipo';
+  if(pagoDirectoDueno>0)pago=(pago==='Contado'&&!(cash>0)&&!(anticipo>0)?'Directo al dueño':pago+' + Directo al dueño');
 
   const id=document.getElementById('mvt-id').value||uid();
   const ventaExistente=ventas.find(v=>v.id===id);
@@ -11945,7 +11982,7 @@ async function guardarVenta(){
     anticipo:anticipo.toFixed(2),reciboAnticipo,
     bancario:bancario.toFixed(2),bancarioTipo,reciboBanco,banco,terceroCredito,
     depositos:depositos.map(d=>({banco:d.banco,monto:Number(d.monto.toFixed(2)),ref:d.ref})),
-    canjeDesc,canjeValor:canjeValor.toFixed(2),
+    canjeDesc,canjeValor:canjeValor.toFixed(2),pagoDirectoDueno:pagoDirectoDueno?pagoDirectoDueno.toFixed(2):'',
     cash:cash.toFixed(2),cashDest:(document.getElementById('mvt-cash-dest')?.value==='cashjulio'?'cashjulio':'cajafuerte'),
     nombreFactura,cedulaFactura,tel1,tel2,
     costoTotal:costoTotal.toFixed(2),ganancia:ganancia.toFixed(2),ventaConfirmada,numeroControl};
@@ -19259,6 +19296,7 @@ function abrirLiquidacion(ventaId){
         ${(Array.isArray(v.depositos)?v.depositos:[]).map((d,i)=>`<span>Depósito ${i+1} — ${d.banco||''}:</span><span style="font-weight:600;color:#1971C2">${fmtD(d.monto)} ${d.ref?'(Recibo/Ref. '+d.ref+')':''}</span>`).join('')}
         ${Number(v.canjeValor)>0?`<span>Canje (${v.canjeDesc||'vehículo'}):</span><span style="font-weight:600;color:#6741D9">${fmtD(v.canjeValor)}</span>`:''}
         ${Number(v.cash)>0?`<span>Efectivo recibido:</span><span style="font-weight:600;color:#2F9E44">${fmtD(v.cash)}</span>`:''}
+        ${Number(v.pagoDirectoDueno)>0?`<span>Pagado directo al dueño <i style="font-size:10px">(no ingresó a NICAUTO)</i>:</span><span style="font-weight:600;color:#E8590C">${fmtD(v.pagoDirectoDueno)}</span>`:''}
         <span>¿Cómo nos contactó?:</span><span style="font-weight:600">${contactoMap[v.contacto]||'—'}</span>
         <span>No. de Recibo:</span><span style="font-weight:600">${v.recibo||'—'}</span>
       </div>
@@ -19746,7 +19784,7 @@ function cdLineasAuto(fecha){
       (Array.isArray(v.depositos)?v.depositos:[]).forEach((d,i)=>{if(Number(d.monto||0)>0)lineas.push({...base,key:'V_'+v.id+'_dep'+i,recibo:d.ref||v.recibo||'',
         forma:'Depósito '+(d.banco||''),col:CD_BANCO_DEP_COL[d.banco]||'sinbanco',banco:d.banco||'',monto:Number(d.monto),montoNIO:Number(d.montoNIO||0)||undefined,tipoLinea:'Venta'});});
       if(canje>0)lineas.push({...base,key:'V_'+v.id+'_canje',forma:'Canje'+(v.canjeDesc?': '+v.canjeDesc:''),col:'canje',monto:canje,tipoLinea:'Venta'});
-    } else if((v.estado==='Pendiente'||(v.estado==='Anulada'&&v.devolucionReserva))&&Number(v.anticipo||0)>0){
+    } else if((v.estado==='Pendiente'||(v.estado==='Anulada'&&(v.devolucionReserva||v.anticipoRetenido)))&&Number(v.anticipo||0)>0){
       const pago=v.pago||'Efectivo';
       const colR=v.bancoIngresoCol||(pago==='Efectivo'?'cajafuerte':pago==='CxC Tercero'?'cxc':(CD_BANCO_COL[v.banco]||'sinbanco'));
       const bancoTxt=v.bancoIngresoCol&&v.bancoIngresoCol!=='cajafuerte'&&v.bancoIngresoCol!=='cxc'?' '+((CD_COLS.find(c=>c.k===v.bancoIngresoCol)||{}).t||''):'';
@@ -19819,7 +19857,7 @@ function cdDiasPendientes(fecha){
   (contData.cajaDiariaMovs||[]).filter(m=>!m.anulado).forEach(m=>dias.add(m.fecha));
   (vehiculos||[]).forEach(v=>{if(pagosCompraDe(v).some(p=>(p.fuente==='cajafuerte'||p.fuente==='cashjulio')&&Number(p.monto)>0))dias.add(v.fechacompra||v.fechaPagoCaja);});
   reparacionesConPago().forEach(x=>{if(x.rep.fuentePago==='cajafuerte'&&x.rep.fecha)dias.add(x.rep.fecha);});
-  (ventas||[]).forEach(v=>{if(v.fecha&&(v.estado==='Completada'||((v.estado==='Pendiente'||(v.estado==='Anulada'&&v.devolucionReserva))&&Number(v.anticipo||0)>0)))dias.add(v.fecha);});
+  (ventas||[]).forEach(v=>{if(v.fecha&&(v.estado==='Completada'||((v.estado==='Pendiente'||(v.estado==='Anulada'&&(v.devolucionReserva||v.anticipoRetenido)))&&Number(v.anticipo||0)>0)))dias.add(v.fecha);});
   diasCobrosCxC().forEach(d=>dias.add(d));
   return[...dias].filter(d=>d&&d>=ini&&d<fecha&&!cerrados.has(d)).sort();
 }
@@ -20000,7 +20038,7 @@ function cdHojaHTML(h,enPantalla){
     <tr><td style="font-weight:800;font-size:14px;padding-top:8px">SALDO FINAL CAJA</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cajafuerte)}</td>
       <td style="${amarillo};text-align:right;padding:6px 8px;font-size:14px">${fmtD(h.saldoFinal.cashjulio)} <span style="font-weight:400;font-size:10px">${cjNuevo?'del día → Fondos JM (auxiliar Don Julio)':'en caja Don Julio'}</span></td></tr>
-  </table>${cdSalidasBancariasHTML(h.fecha,enPantalla?acciones:null,h.egresos)}${cdSalidasFondosJMHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
+  </table>${cdSalidasBancariasHTML(h.fecha,enPantalla?acciones:null,h.egresos)}${cdPagosDirectosDuenoHTML(h.fecha)}${cdSalidasFondosJMHTML(h.fecha)}${cdSalidasTercerosHTML(h.fecha)}`;
 }
 // Solo informativo (NO afecta los saldos de la caja): salidas de las cuentas bancarias de
 // Gerencia de ese día — compras de vehículos pagadas por transferencia y salidas registradas a
@@ -20039,6 +20077,17 @@ function cdSalidasFondosJMHTML(fecha){
     <tbody>${movs.map(f=>`<tr><td style="${td}">${f.detalle||'—'}${etiqueta(f)?` <span style="font-size:9px;color:#7048E8">(${etiqueta(f)})</span>`:''}</td><td style="${td};text-align:center">${f.placa||'—'}</td><td style="${td};text-align:right">${fmtD(Number(f.monto))}</td></tr>`).join('')}</tbody>
     <tfoot><tr style="background:#F3F0FF;font-weight:800"><td style="${td}" colspan="2">TOTAL PAGADO POR DON JULIO (FONDOS JM)</td><td style="${td};text-align:right">${fmtD(movs.reduce((s,f)=>s+Number(f.monto||0),0))}</td></tr></tfoot>
   </table>`;
+}
+// Ventas de consignación donde el comprador le pagó DIRECTO al dueño del carro: se muestran solo
+// como información — ese dinero no entró a Caja, Fondos JM ni Bancos de NICAUTO.
+function cdPagosDirectosDuenoHTML(fecha){
+  const l=(ventas||[]).filter(v=>v&&v.estado==='Completada'&&v.fecha===fecha&&Number(v.pagoDirectoDueno)>0);
+  if(!l.length)return'';
+  const td='padding:4px 6px;border:1px solid #DEE2E6';
+  return`<div style="margin-top:14px;font-weight:800;font-size:13px;color:#E8590C">PAGOS DIRECTOS AL DUEÑO (consignación) <span style="font-weight:400;font-size:10px;color:#868E96">(solo informativo — NO ingresaron a Caja, Fondos JM ni Bancos)</span></div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px"><thead><tr><th style="${td};background:#E8590C;color:#fff;text-align:left">Vehículo / comprador</th><th style="${td};background:#E8590C;color:#fff">Recibo</th><th style="${td};background:#E8590C;color:#fff;text-align:right">Monto</th></tr></thead>
+  <tbody>${l.map(v=>{const vh=buscarVehiculoOConsig(v.vehiculoId);return`<tr><td style="${td}">${vh?[vh.marca,vh.modelo,vh.anio].filter(Boolean).join(' ')+(vh.placa?' ('+vh.placa+')':''):'—'} — ${v.nombreFactura||''}</td><td style="${td};text-align:center">${v.recibo||'—'}</td><td style="${td};text-align:right">${fmtD(v.pagoDirectoDueno)}</td></tr>`;}).join('')}</tbody>
+  <tfoot><tr style="font-weight:800;background:#FFF4E6"><td style="${td}" colspan="2">TOTAL PAGADO DIRECTO A DUEÑOS</td><td style="${td};text-align:right">${fmtD(l.reduce((s,v)=>s+Number(v.pagoDirectoDueno||0),0))}</td></tr></tfoot></table>`;
 }
 function cdSalidasBancariasHTML(fecha,acc,egresosCaja){
   let movs=[];
