@@ -19784,6 +19784,13 @@ function cdLineasAuto(fecha){
       (Array.isArray(v.depositos)?v.depositos:[]).forEach((d,i)=>{if(Number(d.monto||0)>0)lineas.push({...base,key:'V_'+v.id+'_dep'+i,recibo:d.ref||v.recibo||'',
         forma:'Depósito '+(d.banco||''),col:CD_BANCO_DEP_COL[d.banco]||'sinbanco',banco:d.banco||'',monto:Number(d.monto),montoNIO:Number(d.montoNIO||0)||undefined,tipoLinea:'Venta'});});
       if(canje>0)lineas.push({...base,key:'V_'+v.id+'_canje',forma:'Canje'+(v.canjeDesc?': '+v.canjeDesc:''),col:'canje',monto:canje,tipoLinea:'Venta'});
+      // Venta sin ningún cobro en caja/bancos (ej. consignación pagada directo al dueño, o anticipo
+      // ya cobrado antes): igual se lista con su recibo en $0, para que no falte ningún número.
+      if(!lineas.some(l=>l.ventaId===v.id)){
+        const dir=Number(v.pagoDirectoDueno||0),ant=Number(v.anticipo||0);
+        lineas.push({...base,key:'V_'+v.id+'_cero',col:'cajafuerte',monto:0,tipoLinea:'Venta',
+          forma:dir>0?'Pagado directo al dueño ('+fmtD(dir)+') — no ingresó a NICAUTO':ant>0?'Cubierta con anticipo ('+fmtD(ant)+(v.reciboAnticipo?', recibo '+v.reciboAnticipo:'')+')':'Sin cobro registrado'});
+      }
     } else if((v.estado==='Pendiente'||(v.estado==='Anulada'&&(v.devolucionReserva||v.anticipoRetenido)))&&Number(v.anticipo||0)>0){
       const pago=v.pago||'Efectivo';
       const colR=v.bancoIngresoCol||(pago==='Efectivo'?'cajafuerte':pago==='CxC Tercero'?'cxc':(CD_BANCO_COL[v.banco]||'sinbanco'));
