@@ -1210,6 +1210,27 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
         <input id="resr-tercero" placeholder="Nombre de la persona o negocio">
       </div>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;margin:-.2rem 0 .5rem;cursor:pointer">
+      <input type="checkbox" id="resr-mixto" onchange="resrMixtoVer()" style="width:auto"> 💳 Pago dividido (efectivo + depósitos, hasta 3 partes)
+    </label>
+    <div id="resr-mixto-wrap" style="display:none;background:var(--amber-light);border-radius:8px;padding:.5rem .6rem;margin-bottom:.6rem">
+      <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
+        <select id="resr-mx-col-0" style="flex:1;min-width:170px"></select>
+        <input id="resr-mx-monto-0" class="calc-input" type="text" inputmode="decimal" placeholder="Monto US$" oninput="resrMixtoSumar()" style="width:110px">
+        <input id="resr-mx-ref-0" placeholder="Ref. / No. depósito" style="width:140px">
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
+        <select id="resr-mx-col-1" style="flex:1;min-width:170px"></select>
+        <input id="resr-mx-monto-1" class="calc-input" type="text" inputmode="decimal" placeholder="Monto US$" oninput="resrMixtoSumar()" style="width:110px">
+        <input id="resr-mx-ref-1" placeholder="Ref. / No. depósito" style="width:140px">
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:5px;flex-wrap:wrap">
+        <select id="resr-mx-col-2" style="flex:1;min-width:170px"></select>
+        <input id="resr-mx-monto-2" class="calc-input" type="text" inputmode="decimal" placeholder="Monto US$" oninput="resrMixtoSumar()" style="width:110px">
+        <input id="resr-mx-ref-2" placeholder="Ref. / No. depósito" style="width:140px">
+      </div>
+      <div style="font-size:12px;font-weight:700" id="resr-mx-total">Total: $0.00</div>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>La venta será</label>
         <select id="resr-condicion" onchange="document.getElementById('resr-banco-wrap').style.display=this.value==='Crédito'?'block':'none'"><option>Contado</option><option>Crédito</option></select>
@@ -8994,6 +9015,7 @@ function abrirReservaRapida(vid,esConsig){
   document.getElementById('resr-anticipo').value='';
   document.getElementById('resr-pago').value='Efectivo';
   document.getElementById('resr-tercero').value='';
+  {const mx=document.getElementById('resr-mixto');if(mx)mx.checked=false;[0,1,2].forEach(i=>{['col','monto','ref'].forEach(k=>{const e=document.getElementById('resr-mx-'+k+'-'+i);if(e)e.value='';});});resrMixtoVer();}
   resrPagoCambio();
   document.getElementById('resr-recibo').value=previsualizarNumeroRecibo('venta');
   document.getElementById('resr-condicion').value='Contado';
@@ -9015,6 +9037,34 @@ const RESR_BANCOS_ING=[{k:'bac',t:'BAC (D. Julio)'},{k:'bacgisselle',t:'BAC Giss
 function resrLlenarDestinos(){
   const sel=document.getElementById('resr-bancoing');if(!sel||sel.options.length)return;
   sel.innerHTML='<option value="cajafuerte">💵 Caja fuerte (efectivo)</option><option value="cashjulio">💵 Efectivo — Fondo JM (lo recibió Don Julio)</option><optgroup label="🏦 Bancos">'+RESR_BANCOS_ING.map(b=>`<option value="${b.k}">${b.t}</option>`).join('')+'</optgroup><option value="cxc">📄 CxC Tercero (lo tiene otra persona)</option>';
+}
+// Pago dividido de la reserva: cada parte cae en su columna del Cash in Hand (y de ahí a Bancos)
+function resrMixtoVer(){
+  const on=document.getElementById('resr-mixto')?.checked;
+  document.getElementById('resr-mixto-wrap').style.display=on?'':'none';
+  document.getElementById('resr-destino-wrap').style.display=on?'none':'';
+  const pg=document.getElementById('resr-pago');if(pg)pg.disabled=!!on;
+  const an=document.getElementById('resr-anticipo');if(an)an.readOnly=!!on;
+  if(on){
+    const opts='<option value="">— forma / destino —</option><option value="cajafuerte">💵 Efectivo — Caja fuerte</option><option value="cashjulio">💵 Efectivo — Fondo JM</option><optgroup label="🏦 Depósito / transferencia a">'+RESR_BANCOS_ING.map(b=>`<option value="${b.k}">${b.t}</option>`).join('')+'</optgroup>';
+    [0,1,2].forEach(i=>{const sel=document.getElementById('resr-mx-col-'+i);if(sel&&!sel.options.length)sel.innerHTML=opts;});
+    resrMixtoSumar();
+  }
+}
+function resrMixtoPartes(){
+  const res=[];
+  [0,1,2].forEach(i=>{
+    const col=document.getElementById('resr-mx-col-'+i)?.value||'';
+    const monto=parseFloat(String(document.getElementById('resr-mx-monto-'+i)?.value||'').replace(/,/g,''))||0;
+    const ref=(document.getElementById('resr-mx-ref-'+i)?.value||'').trim();
+    if(col||monto)res.push({col,monto,ref});
+  });
+  return res;
+}
+function resrMixtoSumar(){
+  const tot=resrMixtoPartes().reduce((s,p)=>s+p.monto,0);
+  const t=document.getElementById('resr-mx-total');if(t)t.textContent='Total de la reserva: '+fmtD(tot);
+  const an=document.getElementById('resr-anticipo');if(an&&document.getElementById('resr-mixto')?.checked)an.value=tot?tot.toFixed(2):'';
 }
 function resrDestinoCambio(){
   resrLlenarDestinos();
@@ -9045,9 +9095,16 @@ async function guardarReservaRapida(){
   if(!recibo){alert('El número de recibo es obligatorio (escribí el número del talonario).');return;}
   const condicion=document.getElementById('resr-condicion').value;
   const banco=condicion==='Crédito'?document.getElementById('resr-banco').value:'';
-  const montoAnticipo=parseFloat(document.getElementById('resr-anticipo').value||0);
-  const destResr=document.getElementById('resr-bancoing').value||'cajafuerte';
-  let pagoResr=document.getElementById('resr-pago').value;
+  const esMixto=!!document.getElementById('resr-mixto')?.checked;
+  const partesMx=esMixto?resrMixtoPartes():[];
+  if(esMixto){
+    if(partesMx.length<2){alert('Para pago dividido poné al menos 2 partes (por ejemplo efectivo + depósito).');return;}
+    if(partesMx.some(p=>!p.col)){alert('Elegí la forma / destino de cada parte del pago.');return;}
+    if(partesMx.some(p=>!(p.monto>0))){alert('Cada parte del pago debe tener un monto mayor a 0.');return;}
+  }
+  const montoAnticipo=esMixto?partesMx.reduce((s,p)=>s+p.monto,0):parseFloat(document.getElementById('resr-anticipo').value||0);
+  const destResr=esMixto?partesMx[0].col:(document.getElementById('resr-bancoing').value||'cajafuerte');
+  let pagoResr=esMixto?'Mixto':document.getElementById('resr-pago').value;
   if(destResr==='cxc')pagoResr='CxC Tercero';
   const bancoIngresoCol=destResr;
   const terceroResr=destResr==='cxc'?(document.getElementById('resr-tercero').value||'').trim():'';
@@ -9059,6 +9116,7 @@ async function guardarReservaRapida(){
     precio:parseFloat(precio),anticipo:montoAnticipo,
     pago:pagoResr,estado:'Pendiente',recibo,condicion,banco,
     bancoIngresoCol,terceroReserva:terceroResr,
+    ...(esMixto?{partesAnticipo:partesMx.map(p=>({col:p.col,monto:p.monto,ref:p.ref,forma:(p.col==='cajafuerte'||p.col==='cashjulio')?'Efectivo':'Depósito'}))}:{}),
     registradoPor:getNombreUsuario()
   };
   ventas.push(nueva);
@@ -9075,7 +9133,7 @@ async function guardarReservaRapida(){
     await saveOne('contable',{id:'main',...contData});
   }
   // Registrar esta reserva/anticipo en la lista del vehículo (hasta 3 — req: reservas como anticipo de pago)
-  const nuevaReserva={vendedor:vendedorNombre,cliente,celular:document.getElementById('resr-cel').value,monto:montoAnticipo,fecha:nueva.fecha,ventaId:nueva.id,recibo,precioVenta:parseFloat(precio),condicion,banco,pago:pagoResr,bancoIngresoCol,terceroReserva:terceroResr};
+  const nuevaReserva={vendedor:vendedorNombre,cliente,celular:document.getElementById('resr-cel').value,monto:montoAnticipo,fecha:nueva.fecha,ventaId:nueva.id,recibo,precioVenta:parseFloat(precio),condicion,banco,pago:pagoResr,bancoIngresoCol,terceroReserva:terceroResr,...(esMixto?{pago:'Mixto',partesAnticipo:nueva.partesAnticipo}:{})};
   if(vid.startsWith('CONSIG_')){
     const cid=vid.replace('CONSIG_','');
     const c=(contData.consignacion||[]).find(x=>x.id===cid);
@@ -19354,10 +19412,14 @@ function actualizarTipoRecibo(){
     ${tipo==='reserva'?`<div><b>Monto de reserva:</b> ${fmtD(v.anticipo||0)}</div>`:''}
     ${tipo==='venta'&&Number(v.anticipo)>0?`<div><b>Anticipo aplicado:</b> ${fmtD(v.anticipo)}</div>`:''}
     ${tipo==='venta'&&Number(v.cash)>0?`<div><b>Efectivo recibido:</b> ${fmtD(v.cash)}</div>`:''}
-    <div><b>Forma de pago:</b> ${formaPago}${formaPago==='Depósito bancario'?' — '+banco:''}</div>
+    <div><b>Forma de pago:</b> ${textoPartesAnticipo(v)?'Mixto — '+textoPartesAnticipo(v):formaPago+(formaPago==='Depósito bancario'?' — '+banco:'')}</div>
     <div><b>No. Recibo:</b> ${num}</div>`;
 }
 
+function textoPartesAnticipo(v){
+  if(!Array.isArray(v.partesAnticipo)||!v.partesAnticipo.length)return'';
+  return v.partesAnticipo.map(p=>`${p.forma||''} ${((CD_COLS.find(c=>c.k===p.col)||{}).t||p.col)}: ${fmtD(p.monto)}${p.ref?' (ref. '+p.ref+')':''}`).join(' · ');
+}
 function imprimirReciboVenta(){
   const v=ventas.find(x=>x.id===reciboVentaId);
   if(!v)return;
@@ -19369,9 +19431,11 @@ function imprimirReciboVenta(){
   const formaPago=document.getElementById('rv-formapago').value;
   const banco=document.getElementById('rv-banco').value;
   // Persistir la forma de pago/banco de depósito seleccionado en el recibo (req #6)
-  v.pago=formaPago;
-  v.bancoDeposito=formaPago==='Depósito bancario'?banco:'';
-  saveOne('ventas',v);
+  if(!(Array.isArray(v.partesAnticipo)&&v.partesAnticipo.length)){ // en pago dividido se respeta el desglose
+    v.pago=formaPago;
+    v.bancoDeposito=formaPago==='Depósito bancario'?banco:'';
+    saveOne('ventas',v);
+  }
   const concepto=tipo==='reserva'?'RECIBO DE RESERVA':'RECIBO DE VENTA';
   const html=`
   <div style="border:2px solid #1971C2;padding:1.5rem;font-family:Arial,sans-serif;max-width:580px;margin:0 auto">
@@ -19421,7 +19485,7 @@ function imprimirReciboVenta(){
         <td style="padding:9px 10px;text-align:right;font-weight:800">${fmtD(Number(v.cash||0)+Number(v.bancario||0))}</td>
       </tr>`}
     </table>
-    <div style="font-size:12px;color:#555;margin-bottom:2rem"><b>Forma de pago:</b> ${formaPago}${formaPago==='Depósito bancario'?' — Banco '+banco:''}</div>
+    <div style="font-size:12px;color:#555;margin-bottom:2rem"><b>Forma de pago:</b> ${textoPartesAnticipo(v)?'Mixto — '+textoPartesAnticipo(v):formaPago+(formaPago==='Depósito bancario'?' — Banco '+banco:'')}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;padding-top:1rem;border-top:1px solid #ccc">
       <div style="text-align:center">
         <div style="height:50px"></div>
@@ -19688,6 +19752,13 @@ function cdLineasAuto(fecha){
       const bancoTxt=v.bancoIngresoCol&&v.bancoIngresoCol!=='cajafuerte'&&v.bancoIngresoCol!=='cxc'?' '+((CD_COLS.find(c=>c.k===v.bancoIngresoCol)||{}).t||''):'';
       const dvR=v.devolucionReserva;
       const notaDev=dvR?` · ↩️ Devuelto ${dvR.fecha}${dvR.externa?' por '+dvR.externa.quien:''}`:'';
+      if(Array.isArray(v.partesAnticipo)&&v.partesAnticipo.length){
+        // Reserva con pago dividido: una línea por cada parte, en su columna (efectivo / cada banco)
+        v.partesAnticipo.forEach((pt,i)=>{
+          const nomCol=(CD_COLS.find(c=>c.k===pt.col)||{}).t||pt.col;
+          lineas.push({...base,key:'R_'+v.id+'_'+i,forma:'Reserva — '+(pt.forma||'')+' '+nomCol+(pt.ref?' (ref. '+pt.ref+')':'')+notaDev,tipoLinea:'Reserva',col:pt.col,monto:Number(pt.monto||0)});
+        });
+      } else
       lineas.push({...base,key:'R_'+v.id,forma:'Reserva — '+pago+(pago==='CxC Tercero'&&v.terceroReserva?' ('+v.terceroReserva+')':bancoTxt)+notaDev,tipoLinea:'Reserva',
         col:colR,monto:Number(v.anticipo)});
     }
