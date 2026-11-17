@@ -26123,7 +26123,8 @@ function renderRendicionCuentas(){
   <div class="stats-grid" style="margin-bottom:1rem">
     <div class="stat-card"><div class="stat-label">Saldo Inicial</div><div class="stat-value stat-blue">C$ ${fmtNio(saldoInicial)}</div></div>
     <div class="stat-card"><div class="stat-label">+ Fondo Recibido</div><div class="stat-value stat-green">C$ ${fmtNio(fondoRecibido)}</div></div>
-    <div class="stat-card"><div class="stat-label">− Total Gastos (efectivo)</div><div class="stat-value" style="color:var(--red)">C$ ${fmtNio(totalGastos)}</div></div>
+    <div class="stat-card"><div class="stat-label">− Total Gastos pagados</div><div class="stat-value" style="color:var(--red)">C$ ${fmtNio(totalGastos-totInv)}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">Admón, JM, Operativos y demás</div></div>
+    <div class="stat-card"><div class="stat-label">− Total Inversión pagada</div><div class="stat-value" style="color:#7048E8">C$ ${fmtNio(totInv)}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">Repuestos y reparaciones de vehículos</div></div>
     <div class="stat-card" style="border:2px solid var(--green)"><div class="stat-label">= SALDO FINAL</div><div class="stat-value" style="color:${saldoFinal>=0?'var(--green)':'var(--red)'}">C$ ${fmtNio(saldoFinal)}</div></div>
   </div>
   <div class="stats-grid" style="margin-bottom:1rem">
@@ -26134,11 +26135,11 @@ function renderRendicionCuentas(){
     <div style="font-size:12px;color:var(--text2)">Admón: <b>C$ ${fmtNio(totAdmon)}</b> | JM: <b>C$ ${fmtNio(totJM)}</b> | Operativos: <b>C$ ${fmtNio(totOp)}</b> | Inversión: <b>C$ ${fmtNio(totInv)}</b></div>
     ${puede?`<div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="exportExcelRendicion()"><i class="ti ti-download"></i>Excel</button>
-      <button class="btn" style="color:var(--purple);border-color:var(--purple)" onclick="imprimirRendicion()"><i class="ti ti-printer"></i>Imprimir</button>
+      <button class="btn" style="color:var(--purple);border-color:var(--purple)" onclick="imprimirRendicion()"><i class="ti ti-printer"></i>Imprimir rendición abierta</button>
       <button class="btn" style="color:var(--green);border-color:var(--green);font-weight:700" onclick="cerrarRendicion()"><i class="ti ti-circle-check"></i>Cerrar y crear ${fmtRDC(numActual+1)}</button>
       <button class="btn btn-primary" onclick="abrirModalRendicion()"><i class="ti ti-plus"></i>Nuevo gasto</button>
       ${MODO==='admin'?`<button class="btn" style="color:var(--amber);border-color:var(--amber)" onclick="reabrirRendicionParaReconstruir()" title="Reabrir una rendición anterior para reconstruirla a mano"><i class="ti ti-history"></i>Reconstruir rendición anterior</button>`:''}
-    </div>`:`<button class="btn" onclick="imprimirRendicion()"><i class="ti ti-printer"></i>Imprimir</button>`}
+    </div>`:`<button class="btn" onclick="imprimirRendicion()"><i class="ti ti-printer"></i>Imprimir rendición abierta</button>`}
   </div>
   <div class="toolbar" style="margin-bottom:1rem">
     <div class="search-wrap"><i class="ti ti-search"></i><input type="text" id="rendicion-q" placeholder="Buscar en TODAS las rendiciones (activa y cerradas)…" value="${(document.getElementById('rendicion-q')?.value)||''}" oninput="renderRendicionCuentasDebounced()"></div>
@@ -27754,7 +27755,8 @@ function generarHTMLRendicion(numero,saldoInicial,fondoRecibido,totalGastos,sald
     <table style="width:100%;border-collapse:collapse;margin-bottom:1rem;font-size:12px">
       <tr style="background:#f5f5f5"><td style="padding:6px 10px;font-weight:700">Saldo Anterior Inicial</td><td style="padding:6px 10px;text-align:right">C$ ${fmtNio(saldoInicial)}</td></tr>
       <tr><td style="padding:6px 10px;font-weight:700">(+) Fondo Recibido</td><td style="padding:6px 10px;text-align:right;color:#2F9E44">C$ ${fmtNio(fondoRecibido)}</td></tr>
-      <tr><td style="padding:6px 10px;font-weight:700">(−) Total Gastos Pagados</td><td style="padding:6px 10px;text-align:right;color:#C92A2A">C$ ${fmtNio(totalGastos)}</td></tr>
+      ${(()=>{const inv=(movs||[]).filter(m=>m.clasif==='Inversión').reduce((s,m)=>s+Number(m.monto||0),0);return`<tr><td style="padding:6px 10px;font-weight:700">(−) Total Gastos Pagados</td><td style="padding:6px 10px;text-align:right;color:#C92A2A">C$ ${fmtNio(totalGastos-inv)}</td></tr>
+      <tr><td style="padding:6px 10px;font-weight:700">(−) Total Inversión Pagada</td><td style="padding:6px 10px;text-align:right;color:#7048E8">C$ ${fmtNio(inv)}</td></tr>`;})()}
       <tr style="background:#1971C2;color:#fff"><td style="padding:9px 10px;font-weight:800">SALDO FINAL</td><td style="padding:9px 10px;text-align:right;font-weight:900;font-size:15px">C$ ${fmtNio(saldoFinal)}</td></tr>
     </table>
     <div style="font-size:12px;font-weight:700;margin-bottom:.4rem">📥 Detalle de fondos recibidos en esta rendición</div>
@@ -27807,7 +27809,7 @@ function imprimirRendicion(){
   const saldoInicial=Number(cfg.saldoInicial||0);
   const fondoRecibido=sumaFondosRecibidos(cfg);
   const saldoFinal=Math.round((saldoInicial+fondoRecibido-totalGastos)*100)/100;
-  const html=generarHTMLRendicion(cfg.numeroActual||1,saldoInicial,fondoRecibido,totalGastos,saldoFinal,movsEfectivo,new Date().toLocaleDateString('es-NI'),cfg.fondosRecibidos||[],movsTC,totalTC);
+  const html=generarHTMLRendicion(cfg.numeroActual||1,saldoInicial,fondoRecibido,totalGastos,saldoFinal,movsEfectivo,new Date().toLocaleDateString('es-NI')+' — <b style="color:#E67700">EN CURSO (abierta, sin cerrar)</b>',cfg.fondosRecibidos||[],movsTC,totalTC);
   abrirVentanaImpresion(html,'NICAUTO - Rendición de Cuentas');
 }
 function abrirVentanaImpresion(html,titulo){
