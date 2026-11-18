@@ -20677,6 +20677,11 @@ function verReservadoLP(vid,origen){
               </select>
             </div>
           </div>
+          <div class="form-group" style="margin:0 0 6px"><label style="font-size:10px;font-weight:700;color:var(--green)">💰 ¿A dónde entró el dinero de esta reserva?</label>
+            <select id="rese-ingreso-${i}" style="padding:6px;font-size:12px">
+              ${[['cajafuerte','💵 Efectivo — Caja fuerte'],['cashjulio','💵 Efectivo — Fondo JM'],...RESR_BANCOS_ING.map(b=>[b.k,'🏦 Depósito / transferencia — '+b.t]),['cxc','👤 Lo tiene un tercero (CxC)']].map(([k,t])=>`<option value="${k}" ${(r.bancoIngresoCol||'cajafuerte')===k?'selected':''}>${t}</option>`).join('')}
+            </select>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">Con esto el anticipo cae en la columna correcta del Cash in Hand y de Bancos.</div></div>
           <div style="border-top:1px dashed #FFDEAB;margin:8px 0;padding-top:8px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
               <label style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase">Adelantos (máx. 3)</label>
@@ -20750,6 +20755,14 @@ async function guardarEdicionReserva(vid,i,origen){
   r.condicion=document.getElementById(`rese-condicion-${i}`).value;
   r.banco=r.condicion==='Crédito'?document.getElementById(`rese-banco-${i}`).value:'';
   r.fecha=document.getElementById(`rese-fecha-${i}`).value;
+  const ingSel=document.getElementById(`rese-ingreso-${i}`);
+  if(ingSel){
+    r.bancoIngresoCol=ingSel.value;
+    r.pago=ingSel.value==='cajafuerte'||ingSel.value==='cashjulio'?'Efectivo':ingSel.value==='cxc'?'CxC Tercero':'Transferencia';
+    // La venta pendiente ligada a la reserva es la que alimenta el Cash in Hand y Bancos
+    const vtaR=r.ventaId&&ventas.find(x=>x.id===r.ventaId);
+    if(vtaR&&vtaR.bancoIngresoCol!==r.bancoIngresoCol){vtaR.bancoIngresoCol=r.bancoIngresoCol;vtaR.pago=r.pago;await saveOne('ventas',vtaR);}
+  }
   const recibos=[...document.querySelectorAll(`.rese-adel-recibo-${i}`)];
   const montos=[...document.querySelectorAll(`.rese-adel-monto-${i}`)];
   const fechas=[...document.querySelectorAll(`.rese-adel-fecha-${i}`)];
@@ -26070,7 +26083,7 @@ function renderRendicionCuentas(){
   const totAdmon=movsEfectivo.filter(m=>m.clasif==='Admón').reduce((s,m)=>s+Number(m.monto||0),0);
   const totJM=movsEfectivo.filter(m=>m.clasif==='Gastos JM').reduce((s,m)=>s+Number(m.monto||0),0);
   const totOp=movsEfectivo.filter(m=>m.clasif==='Gastos Operativos').reduce((s,m)=>s+Number(m.monto||0),0);
-  const totInv=movsEfectivo.filter(m=>m.clasif==='Inversión').reduce((s,m)=>s+Number(m.monto||0),0);
+  const totInv=movsEfectivo.filter(esMovInversionRend).reduce((s,m)=>s+Number(m.monto||0),0);
 
   const desglosePend=(MODO==='admin'||MODO==='coordinador')?desgloseRendicionesPendientes():[];
   document.getElementById('ops-rendicion').innerHTML=`
@@ -27736,6 +27749,13 @@ function exportExcelRendicion(){
   downloadCSV(toCSV(rows),'rendicion_cuentas_nicauto');
 }
 
+// Manda la casilla principal del movimiento: "Gasto" o "Inversión (reparación a vehículo)"
+// (campo esInversion). Solo en movimientos viejos que no tienen esa casilla se usa la cuenta/clasificación.
+function esMovInversionRend(m){
+  if(!m)return false;
+  if(typeof m.esInversion==='boolean')return m.esInversion;
+  return m.clasif==='Inversión'||/^1201\b/.test(String(m.cuenta||''));
+}
 function generarHTMLRendicion(numero,saldoInicial,fondoRecibido,totalGastos,saldoFinal,movs,fechaCierre,fondosRecibidos,movsTC,totalTC){
   const filasFondos=(fondosRecibidos||[]).length?`
     <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:1rem">
@@ -27755,7 +27775,7 @@ function generarHTMLRendicion(numero,saldoInicial,fondoRecibido,totalGastos,sald
     <table style="width:100%;border-collapse:collapse;margin-bottom:1rem;font-size:12px">
       <tr style="background:#f5f5f5"><td style="padding:6px 10px;font-weight:700">Saldo Anterior Inicial</td><td style="padding:6px 10px;text-align:right">C$ ${fmtNio(saldoInicial)}</td></tr>
       <tr><td style="padding:6px 10px;font-weight:700">(+) Fondo Recibido</td><td style="padding:6px 10px;text-align:right;color:#2F9E44">C$ ${fmtNio(fondoRecibido)}</td></tr>
-      ${(()=>{const inv=(movs||[]).filter(m=>m.clasif==='Inversión').reduce((s,m)=>s+Number(m.monto||0),0);return`<tr><td style="padding:6px 10px;font-weight:700">(−) Total Gastos Pagados</td><td style="padding:6px 10px;text-align:right;color:#C92A2A">C$ ${fmtNio(totalGastos-inv)}</td></tr>
+      ${(()=>{const inv=(movs||[]).filter(esMovInversionRend).reduce((s,m)=>s+Number(m.monto||0),0);return`<tr><td style="padding:6px 10px;font-weight:700">(−) Total Gastos Pagados</td><td style="padding:6px 10px;text-align:right;color:#C92A2A">C$ ${fmtNio(totalGastos-inv)}</td></tr>
       <tr><td style="padding:6px 10px;font-weight:700">(−) Total Inversión Pagada</td><td style="padding:6px 10px;text-align:right;color:#7048E8">C$ ${fmtNio(inv)}</td></tr>`;})()}
       <tr style="background:#1971C2;color:#fff"><td style="padding:9px 10px;font-weight:800">SALDO FINAL</td><td style="padding:9px 10px;text-align:right;font-weight:900;font-size:15px">C$ ${fmtNio(saldoFinal)}</td></tr>
     </table>
