@@ -8189,7 +8189,7 @@ function renderReservadosBoxLP(){
           return`<tr style="cursor:pointer" onclick="verReservadoLP('${v.id}','${v._origen}')">
             <td><b>${v.marca} ${v.modelo}</b> <span style="color:var(--text3);font-size:10px">${v.anio}</span>${v._origen==='consig'?' <span class="badge badge-purple" style="font-size:9px">Consig.</span>':''}</td>
             <td>${badge(v.estado,'')}</td>
-            <td style="color:var(--green);font-weight:600">${(v.precio||v.precioA)?fmtD(v.precio||v.precioA):'—'}</td>
+            <td style="color:var(--green);font-weight:600">${(()=>{const pactado=Number((reservas.find(r=>Number(r.precioVenta)>0)||{}).precioVenta||0);const mc=pactado||Number(v.precio||v.precioA||0);return mc?fmtD(mc):'—';})()}</td>
             <td style="color:var(--amber);font-weight:600">${montoReservado>0?fmtD(montoReservado):'—'}</td>
             <td>${vendedorTxt}</td>
           </tr>`;
