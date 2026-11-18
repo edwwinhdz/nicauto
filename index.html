@@ -8113,7 +8113,9 @@ function datosReservadosLP(){
       return s+adelantos.reduce((s2,a)=>s2+Number(a.monto||0),0);
     },0);
     const cliente=principal?.cliente||principal?.nombreCliente||v.clientereserva||'';
-    return{v,vendedorTxt,montoReservado,montoCierre:Number(v.precio||v.precioA||0),cliente};
+    // Monto de cierre = el precio pactado en la reserva; si la reserva no lo tiene, el precio de lista
+    const pactado=Number((reservas.find(r=>Number(r.precioVenta)>0)||{}).precioVenta||0);
+    return{v,vendedorTxt,montoReservado,montoCierre:pactado||Number(v.precio||v.precioA||0),cliente};
   });
 }
 function imprimirReservadosLP(){
