@@ -584,7 +584,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
     <select id="inv-ftipo" onchange="renderInv()"><option value="">Todos los tipos</option><option>Sedán</option><option>SUV</option><option>Pickup</option><option>Van</option><option>Hatchback</option><option>Otro</option></select>
     <select id="inv-fcolor" onchange="renderInv()"><option value="">Todos los colores</option></select>
     <select id="inv-fdias" onchange="renderInv()" title="Antigüedad (días en lote desde la compra)" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--amber);border-radius:var(--radius);background:var(--surface);font-weight:600">
-      <option value="">Antigüedad: todas</option><option value="0-30">0 – 30 días</option><option value="31-60">31 – 60 días</option><option value="61-90">61 – 90 días</option><option value="91-120">91 – 120 días</option><option value="121-99999">Más de 120 días</option></select>
+      <option value="">Antigüedad: todas</option><option value="0-30">0 – 30 días</option><option value="31-60">31 – 60 días</option><option value="61-90">61 – 90 días</option><option value="91-120">91 – 120 días</option><option value="121-180">121 – 180 días</option><option value="181-99999">Más de 180 días</option><option value="121-99999">Más de 120 días</option></select>
     <div style="display:flex;align-items:center;gap:4px">
       <input type="text" id="inv-fmontomin" inputmode="decimal" placeholder="Precio desde" style="width:110px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:12px" oninput="renderInv()">
       <span style="color:var(--text3);font-size:12px">—</span>
@@ -629,6 +629,8 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
   </div>
   <div id="inv-resumen-estados" style="margin-top:1rem"></div>
   <div id="inv-resumen-categorias" style="margin-top:1rem"></div>
+  <div id="inv-resumen-antig" style="margin-top:1rem"></div>
+  <div id="inv-resumen-marcas" style="margin-top:1rem"></div>
   <div id="inv-control-dia"></div>
   <div id="inv-resumen-tabla-word" style="margin-top:1rem"></div>
   <!-- tabla oculta de respaldo para que tbl-inv-vendidos-table siga existiendo sin romper referencias internas -->
@@ -7062,7 +7064,65 @@ function renderInvTotals(data){
       </div>
     </div>`:'';
   }
+  try{renderResumenAntigMarcasInv(data);}catch(e){console.warn('resumen antig/marcas',e);}
   renderControlInventarioDia();
+}
+// Cuadritos "Resumen por Antigüedad" y "Resumen por Marca" (abajo en Inventario), con el mismo
+// conjunto filtrado que se ve en la tabla. Clic en un cuadrito = filtra la tabla de arriba.
+function antigResumenConteos(data){
+  const porG={},porM={};
+  data.forEach(v=>{
+    const g=antigGrupoDe(v);(porG[g]=porG[g]||[]).push(v);
+    const m=String(v.marca||'Sin marca').trim()||'Sin marca';(porM[m]=porM[m]||[]).push(v);
+  });
+  const grupos=ANTIG_GRUPOS.filter(g=>porG[g.k]).map(g=>({...g,n:porG[g.k].length,precio:porG[g.k].reduce((s,v)=>s+Number(v.precio||0),0)}));
+  const marcas=Object.keys(porM).sort((a,b)=>porM[b].length-porM[a].length||a.localeCompare(b)).map(m=>({m,n:porM[m].length,precio:porM[m].reduce((s,v)=>s+Number(v.precio||0),0),modelos:(()=>{const c={};porM[m].forEach(v=>{const x=String(v.modelo||'').trim()||'—';c[x]=(c[x]||0)+1;});return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,n])=>n>1?`${k} (${n})`:k).join(', ');})()}));
+  return{grupos,marcas,total:data.length};
+}
+function cuadritoResumenHTML(titulo,num,color,sub,onclick){
+  return `<div ${onclick?`onclick="${onclick}"`:''} style="${onclick?'cursor:pointer;':''}background:var(--surface2,#f1f5f9);border-radius:var(--radius,8px);padding:.7rem 1.1rem;min-width:140px;max-width:220px;text-align:center;border-left:4px solid ${color}">
+    <div style="font-size:12px;color:var(--text2,#475569);text-transform:uppercase;letter-spacing:.03em">${titulo}</div>
+    <div style="font-size:24px;font-weight:800;color:${color}">${num}</div>
+    <div style="font-size:11px;color:var(--text3,#64748b)">${sub}</div>
+  </div>`;
+}
+function resumenAntigMarcasHTML(data,conClic){
+  const {grupos,marcas,total}=antigResumenConteos(data);
+  const totalBox=(t)=>`<div ${conClic?`onclick="${t}"`:''} style="${conClic?'cursor:pointer;':''}background:var(--surface,#fff);border:2px solid var(--text,#0f172a);border-radius:var(--radius,8px);padding:.7rem 1.1rem;min-width:140px;text-align:center">
+      <div style="font-size:12px;color:var(--text2,#475569);text-transform:uppercase;letter-spacing:.03em">Total${conClic?' (ver todos)':''}</div>
+      <div style="font-size:24px;font-weight:800">${total}</div><div style="font-size:11px;color:var(--text3,#64748b)">carro${total===1?'':'s'}</div></div>`;
+  const pal=['#1d4ed8','#16a34a','#d97706','#7c3aed','#dc2626','#0891b2','#be185d','#4d7c0f','#475569'];
+  const antig=`<div class="card" style="break-inside:avoid-page">
+    <div class="card-head"><h3><i class="ti ti-hourglass"></i> Resumen por Antigüedad</h3>${conClic?`<button class="btn btn-sm" onclick="abrirHojaAntiguedad()"><i class="ti ti-file-report"></i>Hoja por antigüedad</button>`:''}</div>
+    ${conClic?`<p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> Días desde la fecha de compra. Clic en un cuadrito para ver solo esos carros en la tabla de arriba.</p>`:''}
+    <div style="padding:1rem;display:flex;flex-wrap:wrap;gap:10px">
+      ${grupos.map(g=>cuadritoResumenHTML(g.t,g.n,g.c,`carro${g.n===1?'':'s'}${g.precio?' · '+fmtD(g.precio):''}`,conClic&&g.k!=='sin'?`filtrarInvPorAntigClick('${g.k==='181+'?'181-99999':g.k}')`:'')).join('')}
+      ${totalBox("filtrarInvPorAntigClick('')")}
+    </div></div>`;
+  const marc=`<div class="card" style="break-inside:avoid-page;margin-top:1rem">
+    <div class="card-head"><h3><i class="ti ti-car"></i> Resumen por Marca</h3></div>
+    ${conClic?`<p style="font-size:11px;color:var(--text3);padding:0 1rem .25rem"><i class="ti ti-info-circle"></i> Clic en un cuadrito para ver solo esa marca en la tabla de arriba.</p>`:''}
+    <div style="padding:1rem;display:flex;flex-wrap:wrap;gap:10px">
+      ${marcas.map((m,i)=>cuadritoResumenHTML(m.m,m.n,pal[i%pal.length],`<span title="${m.modelos.replace(/"/g,'&quot;')}">${m.modelos}</span>`,conClic?`filtrarInvPorMarcaClick('${m.m.replace(/'/g,"\\'")}')`:'')).join('')}
+      ${totalBox("filtrarInvPorMarcaClick('')")}
+    </div></div>`;
+  return {antig,marc};
+}
+function renderResumenAntigMarcasInv(data){
+  const a=document.getElementById('inv-resumen-antig'),m=document.getElementById('inv-resumen-marcas');
+  if(!a&&!m)return;
+  if(!data.length){if(a)a.innerHTML='';if(m)m.innerHTML='';return;}
+  const h=resumenAntigMarcasHTML(data,true);
+  if(a)a.innerHTML=h.antig;
+  if(m)m.innerHTML=h.marc.replace('margin-top:1rem','');
+}
+function filtrarInvPorAntigClick(r){
+  const sel=document.getElementById('inv-fdias');
+  if(sel){sel.value=r;renderInv();document.getElementById('tbl-inv-table')?.scrollIntoView({behavior:'smooth',block:'start'});}
+}
+function filtrarInvPorMarcaClick(m){
+  const q=document.getElementById('inv-q');
+  if(q){q.value=m;renderInv();document.getElementById('tbl-inv-table')?.scrollIntoView({behavior:'smooth',block:'start'});}
 }
 function filtrarInvPorCategoriaClick(tipo){
   const sel=document.getElementById('inv-ftipo');
@@ -9766,7 +9826,8 @@ function antigTablaHTML(paraImprimir){
     </div>`;
   }).join('');
   const totalGeneral=(cols.includes('precioA')||cols.includes('costo'))?`<div style="text-align:right;font-weight:800;font-size:13px;padding:.3rem .5rem">TOTAL GENERAL (${lista.length} carros)${cols.includes('costo')?` · Costo: ${fmtD(sumC(lista))}`:''}${cols.includes('precioA')?` · Precio lista A: ${fmtD(sumP(lista))}`:''}</div>`:'';
-  return resumen+secciones+totalGeneral;
+  const rs=resumenAntigMarcasHTML(lista,false);
+  return resumen+secciones+totalGeneral+`<div style="margin-top:1rem">${rs.antig}${rs.marc}</div>`;
 }
 function renderHojaAntiguedad(){
   const el=document.getElementById('antig-res');if(!el)return;
