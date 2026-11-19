@@ -551,6 +551,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
     <h2 class="section-title">Inventario de vehículos</h2>
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="exportExcelInventario()"><i class="ti ti-download"></i>Excel</button>
+      <button class="btn" onclick="abrirHojaAntiguedad()" style="color:var(--amber);border-color:var(--amber)" title="Carros clasificados por antigüedad (días desde la compra)"><i class="ti ti-hourglass"></i>Hoja por antigüedad</button>
       <button class="btn" id="btn-corregir-rep-cordobas" onclick="abrirCorregirRepCordobas()" style="display:none;color:var(--red);border-color:var(--red)"><i class="ti ti-alert-triangle"></i>Corregir moneda de reparaciones</button>
       <button class="btn" id="btn-plan-gerencial" onclick="abrirModalPlanGerencial()" style="display:none;color:var(--purple);border-color:var(--purple)"><i class="ti ti-percentage"></i>Plan Gerencial</button>
       <button class="btn btn-primary" onclick="abrirModalVehiculo()"><i class="ti ti-plus"></i>Agregar vehículo</button>
@@ -9604,6 +9605,212 @@ function sortByTipo(arr){
   const pos=t=>{const i=TIPO_ORDER.indexOf(t);return i<0?99:i;};
   const mm=v=>((v.marca||'')+' '+(v.modelo||'')).trim().toLowerCase();
   return [...arr].sort((a,b)=>(pos(a.tipo)-pos(b.tipo))||String(a.tipo||'').localeCompare(String(b.tipo||''))||mm(a).localeCompare(mm(b)));
+}
+
+
+// ======================== HOJA POR ANTIGÜEDAD (Inventario) ========================
+// Clasifica los carros en inventario (no vendidos) por días desde la fecha de compra, en grupos,
+// con filtros de marca, modelo, precio, estado y elección de columnas. Imprime y exporta a Excel
+// exactamente lo que está en pantalla.
+const ANTIG_GRUPOS=[
+  {k:'0-30',t:'0 – 30 días',a:0,b:30,c:'#16a34a'},
+  {k:'31-60',t:'31 – 60 días',a:31,b:60,c:'#65a30d'},
+  {k:'61-90',t:'61 – 90 días',a:61,b:90,c:'#d97706'},
+  {k:'91-120',t:'91 – 120 días',a:91,b:120,c:'#ea580c'},
+  {k:'121-180',t:'121 – 180 días',a:121,b:180,c:'#dc2626'},
+  {k:'181+',t:'Más de 180 días',a:181,b:1e9,c:'#991b1b'},
+  {k:'sin',t:'Sin fecha de compra',a:null,b:null,c:'#64748b'}
+];
+const ANTIG_COLS=[
+  {k:'veh',t:'Marca / Modelo',on:true},
+  {k:'anio',t:'Año',on:true},
+  {k:'placa',t:'Placa',on:true},
+  {k:'color',t:'Color',on:true},
+  {k:'tipo',t:'Tipo',on:false},
+  {k:'estado',t:'Estado',on:true},
+  {k:'fcompra',t:'F. compra',on:true},
+  {k:'dias',t:'Días',on:true},
+  {k:'costo',t:'Costo total',on:false},
+  {k:'precioA',t:'Precio lista A',on:true},
+  {k:'precioB',t:'Precio lista B',on:false}
+];
+function antigCostoTotal(v){
+  const reps=(v.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0);
+  return Number(v.costo||0)+reps+Number(v.comisionEstimada||0);
+}
+function antigGrupoDe(v){
+  const d=diasDesde(v.fechacompra);
+  if(d===null||isNaN(d))return 'sin';
+  const g=ANTIG_GRUPOS.find(g=>g.a!==null&&d>=g.a&&d<=g.b);
+  return g?g.k:'0-30';
+}
+function antigBase(){return vehiculos.filter(v=>v.estado!=='Vendido');}
+function abrirHojaAntiguedad(){
+  document.getElementById('antig-ov')?.remove();
+  const base=antigBase();
+  const marcas=[...new Set(base.map(v=>String(v.marca||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const estados=[...new Set(base.map(v=>v.estado).filter(Boolean))].sort();
+  const sel='width:auto;max-width:200px;padding:7px 8px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:12px;background:var(--surface)';
+  const ov=document.createElement('div');
+  ov.id='antig-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:2vh 1vw;overflow:auto';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(1200px,100%);box-shadow:0 20px 50px rgba(0,0,0,.3);padding:1rem 1.2rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.7rem">
+      <h3 style="margin:0;font-size:17px"><i class="ti ti-hourglass" style="color:var(--amber)"></i> Inventario por antigüedad</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="imprimirHojaAntiguedad()"><i class="ti ti-printer"></i>Imprimir</button>
+        <button class="btn btn-sm" onclick="excelHojaAntiguedad()"><i class="ti ti-download"></i>Excel</button>
+        <button class="btn btn-sm" onclick="document.getElementById('antig-ov').remove()"><i class="ti ti-x"></i>Cerrar</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:.5rem">
+      <input type="text" id="antig-q" placeholder="Buscar placa, color…" oninput="renderHojaAntiguedad()" style="${sel};width:160px">
+      <select id="antig-marca" onchange="antigActualizarModelos();renderHojaAntiguedad()" style="${sel}"><option value="">Todas las marcas</option>${marcas.map(m=>`<option>${m}</option>`).join('')}</select>
+      <select id="antig-modelo" onchange="renderHojaAntiguedad()" style="${sel}"><option value="">Todos los modelos</option></select>
+      <select id="antig-estado" onchange="renderHojaAntiguedad()" style="${sel}"><option value="">Todos los estados</option>${estados.map(e=>`<option>${e}</option>`).join('')}</select>
+      <select id="antig-grupo" onchange="renderHojaAntiguedad()" style="${sel}"><option value="">Todas las antigüedades</option>${ANTIG_GRUPOS.map(g=>`<option value="${g.k}">${g.t}</option>`).join('')}</select>
+      <input type="text" inputmode="decimal" id="antig-pmin" placeholder="Precio desde" oninput="renderHojaAntiguedad()" style="${sel};width:105px">
+      <span style="color:var(--text3)">—</span>
+      <input type="text" inputmode="decimal" id="antig-pmax" placeholder="Precio hasta" oninput="renderHojaAntiguedad()" style="${sel};width:105px">
+      <select id="antig-orden" onchange="renderHojaAntiguedad()" style="${sel}">
+        <option value="dias-desc">Más antiguo primero</option><option value="dias-asc">Más reciente primero</option>
+        <option value="marca">Marca / modelo</option><option value="precio-desc">Precio mayor a menor</option><option value="precio-asc">Precio menor a mayor</option></select>
+      <button class="btn btn-sm" style="color:var(--red);border-color:var(--red)" onclick="['antig-q','antig-pmin','antig-pmax'].forEach(i=>document.getElementById(i).value='');['antig-marca','antig-estado','antig-grupo'].forEach(i=>document.getElementById(i).value='');antigActualizarModelos();renderHojaAntiguedad()"><i class="ti ti-x"></i>Quitar filtros</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:12px;margin-bottom:.7rem;padding:.45rem .6rem;background:var(--surface2,#f1f5f9);border-radius:8px">
+      <b style="font-size:11px;color:var(--text2)">Columnas a mostrar:</b>
+      ${ANTIG_COLS.map(c=>`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;margin:0"><input type="checkbox" style="width:auto;margin:0" class="antig-col" value="${c.k}" ${c.on?'checked':''} onchange="renderHojaAntiguedad()">${c.t}</label>`).join('')}
+    </div>
+    <div id="antig-res"></div>
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+  antigActualizarModelos();
+  renderHojaAntiguedad();
+}
+function antigActualizarModelos(){
+  const m=document.getElementById('antig-marca')?.value||'';
+  const selM=document.getElementById('antig-modelo');if(!selM)return;
+  const prev=selM.value;
+  const modelos=[...new Set(antigBase().filter(v=>!m||String(v.marca||'').trim()===m).map(v=>String(v.modelo||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  selM.innerHTML='<option value="">Todos los modelos</option>'+modelos.map(x=>`<option>${x}</option>`).join('');
+  if(modelos.includes(prev))selM.value=prev;
+}
+function antigDatos(){
+  const g=id=>document.getElementById(id)?.value||'';
+  const q=g('antig-q').toLowerCase(),marca=g('antig-marca'),modelo=g('antig-modelo'),estado=g('antig-estado'),grupo=g('antig-grupo'),orden=g('antig-orden')||'dias-desc';
+  const num=x=>{const n=parseFloat(String(x).replace(/[^0-9.]/g,''));return isNaN(n)?null:n;};
+  const pmin=num(g('antig-pmin')),pmax=num(g('antig-pmax'));
+  const cols=[...document.querySelectorAll('.antig-col')].filter(c=>c.checked).map(c=>c.value);
+  const lista=antigBase().filter(v=>{
+    const p=Number(v.precio||0);
+    return (!q||[v.marca,v.modelo,v.placa,v.color,v.anio,v.numeroControl].join(' ').toLowerCase().includes(q))
+      &&(!marca||String(v.marca||'').trim()===marca)
+      &&(!modelo||String(v.modelo||'').trim()===modelo)
+      &&(!estado||v.estado===estado)
+      &&(!grupo||antigGrupoDe(v)===grupo)
+      &&(pmin==null||p>=pmin)&&(pmax==null||p<=pmax);
+  });
+  const dd=v=>{const d=diasDesde(v.fechacompra);return d===null?-1:d;};
+  const mm=v=>((v.marca||'')+' '+(v.modelo||'')).toLowerCase();
+  const cmp={
+    'dias-desc':(a,b)=>dd(b)-dd(a),'dias-asc':(a,b)=>dd(a)-dd(b),
+    'marca':(a,b)=>mm(a).localeCompare(mm(b))||dd(b)-dd(a),
+    'precio-desc':(a,b)=>Number(b.precio||0)-Number(a.precio||0),'precio-asc':(a,b)=>Number(a.precio||0)-Number(b.precio||0)
+  }[orden];
+  const grupos=ANTIG_GRUPOS.map(gr=>({...gr,items:lista.filter(v=>antigGrupoDe(v)===gr.k).sort(cmp)})).filter(gr=>gr.items.length);
+  return{lista,grupos,cols};
+}
+function antigCelda(v,k,paraExcel){
+  const d=diasDesde(v.fechacompra);
+  switch(k){
+    case 'veh':return `${v.marca||''} ${v.modelo||''}`.trim();
+    case 'anio':return v.anio||'';
+    case 'placa':return v.placa||'';
+    case 'color':return v.color||'';
+    case 'tipo':return v.tipo||'';
+    case 'estado':return v.estado||'';
+    case 'fcompra':return v.fechacompra?(paraExcel?v.fechacompra:v.fechacompra.split('-').reverse().join('/')):'';
+    case 'dias':return d===null?'':d;
+    case 'costo':{const c=antigCostoTotal(v);return paraExcel?c:(c?fmtD(c):'—');}
+    case 'precioA':{const p=Number(v.precio||0);return paraExcel?p:(p?fmtD(p):'—');}
+    case 'precioB':{const p=Number(v.precioB||0);return paraExcel?p:(p?fmtD(p):'—');}
+  }
+  return '';
+}
+const ANTIG_NUM=['dias','costo','precioA','precioB'];
+function antigTablaHTML(paraImprimir){
+  const {lista,grupos,cols}=antigDatos();
+  if(!lista.length)return `<div class="empty" style="padding:2rem"><i class="ti ti-car-off"></i><p>No hay carros con esos filtros</p></div>`;
+  const tit=k=>(ANTIG_COLS.find(c=>c.k===k)||{}).t;
+  const sumP=a=>a.reduce((s,v)=>s+Number(v.precio||0),0);
+  const sumC=a=>a.reduce((s,v)=>s+antigCostoTotal(v),0);
+  const th=`<tr><th style="width:28px">#</th>${cols.map(k=>`<th class="${ANTIG_NUM.includes(k)?'num':''}">${tit(k)}</th>`).join('')}</tr>`;
+  const resumen=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.8rem">
+    ${ANTIG_GRUPOS.map(gr=>{const n=(grupos.find(x=>x.k===gr.k)||{items:[]}).items.length;return n?`<div style="border:1.5px solid ${gr.c};border-radius:8px;padding:5px 10px;font-size:12px"><span style="color:${gr.c};font-weight:800">${n}</span> <span style="color:#475569">${gr.t}</span></div>`:'';}).join('')}
+    <div style="border:1.5px solid #0f172a;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:800">Total: ${lista.length} carros</div>
+  </div>`;
+  let i=0;
+  const secciones=grupos.map(gr=>{
+    const filas=gr.items.map(v=>{i++;return `<tr${paraImprimir?'':` style="cursor:pointer" onclick="document.getElementById('antig-ov').remove();typeof abrirModalVehiculo==='function'&&abrirModalVehiculo('${v.id}')"`}><td style="color:#94a3b8">${i}</td>${cols.map(k=>`<td class="${ANTIG_NUM.includes(k)?'num':''}"${k==='dias'?` style="font-weight:700;color:${gr.c}"`:''}>${antigCelda(v,k)}</td>`).join('')}</tr>`;}).join('');
+    const pie=[];
+    cols.forEach((k,j)=>{
+      if(k==='precioA')pie[j]=fmtD(sumP(gr.items));
+      else if(k==='costo')pie[j]=fmtD(sumC(gr.items));
+      else pie[j]='';
+    });
+    return `<div style="margin-bottom:1rem;break-inside:avoid-page">
+      <div style="background:${gr.c};color:#fff;padding:6px 10px;border-radius:6px 6px 0 0;font-weight:800;font-size:13px;display:flex;justify-content:space-between"><span>${gr.t}</span><span>${gr.items.length} carro${gr.items.length===1?'':'s'}</span></div>
+      <table class="tbl antig-tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead>${th}</thead><tbody>${filas}</tbody>
+      <tfoot><tr style="font-weight:800;background:#f1f5f9"><td></td>${pie.map((x,j)=>`<td class="${ANTIG_NUM.includes(cols[j])?'num':''}">${x||(j===0?'Subtotal':'')}</td>`).join('')}</tr></tfoot></table>
+    </div>`;
+  }).join('');
+  const totalGeneral=(cols.includes('precioA')||cols.includes('costo'))?`<div style="text-align:right;font-weight:800;font-size:13px;padding:.3rem .5rem">TOTAL GENERAL (${lista.length} carros)${cols.includes('costo')?` · Costo: ${fmtD(sumC(lista))}`:''}${cols.includes('precioA')?` · Precio lista A: ${fmtD(sumP(lista))}`:''}</div>`:'';
+  return resumen+secciones+totalGeneral;
+}
+function renderHojaAntiguedad(){
+  const el=document.getElementById('antig-res');if(!el)return;
+  el.innerHTML=antigTablaHTML(false);
+}
+function antigFiltrosTxt(){
+  const g=id=>document.getElementById(id)?.value||'';
+  const f=[];
+  if(g('antig-marca'))f.push('Marca: '+g('antig-marca'));
+  if(g('antig-modelo'))f.push('Modelo: '+g('antig-modelo'));
+  if(g('antig-estado'))f.push('Estado: '+g('antig-estado'));
+  if(g('antig-grupo'))f.push('Antigüedad: '+(ANTIG_GRUPOS.find(x=>x.k===g('antig-grupo'))||{}).t);
+  if(g('antig-pmin')||g('antig-pmax'))f.push('Precio: '+(g('antig-pmin')||'0')+' – '+(g('antig-pmax')||'∞'));
+  if(g('antig-q'))f.push('Búsqueda: '+g('antig-q'));
+  return f.join(' · ');
+}
+function imprimirHojaAntiguedad(){
+  const w=window.open('','_blank');
+  if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  const hoy=new Date().toLocaleDateString('es-NI',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const filtros=antigFiltrosTxt();
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Inventario por antigüedad</title>
+  <style>body{font-family:Arial,sans-serif;color:#0f172a;margin:18px;font-size:12px}h2{margin:0 0 2px}
+  table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}th{background:#e2e8f0;font-size:11px}
+  .num{text-align:right}@media print{body{margin:8mm}@page{size:letter landscape}}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+  <h2>NICAUTO — Inventario por antigüedad</h2><div style="color:#475569;margin-bottom:10px">Fecha: ${hoy}${filtros?' · '+filtros:''}</div>
+  ${antigTablaHTML(true)}
+  <script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+function excelHojaAntiguedad(){
+  const {lista,grupos,cols}=antigDatos();
+  if(!lista.length){alert('No hay carros con esos filtros.');return;}
+  const tit=k=>(ANTIG_COLS.find(c=>c.k===k)||{}).t;
+  const rows=[['Antigüedad','#',...cols.map(tit)]];
+  let i=0;
+  grupos.forEach(gr=>{
+    gr.items.forEach(v=>{i++;rows.push([gr.t,i,...cols.map(k=>antigCelda(v,k,true))]);});
+    const sub=['Subtotal '+gr.t+' ('+gr.items.length+')',''];
+    cols.forEach(k=>sub.push(k==='precioA'?gr.items.reduce((s,v)=>s+Number(v.precio||0),0):k==='costo'?gr.items.reduce((s,v)=>s+antigCostoTotal(v),0):''));
+    rows.push(sub);
+  });
+  exportarExcelConFormato(rows,'inventario_por_antiguedad','Antigüedad','Inventario por antigüedad'+(antigFiltrosTxt()?' — '+antigFiltrosTxt():''));
 }
 
 // ======================== CORREGIR REPARACIONES REGISTRADAS EN CÓRDOBAS (bug de moneda) ========================
