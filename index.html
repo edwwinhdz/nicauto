@@ -551,6 +551,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
     <h2 class="section-title">Inventario de vehículos</h2>
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="exportExcelInventario()"><i class="ti ti-download"></i>Excel</button>
+      <button class="btn" onclick="abrirCambiosPrecio()" style="color:#1971C2;border-color:#1971C2" title="Ver qué carros cambiaron de precio, cuándo y quién"><i class="ti ti-currency-dollar"></i>Cambios de precio</button>
       <button class="btn" onclick="abrirHojaAntiguedad()" style="color:var(--amber);border-color:var(--amber)" title="Carros clasificados por antigüedad (días desde la compra)"><i class="ti ti-hourglass"></i>Hoja por antigüedad</button>
       <button class="btn" id="btn-corregir-rep-cordobas" onclick="abrirCorregirRepCordobas()" style="display:none;color:var(--red);border-color:var(--red)"><i class="ti ti-alert-triangle"></i>Corregir moneda de reparaciones</button>
       <button class="btn" id="btn-plan-gerencial" onclick="abrirModalPlanGerencial()" style="display:none;color:var(--purple);border-color:var(--purple)"><i class="ti ti-percentage"></i>Plan Gerencial</button>
@@ -811,6 +812,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
       <button class="btn" onclick="abrirComparadorVehiculos()" style="color:var(--purple);border-color:var(--purple)"><i class="ti ti-arrows-left-right"></i>Comparar</button>
       <button class="btn" onclick="abrirImprimirLP()" style="color:var(--blue);border-color:var(--blue)"><i class="ti ti-printer"></i>Imprimir</button>
       <button class="btn" onclick="catalogoElegirEstados()" style="color:#0B6E6E;border-color:#0B6E6E"><i class="ti ti-book"></i>Catálogo</button>
+      <button class="btn" id="btn-qr-wa-vend" onclick="abrirConfigWhatsQR()" style="display:none;color:#25D366;border-color:#25D366" title="Números de WhatsApp de los vendedores que ve el cliente al escanear el QR"><i class="ti ti-brand-whatsapp"></i>WhatsApp QR</button>
       <button class="btn" onclick="exportExcelListaPrecios()"><i class="ti ti-download"></i>Excel</button>
       <button class="btn" onclick="renderListaPrecios()"><i class="ti ti-refresh"></i>Actualizar</button>
     </div>
@@ -5399,6 +5401,7 @@ async function intentarLogin(){
     // El nombre ya viene fijo por usuario (USERS[].nombre) — no se solicita al ingresar (req #23)
     const nombreIngresado='';
     MODO=user.modo;
+    marcarDispositivoRegistrado(true);
     safeStorage.setItem('nicauto_modo',MODO);
     safeStorage.setItem('nicauto_modo_raw',usuario);
     safeStorage.setItem('nicauto_label',user.nombre||user.label);
@@ -5454,7 +5457,15 @@ async function intentarLogin(){
     alert('Error al ingresar: '+err.message);
   }
 }
+// Marca persistente (localStorage) de que en este dispositivo entró un usuario registrado: la usa la
+// ficha del QR (que se abre en otra pestaña, donde la sesión normal no existe) para mostrar Precio B.
+function marcarDispositivoRegistrado(si){try{if(si)localStorage.setItem('nicauto_registrado',String(Date.now()));else localStorage.removeItem('nicauto_registrado');}catch(e){}}
+function dispositivoRegistrado(){
+  try{if(safeStorage.getItem('nicauto_modo'))return true;}catch(e){}
+  try{return !!localStorage.getItem('nicauto_registrado');}catch(e){return false;}
+}
 function cerrarSesion(){
+  marcarDispositivoRegistrado(false);
   safeStorage.removeItem('nicauto_modo');
   safeStorage.removeItem('nicauto_label');
   safeStorage.removeItem('nicauto_nombre');
@@ -8831,6 +8842,7 @@ function corregirVendidosSegunVentas(){
   }catch(e){console.warn('corregirVendidosSegunVentas',e);}
 }
 function renderListaPrecios(){
+  {const b=document.getElementById('btn-qr-wa-vend');if(b)b.style.display=puedeConfigWhatsQR()?'':'none';}
   corregirVendidosSegunVentas();
   renderMiMeta();
   renderCalendarioLP();
@@ -9667,6 +9679,104 @@ function sortByTipo(arr){
   return [...arr].sort((a,b)=>(pos(a.tipo)-pos(b.tipo))||String(a.tipo||'').localeCompare(String(b.tipo||''))||mm(a).localeCompare(mm(b)));
 }
 
+
+
+// ======================== REPORTE: CAMBIOS DE PRECIO ========================
+// Lee el historialPrecios que se guarda en cada carro (propios y consignación) cada vez que se
+// cambia Precio A o B. Los registros con "antes" en 0 son el precio inicial (no un cambio).
+function cprecioLista(){
+  const out=[];
+  const add=(v,origen)=>(Array.isArray(v.historialPrecios)?v.historialPrecios:[]).forEach((h,i)=>{
+    out.push({v,origen,i,fecha:h.fecha||'',por:h.por||'',antesA:Number(h.antesA||0),antesB:Number(h.antesB||0),ahoraA:Number(h.ahoraA||0),ahoraB:Number(h.ahoraB||0),inicial:!Number(h.antesA||0)&&!Number(h.antesB||0)});
+  });
+  (vehiculos||[]).forEach(v=>add(v,'propio'));
+  ((contData&&contData.consignacion)||[]).forEach(v=>add(v,'consig'));
+  return out;
+}
+function abrirCambiosPrecio(){
+  document.getElementById('cprecio-ov')?.remove();
+  const hoy=hoyLocal();
+  const d30=new Date(Date.now()-30*864e5);const desde=d30.getFullYear()+'-'+String(d30.getMonth()+1).padStart(2,'0')+'-'+String(d30.getDate()).padStart(2,'0');
+  const sel='width:auto;padding:7px 8px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:12px;background:var(--surface)';
+  const ov=document.createElement('div');ov.id='cprecio-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:2vh 1vw;overflow:auto';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(1150px,100%);box-shadow:0 20px 50px rgba(0,0,0,.3);padding:1rem 1.2rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.7rem">
+      <h3 style="margin:0;font-size:17px"><i class="ti ti-currency-dollar" style="color:#1971C2"></i> Carros con cambio de precio</h3>
+      <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="imprimirCambiosPrecio()"><i class="ti ti-printer"></i>Imprimir</button><button class="btn btn-sm" onclick="excelCambiosPrecio()"><i class="ti ti-download"></i>Excel</button><button class="btn btn-sm" onclick="document.getElementById('cprecio-ov').remove()"><i class="ti ti-x"></i>Cerrar</button></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:.7rem;font-size:12px">
+      <span>Desde</span><input type="date" id="cp-desde" value="${desde}" onchange="renderCambiosPrecio()" style="${sel}">
+      <span>Hasta</span><input type="date" id="cp-hasta" value="${hoy}" onchange="renderCambiosPrecio()" style="${sel}">
+      <button class="btn btn-sm" onclick="document.getElementById('cp-desde').value='${hoy}';document.getElementById('cp-hasta').value='${hoy}';renderCambiosPrecio()">Hoy</button>
+      <button class="btn btn-sm" onclick="document.getElementById('cp-desde').value='${hoy.slice(0,8)}01';document.getElementById('cp-hasta').value='${hoy}';renderCambiosPrecio()">Este mes</button>
+      <button class="btn btn-sm" onclick="document.getElementById('cp-desde').value='';document.getElementById('cp-hasta').value='';renderCambiosPrecio()">Todo</button>
+      <input type="text" id="cp-q" placeholder="Marca, modelo, placa…" oninput="renderCambiosPrecio()" style="${sel};width:170px">
+      <select id="cp-vista" onchange="renderCambiosPrecio()" style="${sel}"><option value="carro">Un renglón por carro (precio original → actual)</option><option value="detalle">Cada cambio por separado</option></select>
+      <label style="display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap"><input type="checkbox" id="cp-vendidos" style="width:auto;margin:0" onchange="renderCambiosPrecio()">Incluir vendidos</label>
+      <label style="display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap"><input type="checkbox" id="cp-iniciales" style="width:auto;margin:0" onchange="renderCambiosPrecio()">Incluir precio inicial (carros nuevos)</label>
+    </div>
+    <div id="cp-res"></div>
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+  renderCambiosPrecio();
+}
+function cprecioDatos(){
+  const g=id=>document.getElementById(id);
+  const desde=g('cp-desde')?.value||'',hasta=g('cp-hasta')?.value||'',q=(g('cp-q')?.value||'').toLowerCase();
+  const vista=g('cp-vista')?.value||'carro',vend=!!g('cp-vendidos')?.checked,ini=!!g('cp-iniciales')?.checked;
+  const regs=cprecioLista().filter(r=>(!desde||r.fecha>=desde)&&(!hasta||r.fecha<=hasta)&&(ini||!r.inicial)&&(vend||r.v.estado!=='Vendido')
+    &&(!q||[r.v.marca,r.v.modelo,r.v.placa,r.v.anio].join(' ').toLowerCase().includes(q)));
+  regs.sort((a,b)=>b.fecha.localeCompare(a.fecha)||b.i-a.i);
+  if(vista==='detalle')return{vista,filas:regs};
+  const porCarro={};
+  regs.forEach(r=>{const k=r.origen+'|'+r.v.id;(porCarro[k]=porCarro[k]||[]).push(r);});
+  const filas=Object.values(porCarro).map(arr=>{
+    const asc=[...arr].sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.i-b.i);
+    const p=asc[0],u=asc[asc.length-1];
+    return{v:p.v,origen:p.origen,fecha:u.fecha,por:[...new Set(arr.map(x=>x.por).filter(Boolean))].join(', '),antesA:p.antesA,antesB:p.antesB,ahoraA:Number(u.v.precio||u.ahoraA||0),ahoraB:Number(u.v.precioB||u.ahoraB||0),n:arr.length,inicial:p.inicial};
+  }).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  return{vista,filas};
+}
+function cprecioTablaHTML(){
+  const {vista,filas}=cprecioDatos();
+  if(!filas.length)return `<div class="empty" style="padding:2rem"><i class="ti ti-currency-dollar-off"></i><p>No hay cambios de precio en ese período</p></div>`;
+  const fF=f=>f?f.split('-').reverse().join('/'):'';
+  const dif=(a,b)=>{if(!a)return '';const d=b-a;if(Math.abs(d)<0.005)return '<span style="color:#64748b">=</span>';return `<span style="color:${d<0?'#dc2626':'#16a34a'};font-weight:700">${d<0?'▼':'▲'} ${fmtD(Math.abs(d))}</span>`;};
+  const pr=(a,b)=>a?`<s style="color:#94a3b8">${fmtD(a)}</s> → <b>${fmtD(b)}</b>`:`<b>${fmtD(b)}</b> <span style="font-size:10px;color:#64748b">(inicial)</span>`;
+  const bajas=filas.filter(r=>r.antesA&&r.ahoraA<r.antesA).length,subas=filas.filter(r=>r.antesA&&r.ahoraA>r.antesA).length;
+  const totBaja=filas.reduce((s,r)=>s+(r.antesA&&r.ahoraA<r.antesA?r.antesA-r.ahoraA:0),0);
+  const head=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.7rem;font-size:12px">
+    <div style="border:1.5px solid #0f172a;border-radius:8px;padding:5px 10px;font-weight:800">${vista==='carro'?filas.length+' carro'+(filas.length===1?'':'s'):filas.length+' cambio'+(filas.length===1?'':'s')}</div>
+    <div style="border:1.5px solid #dc2626;border-radius:8px;padding:5px 10px"><b style="color:#dc2626">${bajas}</b> bajaron de precio${totBaja?' · '+fmtD(totBaja)+' en total (Precio A)':''}</div>
+    <div style="border:1.5px solid #16a34a;border-radius:8px;padding:5px 10px"><b style="color:#16a34a">${subas}</b> subieron de precio</div></div>`;
+  const rows=filas.map((r,i)=>`<tr>
+    <td style="color:#94a3b8">${i+1}</td>
+    <td><b>${(r.v.marca||'').trim()} ${(r.v.modelo||'').trim()}</b> <span style="color:#64748b;font-size:11px">${r.v.anio||''}</span>${r.origen==='consig'?' <span class="badge badge-purple" style="font-size:9px">Consig.</span>':''}</td>
+    <td>${r.v.placa||''}</td><td>${r.v.estado||''}</td>
+    <td>${fF(r.fecha)}${vista==='carro'&&r.n>1?`<div style="font-size:10px;color:#64748b">${r.n} cambios</div>`:''}</td>
+    <td class="num">${pr(r.antesA,r.ahoraA)}</td><td class="num">${dif(r.antesA,r.ahoraA)}</td>
+    <td class="num">${pr(r.antesB,r.ahoraB)}</td>
+    <td style="font-size:11px">${r.por}</td></tr>`).join('');
+  return head+`<table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead><tr><th>#</th><th>Vehículo</th><th>Placa</th><th>Estado</th><th>${vista==='carro'?'Último cambio':'Fecha'}</th><th class="num">Precio A ${vista==='carro'?'(original → actual)':'(antes → después)'}</th><th class="num">Diferencia A</th><th class="num">Precio B</th><th>Cambiado por</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderCambiosPrecio(){const el=document.getElementById('cp-res');if(el)el.innerHTML=cprecioTablaHTML();}
+function imprimirCambiosPrecio(){
+  const w=window.open('','_blank');if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  const d=document.getElementById('cp-desde')?.value,h=document.getElementById('cp-hasta')?.value;
+  const fF=f=>f?f.split('-').reverse().join('/'):'…';
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Cambios de precio</title><style>body{font-family:Arial,sans-serif;margin:18px;font-size:12px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}th{background:#e2e8f0;font-size:11px}.num{text-align:right}.badge{font-size:9px;border:1px solid #7c3aed;color:#7c3aed;border-radius:4px;padding:0 3px}@page{size:letter landscape}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+  <h2 style="margin:0">NICAUTO — Carros con cambio de precio</h2><div style="color:#475569;margin:2px 0 10px">Período: ${fF(d)} al ${fF(h)}</div>${cprecioTablaHTML()}<script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+function excelCambiosPrecio(){
+  const {vista,filas}=cprecioDatos();
+  if(!filas.length){alert('No hay cambios de precio en ese período.');return;}
+  const rows=[['#','Marca','Modelo','Año','Placa','Origen','Estado',vista==='carro'?'Último cambio':'Fecha',vista==='carro'?'N° cambios':'','Precio A antes','Precio A ahora','Diferencia A','Precio B antes','Precio B ahora','Cambiado por']];
+  filas.forEach((r,i)=>rows.push([i+1,(r.v.marca||'').trim(),(r.v.modelo||'').trim(),r.v.anio||'',r.v.placa||'',r.origen==='consig'?'Consignación':'Propio',r.v.estado||'',r.fecha,vista==='carro'?r.n:'',r.antesA||'',r.ahoraA,r.antesA?r.ahoraA-r.antesA:'',r.antesB||'',r.ahoraB,r.por]));
+  exportarExcelConFormato(rows,'cambios_de_precio','Cambios de precio','Carros con cambio de precio');
+}
 
 // ======================== HOJA POR ANTIGÜEDAD (Inventario) ========================
 // Clasifica los carros en inventario (no vendidos) por días desde la fecha de compra, en grupos,
@@ -23887,6 +23997,9 @@ async function mostrarFichaPublica(vid){
     ficha.id='ficha-publica';
     document.body.appendChild(ficha);
   }
+  // La ficha del QR la ve el cliente: sin la barra del sistema ni botones internos
+  document.body.classList.add('modo-ficha-publica');
+  if(!document.getElementById('css-ficha-publica')){const st=document.createElement('style');st.id='css-ficha-publica';st.textContent='body.modo-ficha-publica .topbar,body.modo-ficha-publica #scroll-nav-flechas{display:none!important}';document.head.appendChild(st);}
   ficha.style.cssText='min-height:100vh;background:var(--bg,#F4F6F8);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem 1rem';
   // Sin contraseña: al escanear el QR va directo a la ficha del vehículo (req #1)
   cargarFichaPublicaDatos(vid);
@@ -23899,6 +24012,10 @@ async function cargarFichaPublicaDatos(vid){
     const v=(rows||[]).find(x=>x.id===vid);
     if(!v){ficha.innerHTML='<div style="padding:3rem;text-align:center">Vehículo no encontrado o ya no está disponible.</div>';return;}
     const fotos=(v.fotos||[]).filter(Boolean);
+    // Precio B solo para usuarios registrados (sesión iniciada en este dispositivo); el cliente ve solo Precio A
+    const registrado=dispositivoRegistrado();
+    let vendWA=[];try{const cfg=await obtenerFilaRemotaPorId('contable','qr_vendedores');vendWA=((cfg&&cfg.lista)||[]).filter(x=>x&&x.nombre&&waNumeroNI(x.tel)&&x.activo!==false);}catch(e){}
+    window._fichaVehWA=v;window._fichaVendWA=vendWA;
     ficha.innerHTML=`
     <div style="max-width:480px;width:100%;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.1);overflow:hidden">
       <div style="background:#1971C2;color:#fff;padding:1rem 1.25rem;text-align:center">
@@ -23909,16 +24026,16 @@ async function cargarFichaPublicaDatos(vid){
       <div style="padding:1.25rem">
         <h2 style="margin:0 0 .75rem;font-size:20px">${v.marca} ${v.modelo} ${v.anio}</h2>
         ${v.estado==='Reservado'?`<div style="background:#FFF3BF;color:#E67700;font-weight:900;text-align:center;padding:.5rem;border-radius:8px;margin-bottom:.75rem;letter-spacing:1px;font-size:15px">🔒 RESERVADO</div>`:''}
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem">
+        <div style="display:grid;grid-template-columns:${registrado?'1fr 1fr':'1fr'};gap:.6rem;margin-bottom:1rem">
           <div style="background:var(--green-light,#EBFBEE);border-radius:10px;padding:.6rem .75rem;text-align:center">
-            <div style="font-size:10px;color:#2F9E44;font-weight:700;text-transform:uppercase">Precio A</div>
+            <div style="font-size:10px;color:#2F9E44;font-weight:700;text-transform:uppercase">${registrado?'Precio A':'Precio'}</div>
             <div style="font-size:22px;font-weight:900;color:#2F9E44">${v.precio?fmtD(v.precio):'—'}</div>
           </div>
-          <div id="ficha-preciob-wrap" style="background:var(--blue-light,#EEF6FF);border-radius:10px;padding:.6rem .75rem;text-align:center;cursor:pointer" onclick="document.getElementById('ficha-preciob-oculto').style.display='none';document.getElementById('ficha-preciob-real').style.display='block'">
+          ${registrado?`<div id="ficha-preciob-wrap" style="background:var(--blue-light,#EEF6FF);border-radius:10px;padding:.6rem .75rem;text-align:center;cursor:pointer" onclick="document.getElementById('ficha-preciob-oculto').style.display='none';document.getElementById('ficha-preciob-real').style.display='block'">
             <div style="font-size:10px;color:#1971C2;font-weight:700;text-transform:uppercase">Precio B</div>
             <div id="ficha-preciob-oculto" style="font-size:20px;color:#1971C2;display:flex;align-items:center;justify-content:center"><i class="ti ti-eye"></i></div>
             <div id="ficha-preciob-real" style="font-size:22px;font-weight:900;color:#1971C2;display:none">${v.precioB?fmtD(v.precioB):'—'}</div>
-          </div>
+          </div>`:''}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:13px">
           <div><b>Placa:</b> ${v.placa||'—'}</div>
@@ -23929,12 +24046,80 @@ async function cargarFichaPublicaDatos(vid){
           <div><b>Tipo:</b> ${v.tipo||'—'}</div>
         </div>
         ${fotos.length>1?`<div style="display:flex;gap:6px;overflow-x:auto;margin-top:1rem">${fotos.slice(1).map(f=>`<img src="${f}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0">`).join('')}</div>`:''}
+        ${vendWA.length?`<button onclick="fichaMostrarVendWA()" style="margin-top:1.1rem;width:100%;background:#25D366;color:#fff;border:none;border-radius:12px;padding:.85rem;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.5-.3z"/></svg>
+          Escribile a un vendedor por WhatsApp</button>
+        <div id="ficha-vend-wa" style="display:none;margin-top:.6rem;flex-direction:column;gap:.45rem"></div>`:''}
       </div>
     </div>`;
   }catch(e){
     console.error(e);
     ficha.innerHTML='<div style="padding:3rem;text-align:center">No se pudo cargar la ficha. Verificá tu conexión a internet.</div>';
   }
+}
+
+
+// ======================== QR: WhatsApp de vendedores ========================
+// La lista (nombre + número) vive en la fila 'qr_vendedores' de la tabla contable, para que la
+// ficha pública del QR la pueda leer sin cargar toda la contabilidad.
+function puedeConfigWhatsQR(){return ['admin','gerente1','gerente2'].includes(MODO);}
+function waNumeroNI(t){
+  let d=String(t||'').replace(/[^0-9]/g,'');
+  if(!d)return '';
+  if(d.length===8)d='505'+d;
+  return d.length>=10?d:'';
+}
+function fichaMostrarVendWA(){
+  const box=document.getElementById('ficha-vend-wa');if(!box)return;
+  if(box.style.display==='flex'){box.style.display='none';return;}
+  const v=window._fichaVehWA||{};
+  const msg=`Hola, me interesa el ${[(v.marca||'').trim(),(v.modelo||'').trim(),v.anio||''].filter(Boolean).join(' ')}${v.placa?' (placa '+v.placa+')':''} que vi en NICAUTO. ¿Me podés dar más información?`;
+  box.innerHTML='<div style="font-size:12px;color:#555;text-align:center">Elegí con quién querés hablar:</div>'+(window._fichaVendWA||[]).map(x=>`<a href="https://wa.me/${waNumeroNI(x.tel)}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" style="display:flex;align-items:center;justify-content:space-between;gap:8px;text-decoration:none;border:2px solid #25D366;border-radius:10px;padding:.65rem .9rem;color:#0f172a;font-weight:700;font-size:15px"><span>${String(x.nombre).replace(/</g,'&lt;')}</span><span style="color:#25D366;font-size:13px">WhatsApp ›</span></a>`).join('');
+  box.style.display='flex';
+}
+async function abrirConfigWhatsQR(){
+  if(!puedeConfigWhatsQR()){alert('⛔ Solo Administración o Gerencia.');return;}
+  document.getElementById('qrwa-ov')?.remove();
+  let lista=null;
+  try{const cfg=await obtenerFilaRemotaPorId('contable','qr_vendedores');lista=cfg&&Array.isArray(cfg.lista)?cfg.lista:null;}catch(e){}
+  if(!lista)lista=VEND_CTRL_SELECTOS.map(n=>({nombre:n,tel:'',activo:true}));
+  window._qrwaLista=lista.map(x=>({nombre:x.nombre||'',tel:x.tel||'',activo:x.activo!==false}));
+  const ov=document.createElement('div');ov.id='qrwa-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:6vh 1rem;overflow:auto';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(560px,100%);padding:1.1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <h3 style="margin:0 0 .3rem;font-size:17px"><i class="ti ti-brand-whatsapp" style="color:#25D366"></i> WhatsApp de vendedores (QR)</h3>
+    <p style="font-size:12px;color:var(--text2);margin:0 0 .8rem">Cuando un cliente escanea el QR de un carro le sale el botón <b>"Escribile a un vendedor por WhatsApp"</b> y elige uno de esta lista. Número de 8 dígitos (se le agrega el 505 solo). Desmarcá "Activo" para ocultar a alguien sin borrarlo.</p>
+    <div id="qrwa-filas"></div>
+    <button class="btn btn-sm" style="margin-top:.5rem" onclick="qrwaLeer();window._qrwaLista.push({nombre:'',tel:'',activo:true});qrwaRender()"><i class="ti ti-plus"></i>Agregar vendedor</button>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:1rem">
+      <button class="btn" onclick="document.getElementById('qrwa-ov').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarConfigWhatsQR()"><i class="ti ti-device-floppy"></i>Guardar</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  qrwaRender();
+}
+function qrwaRender(){
+  const el=document.getElementById('qrwa-filas');if(!el)return;
+  el.innerHTML=window._qrwaLista.map((x,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+    <input id="qrwa-n-${i}" value="${String(x.nombre).replace(/"/g,'&quot;')}" placeholder="Nombre" style="flex:1.4;width:auto">
+    <input id="qrwa-t-${i}" value="${String(x.tel).replace(/"/g,'&quot;')}" placeholder="8888 8888" inputmode="tel" style="flex:1;width:auto">
+    <label style="display:flex;align-items:center;gap:3px;margin:0;font-size:12px;white-space:nowrap"><input type="checkbox" id="qrwa-a-${i}" ${x.activo?'checked':''} style="width:auto;margin:0">Activo</label>
+    <button class="btn btn-sm" style="color:var(--red)" title="Quitar" onclick="qrwaLeer();window._qrwaLista.splice(${i},1);qrwaRender()"><i class="ti ti-trash"></i></button>
+  </div>`).join('')||'<div style="font-size:12px;color:var(--text3)">Sin vendedores.</div>';
+}
+function qrwaLeer(){
+  window._qrwaLista=window._qrwaLista.map((x,i)=>({nombre:(document.getElementById('qrwa-n-'+i)?.value||'').trim(),tel:(document.getElementById('qrwa-t-'+i)?.value||'').trim(),activo:!!document.getElementById('qrwa-a-'+i)?.checked}));
+}
+async function guardarConfigWhatsQR(){
+  qrwaLeer();
+  const lista=window._qrwaLista.filter(x=>x.nombre||x.tel);
+  const malos=lista.filter(x=>x.activo&&!waNumeroNI(x.tel));
+  if(malos.length&&!confirm(`Estos no tienen un número válido y NO van a aparecer en el QR:\n\n${malos.map(x=>'• '+(x.nombre||'(sin nombre)')).join('\n')}\n\n¿Guardar de todas formas?`))return;
+  try{
+    await sbSet('contable','qr_vendedores',{lista,actualizado:hoyLocal(),por:getNombreUsuario()});
+    document.getElementById('qrwa-ov')?.remove();
+    alert('✅ Guardado. Ya aparece en la ficha del QR.');
+  }catch(e){console.error(e);alert('❌ No se pudo guardar. Revisá la conexión e intentá de nuevo.');}
 }
 
 // ======================== COMPARADOR DE VEHÍCULOS (Herramientas de venta #3) ========================
@@ -30529,6 +30714,7 @@ function restaurarSesionSiExiste(){
   }
   try{
     MODO=modoGuardado;
+    marcarDispositivoRegistrado(true);
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app-content').style.display='block';
     aplicarModoAcceso();
