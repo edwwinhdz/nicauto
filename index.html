@@ -11345,18 +11345,22 @@ function showVentasTab(t){
   else renderVtas();
 }
 // Clasifica un margen de utilidad según los parámetros del negocio.
-function clasificarMargen(m){
+function clasificarMargen(m,esConsig){
+  // Consignación: siempre "Buena" (ya tiene un margen especial pactado con el dueño)
+  if(esConsig)return{label:'Buena',color:'#2F9E44',bg:'#EBFBEE'};
   if(m<400)return{label:'Pésima',color:'#C92A2A',bg:'#FFF0F0'};
-  if(m<1000)return{label:'Alerta',color:'#E67700',bg:'#FFF3BF'};
-  if(m<=1300)return{label:'Buena',color:'#2F9E44',bg:'#EBFBEE'};
-  return{label:'Excelente',color:'#1971C2',bg:'#EEF6FF'};
+  if(m<800)return{label:'Alerta',color:'#E67700',bg:'#FFF3BF'};
+  if(m<1300)return{label:'Buena',color:'#2F9E44',bg:'#EBFBEE'};
+  if(m<2000)return{label:'Excelente',color:'#1971C2',bg:'#EEF6FF'};
+  return{label:'Mega Excelente',color:'#7048E8',bg:'#F3F0FF'};
 }
 function renderKpiVentasCompras(){
   const cont=document.getElementById('ventas-tab-kpi');
   const mesSel=cont.querySelector('#kpi-mes')?.value||mesActualLocal();
   const vc=ventas.filter(v=>v.estado==='Completada'&&(v.fecha||'').slice(0,7)===mesSel);
   const filas=vc.map(v=>{
-    const vh=buscarVehiculoPropioOGer(v.vehiculoId);
+    const esConsig=/^CONSIG_/.test(String(v.vehiculoId||''));
+    const vh=esConsig?buscarVehiculoOConsig(v.vehiculoId):buscarVehiculoPropioOGer(v.vehiculoId);
     const vnd=clientes.find(x=>x.id===v.vendedorId);
     const reps=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
     const pCompra=Number(v.costo||v.pCompra||0);
@@ -11368,8 +11372,9 @@ function renderKpiVentasCompras(){
     const modelo=vh?vh.modelo:(v.vehiculo||'').replace(marca,'').trim();
     const anio=vh?vh.anio:(v.vehiculo||'').match(/\d{4}/)?.[0]||'';
     const vendedor=v.vendedor||vnd?.nombre||'—';
-    const comprador=vh?.compradoPor||vh?.nombrecomprador||'—';
-    return{placa:v.placa||vh?.placa||'—',marca,modelo,anio,vendedor,comprador,pCompra:costoTotal,pVenta,ganancia,fecha:v.fecha};
+    const comprador=esConsig?(vh?.duenio?vh.duenio+' (dueño)':'—'):(vh?.compradoPor||vh?.nombrecomprador||'—');
+    const agente=esConsig?'Consignación':((vehGerencia||[]).some(g=>g.id===v.vehiculoId)?'Gerencia':(vh?.agentecompra?normalizarNombrePizarra(vh.agentecompra):'—'));
+    return{placa:v.placa||vh?.placa||'—',marca,modelo,anio,vendedor,comprador,agente,esConsig,pCompra:costoTotal,pVenta,ganancia,fecha:v.fecha};
   });
   const totalGanancia=filas.reduce((s,f)=>s+f.ganancia,0);
   const mejorVenta=filas.slice().sort((a,b)=>b.ganancia-a.ganancia).slice(0,8);
@@ -11381,38 +11386,43 @@ function renderKpiVentasCompras(){
     </div>
     <div style="background:var(--surface2);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:1rem;font-size:11px;display:flex;gap:1rem;flex-wrap:wrap">
       <span><span style="display:inline-block;width:10px;height:10px;background:#C92A2A;border-radius:2px"></span> Pésima: menos de $400 o negativo</span>
-      <span><span style="display:inline-block;width:10px;height:10px;background:#E67700;border-radius:2px"></span> Alerta: $400 – $999</span>
-      <span><span style="display:inline-block;width:10px;height:10px;background:#2F9E44;border-radius:2px"></span> Buena: $1,000 – $1,300</span>
-      <span><span style="display:inline-block;width:10px;height:10px;background:#1971C2;border-radius:2px"></span> Excelente: $1,301 en adelante</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#E67700;border-radius:2px"></span> Alerta: $400 – $799</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#2F9E44;border-radius:2px"></span> Buena: $800 – $1,299</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#1971C2;border-radius:2px"></span> Excelente: $1,300 – $1,999</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#7048E8;border-radius:2px"></span> Mega Excelente: $2,000 en adelante</span>
+      <span style="color:var(--text3)">· Consignación: siempre Buena</span>
     </div>
     <div class="card" style="overflow-x:auto;margin-bottom:1.5rem">
       <div class="card-head" style="background:var(--blue);color:#fff"><h3><i class="ti ti-trending-up"></i> KPI de Ventas (${mesSel}) — Ganancia total: $${fmt(totalGanancia)}</h3></div>
       <table class="tbl">
-        <thead><tr><th>Placa</th><th>Vehículo</th><th>Vendedor</th><th>Costo Total</th><th>P. Venta</th><th>Margen</th><th>Clasificación</th></tr></thead>
-        <tbody>${filas.length?filas.map(f=>{const c=clasificarMargen(f.ganancia);return`<tr>
+        <thead><tr><th>#</th><th>Placa</th><th>Vehículo</th><th>Vendedor</th><th>Costo Total</th><th>P. Venta</th><th>Margen</th><th>Clasificación</th></tr></thead>
+        <tbody>${filas.length?filas.map((f,i)=>{const c=clasificarMargen(f.ganancia,f.esConsig);return`<tr>
+          <td style="color:var(--text3);font-size:12px;font-weight:700">${i+1}</td>
           <td style="font-family:monospace;font-size:12px">${f.placa}</td>
-          <td style="font-size:12px">${f.marca} ${f.modelo} ${f.anio}</td>
+          <td style="font-size:12px">${f.marca} ${f.modelo} ${f.anio}${f.esConsig?' <span class="badge badge-gray" style="font-size:9px">Consig.</span>':''}</td>
           <td style="font-size:12px">${f.vendedor}</td>
           <td style="font-size:12px">$${fmt(f.pCompra)}</td>
           <td style="font-size:12px">$${fmt(f.pVenta)}</td>
           <td style="font-weight:800;color:${c.color}">$${fmt(f.ganancia)}</td>
           <td><span style="background:${c.bg};color:${c.color};font-weight:700;padding:3px 10px;border-radius:20px;font-size:11px">${c.label}</span></td>
-        </tr>`}).join(''):`<tr><td colspan="7"><div class="empty" style="padding:1.5rem"><p>Sin ventas completadas este mes</p></div></td></tr>`}</tbody>
+        </tr>`}).join(''):`<tr><td colspan="8"><div class="empty" style="padding:1.5rem"><p>Sin ventas completadas este mes</p></div></td></tr>`}</tbody>
       </table>
     </div>
     <div class="card" style="overflow-x:auto;margin-bottom:1.5rem">
       <div class="card-head" style="background:var(--purple);color:#fff"><h3><i class="ti ti-shopping-cart"></i> KPI de Compras vendidas este mes</h3></div>
       <table class="tbl">
-        <thead><tr><th>Placa</th><th>Vehículo</th><th>Comprado por</th><th>Costo Total</th><th>P. Venta</th><th>Margen</th><th>Clasificación</th></tr></thead>
-        <tbody>${filas.length?filas.map(f=>{const c=clasificarMargen(f.ganancia);return`<tr>
+        <thead><tr><th>#</th><th>Placa</th><th>Vehículo</th><th>Agente de compra</th><th>Comprado por</th><th>Costo Total</th><th>P. Venta</th><th>Margen</th><th>Clasificación</th></tr></thead>
+        <tbody>${filas.length?filas.map((f,i)=>{const c=clasificarMargen(f.ganancia,f.esConsig);return`<tr>
+          <td style="color:var(--text3);font-size:12px;font-weight:700">${i+1}</td>
           <td style="font-family:monospace;font-size:12px">${f.placa}</td>
-          <td style="font-size:12px">${f.marca} ${f.modelo} ${f.anio}</td>
+          <td style="font-size:12px">${f.marca} ${f.modelo} ${f.anio}${f.esConsig?' <span class="badge badge-gray" style="font-size:9px">Consig.</span>':''}</td>
+          <td style="font-size:12px;font-weight:700">${f.agente}</td>
           <td style="font-size:12px">${f.comprador}</td>
           <td style="font-size:12px">$${fmt(f.pCompra)}</td>
           <td style="font-size:12px">$${fmt(f.pVenta)}</td>
           <td style="font-weight:800;color:${c.color}">$${fmt(f.ganancia)}</td>
-          <td><span style="background:${c.bg};color:${c.color};font-weight:700;padding:3px 10px;border-radius:20px;font-size:11px">${c.label==='Pésima'?'Mala Compra':c.label==='Excelente'||c.label==='Buena'?'Buena Compra':c.label}</span></td>
-        </tr>`}).join(''):`<tr><td colspan="7"><div class="empty" style="padding:1.5rem"><p>Sin compras vendidas este mes</p></div></td></tr>`}</tbody>
+          <td><span style="background:${c.bg};color:${c.color};font-weight:700;padding:3px 10px;border-radius:20px;font-size:11px">${c.label==='Pésima'?'Mala Compra':c.label+' Compra'}</span></td>
+        </tr>`}).join(''):`<tr><td colspan="9"><div class="empty" style="padding:1.5rem"><p>Sin compras vendidas este mes</p></div></td></tr>`}</tbody>
       </table>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
