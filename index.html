@@ -667,6 +667,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
   <div class="tab-bar">
     <button class="tab active" onclick="showVentasTab('registro')">Registro</button>
     <button class="tab" onclick="showVentasTab('kpi')"><i class="ti ti-chart-bar" style="font-size:13px"></i> KPI de Ventas y Compras</button>
+    <button class="tab" onclick="showVentasTab('conteo')"><i class="ti ti-calendar-stats" style="font-size:13px"></i> Conteo de Ventas y Compras</button>
   </div>
   <div id="ventas-tab-registro">
   <div class="section-header">
@@ -716,6 +717,7 @@ body.vtas-limitada #caja-correccion-cierre,body.vtas-limitada #historial-cierres
   <div id="historial-cierres-ventas"></div>
   </div><!-- end ventas-tab-registro -->
   <div id="ventas-tab-kpi" style="display:none"></div>
+  <div id="ventas-tab-conteo" style="display:none"></div>
 </div>
 
 <!-- ======================== BITÁCORA ======================== -->
@@ -11337,12 +11339,152 @@ async function limpiarReservasHuerfanas(){
 }
 // ======================== KPI DE VENTAS Y COMPRAS ========================
 function showVentasTab(t){
-  if(t==='kpi'&&ventasVistaLimitada())t='registro';
-  document.querySelectorAll('#page-ventas .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['registro','kpi'][i]===t));
+  if((t==='kpi'||t==='conteo')&&ventasVistaLimitada())t='registro';
+  document.querySelectorAll('#page-ventas .tab-bar .tab').forEach((x,i)=>x.classList.toggle('active',['registro','kpi','conteo'][i]===t));
   document.getElementById('ventas-tab-registro').style.display=t==='registro'?'block':'none';
   document.getElementById('ventas-tab-kpi').style.display=t==='kpi'?'block':'none';
+  const ct=document.getElementById('ventas-tab-conteo');if(ct)ct.style.display=t==='conteo'?'block':'none';
   if(t==='kpi')renderKpiVentasCompras();
+  else if(t==='conteo')renderConteoAnual();
   else renderVtas();
+}
+// ======================== CONTEO ANUAL DE VENTAS Y COMPRAS ========================
+// Una "pizarra" por mes (Ene–Dic): ventas en unidades por vendedor (propias + consignación) y
+// carros comprados por agente. Fuente automática de cada mes:
+//   · mes en curso → getOperacionesAjustadas (lo mismo que muestra la Pizarra, con sus ajustes)
+//   · mes ya cerrado en Pizarra → la foto guardada en contData.pizarraHistorial
+//   · mes pasado sin cierre → conteo real de ventas/compras del sistema
+// Cualquier casilla se puede corregir a mano (contData.conteoAnual[año].ventas|compras[nombre][mes]);
+// lo escrito a mano reemplaza al automático y se marca con un puntito. Así se cargan Ene–Jun.
+const CONTEO_MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function puedeEditarConteoAnual(){return ['admin','gerente1','gerente2','coordinador'].includes(MODO);}
+function conteoAnualAuto(mesKey){
+  const hoyMes=mesActualLocal();
+  if(mesKey>hoyMes)return {};
+  let filas;
+  if(mesKey===hoyMes){filas=Object.values(getOperacionesAjustadas(mesKey));}
+  else{
+    const arch=(contData.pizarraHistorial||[]).filter(h=>h&&h.mes===mesKey).pop();
+    filas=arch&&Array.isArray(arch.desglose)?arch.desglose:Object.values(calcularOperacionesConfirmadas(mesKey));
+  }
+  filas=fusionarDuplicadosPizarra(filas.map(f=>({...f,nombre:normalizarNombrePizarra(f.nombre)||f.nombre})),['ventas','compras']);
+  const out={};
+  filas.forEach(f=>{out[f.nombre]={ventas:Number(f.ventas||0),compras:Number(f.compras||0)};});
+  return out;
+}
+function conteoAnualDatos(anio){
+  if(!contData.conteoAnual)contData.conteoAnual={};
+  const man=contData.conteoAnual[anio]||{ventas:{},compras:{},extraVentas:[],extraCompras:[]};
+  const auto=CONTEO_MESES.map((_,i)=>conteoAnualAuto(anio+'-'+String(i+1).padStart(2,'0')));
+  const build=cat=>{
+    const manual=man[cat]||{};
+    const extra=man[cat==='ventas'?'extraVentas':'extraCompras']||[];
+    const nombres=new Set([...extra,...Object.keys(manual)]);
+    auto.forEach(a=>Object.entries(a).forEach(([n,o])=>{if(o[cat])nombres.add(n);}));
+    const filas=[...nombres].map(n=>{
+      const meses=CONTEO_MESES.map((_,i)=>{
+        const mk=String(i+1).padStart(2,'0');
+        const m=manual[n]&&manual[n][mk];
+        const a=(auto[i][n]||{})[cat]||0;
+        return (m!==undefined&&m!==null&&m!=='')?{v:Number(m),manual:true,auto:a}:{v:a,manual:false,auto:a};
+      });
+      return {nombre:n,meses,total:meses.reduce((s,x)=>s+x.v,0)};
+    }).sort((a,b)=>b.total-a.total||a.nombre.localeCompare(b.nombre));
+    const totMes=CONTEO_MESES.map((_,i)=>filas.reduce((s,f)=>s+f.meses[i].v,0));
+    return {filas,totMes,total:totMes.reduce((s,x)=>s+x,0)};
+  };
+  return {ventas:build('ventas'),compras:build('compras')};
+}
+function conteoTablaHTML(anio,cat,d,titulo,color,paraImprimir){
+  const ed=!paraImprimir&&puedeEditarConteoAnual();
+  const hoyMes=mesActualLocal();
+  const th=`<tr><th style="text-align:left;min-width:150px">${cat==='ventas'?'Vendedor':'Agente de compra'}</th>${CONTEO_MESES.map((m,i)=>{const mk=anio+'-'+String(i+1).padStart(2,'0');return `<th style="text-align:center;${mk===hoyMes?'background:#FFF3BF;color:#000':''}">${m}</th>`;}).join('')}<th style="text-align:center;background:#000;color:#fff">Total</th></tr>`;
+  const filas=d.filas.map(f=>`<tr><td style="font-weight:700">${f.nombre}</td>${f.meses.map((x,i)=>{
+      const mk=String(i+1).padStart(2,'0');
+      const click=ed?` onclick="editarConteoAnual('${anio}','${cat}','${f.nombre.replace(/'/g,"\\'")}','${mk}')" style="cursor:pointer;text-align:center${x.manual?';background:#FFF9DB':''}"`:` style="text-align:center${x.manual&&!paraImprimir?';background:#FFF9DB':''}"`;
+      return `<td${click} title="${x.manual?'Escrito a mano (automático: '+x.auto+')':'Automático'}${ed?' — clic para corregir':''}">${x.v||'<span style="color:#cbd5e1">–</span>'}${x.manual&&!paraImprimir?'<span style="color:#E67700;font-size:9px"> ●</span>':''}</td>`;
+    }).join('')}<td style="text-align:center;font-weight:800;background:#f1f5f9">${f.total}</td></tr>`).join('');
+  const pie=`<tr style="font-weight:800"><td style="background:#000;color:#fff">TOTAL</td>${d.totMes.map(t=>`<td style="text-align:center;background:#000;color:#fff">${t||'–'}</td>`).join('')}<td style="text-align:center;background:${color};color:#fff;font-size:14px">${d.total}</td></tr>`;
+  return `<div class="card" style="margin-bottom:1.2rem;overflow-x:auto">
+    <div class="card-head" style="background:${color};color:#fff"><h3 style="color:#fff"><i class="ti ti-${cat==='ventas'?'car':'shopping-cart'}"></i> ${titulo} — ${anio}</h3>
+      ${ed?`<button class="btn btn-sm" style="background:#fff" onclick="agregarFilaConteoAnual('${anio}','${cat}')"><i class="ti ti-user-plus"></i>Agregar ${cat==='ventas'?'vendedor':'agente'}</button>`:''}</div>
+    <table class="tbl" style="font-size:12px"><thead>${th}</thead><tbody>${filas||`<tr><td colspan="14" style="text-align:center;color:var(--text3);padding:1rem">Sin datos</td></tr>`}</tbody><tfoot>${pie}</tfoot></table>
+  </div>`;
+}
+function renderConteoAnual(){
+  const cont=document.getElementById('ventas-tab-conteo');if(!cont)return;
+  const anio=window._conteoAnio||mesActualLocal().slice(0,4);
+  const d=conteoAnualDatos(anio);
+  cont.innerHTML=`<div class="section-header">
+      <h2 class="section-title">Conteo de Ventas y Compras</h2>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select onchange="window._conteoAnio=this.value;renderConteoAnual()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;width:auto">${[2026,2027,2028].map(y=>`<option ${String(y)===anio?'selected':''}>${y}</option>`).join('')}</select>
+        <button class="btn btn-sm" onclick="imprimirConteoAnual()"><i class="ti ti-printer"></i>Imprimir</button>
+        <button class="btn btn-sm" onclick="excelConteoAnual()"><i class="ti ti-download"></i>Excel</button>
+      </div></div>
+    <div style="background:var(--surface2);border-radius:var(--radius);padding:.6rem 1rem;margin-bottom:1rem;font-size:11px;color:var(--text2)">
+      <i class="ti ti-info-circle"></i> Ventas = unidades vendidas (propias + consignación) · Compras = carros comprados por agente. Los meses se llenan solos con lo mismo que da la Pizarra.
+      ${puedeEditarConteoAnual()?' <b>Clic en cualquier casilla para escribir o corregir el número a mano</b> (así se cargan Enero–Junio). Las casillas corregidas a mano se ven en amarillo con <span style="color:#E67700">●</span>.':''}
+    </div>
+    ${conteoTablaHTML(anio,'ventas',d.ventas,'Ventas — unidades por vendedor','#1971C2')}
+    ${conteoTablaHTML(anio,'compras',d.compras,'Compras — carros comprados por agente','#7048E8')}`;
+}
+async function editarConteoAnual(anio,cat,nombre,mk){
+  if(!puedeEditarConteoAnual())return;
+  const d=conteoAnualDatos(anio)[cat].filas.find(f=>f.nombre===nombre);
+  const x=d?d.meses[Number(mk)-1]:{v:0,manual:false,auto:0};
+  const mesTxt=CONTEO_MESES[Number(mk)-1]+' '+anio;
+  const r=prompt(`${cat==='ventas'?'Ventas':'Compras'} de ${nombre} — ${mesTxt}
+
+Automático del sistema: ${x.auto}${x.manual?'\nAhora escrito a mano: '+x.v:''}
+
+Escribí el número correcto.
+Dejalo VACÍO para volver al automático.`,x.manual?String(x.v):'');
+  if(r===null)return;
+  const t=r.trim();
+  if(t!==''&&(!/^\d+$/.test(t))){alert('Escribí un número entero (0, 1, 2…).');return;}
+  if(!contData.conteoAnual)contData.conteoAnual={};
+  const man=contData.conteoAnual[anio]=contData.conteoAnual[anio]||{ventas:{},compras:{},extraVentas:[],extraCompras:[]};
+  man[cat]=man[cat]||{};
+  if(t===''){if(man[cat][nombre])man[cat][nombre][mk]=null;} // null = volver al automático (se guarda así para que el merge con el servidor no lo reviva)
+  else{man[cat][nombre]=man[cat][nombre]||{};man[cat][nombre][mk]=Number(t);}
+  renderConteoAnual();
+  await saveOne('contable',{id:'main',...contData});
+}
+async function agregarFilaConteoAnual(anio,cat){
+  if(!puedeEditarConteoAnual())return;
+  const n=(prompt(`Nombre del ${cat==='ventas'?'vendedor':'agente de compra'} a agregar:`)||'').trim();
+  if(!n)return;
+  const nombre=normalizarNombrePizarra(n)||n;
+  if(!contData.conteoAnual)contData.conteoAnual={};
+  const man=contData.conteoAnual[anio]=contData.conteoAnual[anio]||{ventas:{},compras:{},extraVentas:[],extraCompras:[]};
+  const k=cat==='ventas'?'extraVentas':'extraCompras';
+  man[k]=man[k]||[];
+  if(!man[k].includes(nombre))man[k].push(nombre);
+  renderConteoAnual();
+  await saveOne('contable',{id:'main',...contData});
+}
+function imprimirConteoAnual(){
+  const anio=window._conteoAnio||mesActualLocal().slice(0,4);
+  const d=conteoAnualDatos(anio);
+  const w=window.open('','_blank');if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Conteo de Ventas y Compras ${anio}</title><style>body{font-family:Arial,sans-serif;margin:16px;font-size:11px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:4px 5px}th{background:#e2e8f0}.card{margin-bottom:16px}.card-head{padding:6px 10px;font-weight:800}.card-head h3{margin:0;font-size:13px}.card-head button{display:none}@page{size:letter landscape}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+    <h2 style="margin:0 0 8px">NICAUTO — Conteo de Ventas y Compras ${anio}</h2>
+    ${conteoTablaHTML(anio,'ventas',d.ventas,'Ventas — unidades por vendedor','#1971C2',true)}
+    ${conteoTablaHTML(anio,'compras',d.compras,'Compras — carros comprados por agente','#7048E8',true)}
+    <script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+function excelConteoAnual(){
+  const anio=window._conteoAnio||mesActualLocal().slice(0,4);
+  const d=conteoAnualDatos(anio);
+  const rows=[['VENTAS — unidades por vendedor '+anio],['Vendedor',...CONTEO_MESES,'Total']];
+  d.ventas.filas.forEach(f=>rows.push([f.nombre,...f.meses.map(x=>x.v),f.total]));
+  rows.push(['TOTAL',...d.ventas.totMes,d.ventas.total]);
+  rows.push([]);rows.push(['COMPRAS — carros comprados por agente '+anio]);rows.push(['Agente',...CONTEO_MESES,'Total']);
+  d.compras.filas.forEach(f=>rows.push([f.nombre,...f.meses.map(x=>x.v),f.total]));
+  rows.push(['TOTAL',...d.compras.totMes,d.compras.total]);
+  exportarExcelConFormato(rows,'conteo_ventas_compras_'+anio,'Conteo '+anio,'Conteo de Ventas y Compras '+anio);
 }
 // Clasifica un margen de utilidad según los parámetros del negocio.
 function clasificarMargen(m,esConsig){
