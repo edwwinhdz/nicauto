@@ -11352,8 +11352,7 @@ function showVentasTab(t){
 // Una "pizarra" por mes (Ene–Dic): ventas en unidades por vendedor (propias + consignación) y
 // carros comprados por agente. Fuente automática de cada mes:
 //   · mes en curso → getOperacionesAjustadas (lo mismo que muestra la Pizarra, con sus ajustes)
-//   · mes ya cerrado en Pizarra → la foto guardada en contData.pizarraHistorial
-//   · mes pasado sin cierre → conteo real de ventas/compras del sistema
+//   · meses pasados (desde jul-2026) → conteo real de ventas/compras del sistema
 // Cualquier casilla se puede corregir a mano (contData.conteoAnual[año].ventas|compras[nombre][mes]);
 // lo escrito a mano reemplaza al automático y se marca con un puntito. Así se cargan Ene–Jun.
 const CONTEO_MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -11361,12 +11360,14 @@ function puedeEditarConteoAnual(){return ['admin','gerente1','gerente2','coordin
 function conteoAnualAuto(mesKey){
   const hoyMes=mesActualLocal();
   if(mesKey>hoyMes)return {};
+  // Antes de julio 2026 la Pizarra no existía en el sistema: esos meses se cargan a mano.
+  if(mesKey<'2026-07')return {};
   let filas;
+  // Mes en curso: igual que la Pizarra (con sus ajustes). Meses pasados: conteo REAL de ventas y
+  // compras registradas. (No se usan las fotos de "Cerrar mes" de Pizarra: guardaban el mes con
+  // la fecha del cierre y algunas quedaron en cero, por eso Septiembre y Octubre salían vacíos.)
   if(mesKey===hoyMes){filas=Object.values(getOperacionesAjustadas(mesKey));}
-  else{
-    const arch=(contData.pizarraHistorial||[]).filter(h=>h&&h.mes===mesKey).pop();
-    filas=arch&&Array.isArray(arch.desglose)?arch.desglose:Object.values(calcularOperacionesConfirmadas(mesKey));
-  }
+  else{filas=Object.values(calcularOperacionesConfirmadas(mesKey));}
   filas=fusionarDuplicadosPizarra(filas.map(f=>({...f,nombre:normalizarNombrePizarra(f.nombre)||f.nombre})),['ventas','compras']);
   const out={};
   filas.forEach(f=>{out[f.nombre]={ventas:Number(f.ventas||0),compras:Number(f.compras||0)};});
