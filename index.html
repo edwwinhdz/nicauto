@@ -7444,10 +7444,10 @@ async function cerrarMesVentasPorVendedor(){
     if(precio<=0)return;
     const margen=(precio-Number(v.costo||0)-rep-Number(v.comision||0))/precio*100;
     const n=nombreVendedor(v);
-    if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0};
-    margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;
+    if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0,gan:0,ventas:0};
+    margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;margenPorVendedor[n].gan+=margen*precio/100;margenPorVendedor[n].ventas+=precio;
   });
-  const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.suma/o.n]).sort((a,b)=>b[1]-a[1]);
+  const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.ventas?o.gan/o.ventas*100:0,o.gan]).sort((a,b)=>b[1]-a[1]); // % = ganancia total ÷ total vendido (ponderado), [2] = ganancia $
   // Mismo cierre, también guarda el reporte de AGENTES DE COMPRA — mismo mes, mismo botón, para
   // no cerrar dos veces. "Carros comprados" es por fecha de COMPRA; el margen y las compras
   // malas son por fecha de VENTA (igual que en pantalla).
@@ -7538,10 +7538,10 @@ function renderResumenVentasWord(){
     const ganancia=precio-Number(v.costo||0)-rep-Number(v.comision||0);
     const margen=ganancia/precio*100;
     const n=nombreVendedor(v);
-    if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0};
-    margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;
+    if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0,gan:0,ventas:0};
+    margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;margenPorVendedor[n].gan+=margen*precio/100;margenPorVendedor[n].ventas+=precio;
   });
-  const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.suma/o.n]).sort((a,b)=>b[1]-a[1]);
+  const rankingMargen=Object.entries(margenPorVendedor).map(([n,o])=>[n,o.ventas?o.gan/o.ventas*100:0,o.gan]).sort((a,b)=>b[1]-a[1]); // % = ganancia total ÷ total vendido (ponderado), [2] = ganancia $
   const mejorMargen=rankingMargen[0]||null;
   const filaW=(label,n)=>`<tr>
     <td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${label}</td>
@@ -7557,8 +7557,9 @@ function renderResumenVentasWord(){
   const tablaMargen=()=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
       <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejor margen (propias)</td></tr>
-      ${mejorMargen?filaW(mejorMargen[0],mejorMargen[1].toFixed(1)+'%'):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin datos todavía</td></tr>`}
-      ${rankingMargen.slice(1).map(([n,m])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%</td></tr>`).join('')}
+      ${mejorMargen?filaW(mejorMargen[0],mejorMargen[1].toFixed(1)+'%'+(mejorMargen[2]!=null?`<div style="font-size:10px;font-weight:600;color:#B2F2BB">${fmtD(Math.round(mejorMargen[2]))}</div>`:'')):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin datos todavía</td></tr>`}
+      ${rankingMargen.slice(1).map(([n,m,g])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%${g!=null?` · ${fmtD(Math.round(g))}`:''}</td></tr>`).join('')}
+      ${rankingMargen.length?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">% = ganancia total ÷ total vendido</td></tr>`:''}
     </tbody>
   </table>`;
   const yaCerrado=(contData.historialVentasPorVendedor||[]).some(h=>h.mes===mes);
