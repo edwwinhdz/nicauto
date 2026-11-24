@@ -7436,13 +7436,16 @@ async function cerrarMesVentasPorVendedor(){
   const contar=lista=>{const conteo={};lista.forEach(v=>{const n=nombreVendedor(v);conteo[n]=(conteo[n]||0)+1;});return Object.entries(conteo).sort((a,b)=>b[1]-a[1]);};
   const propias=ventasMes.filter(v=>!/^CONSIG_/.test(String(v.vehiculoId||'')));
   const consig=ventasMes.filter(v=>/^CONSIG_/.test(String(v.vehiculoId||'')));
+  window._margenExcluidas=0;
   const margenPorVendedor={};
-  propias.forEach(v=>{
+  ventasMes.forEach(v=>{ // propias + consignación (pedido de Gerencia)
     const vh=buscarVehiculoOConsig(v.vehiculoId);
     const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
     const precio=Number(v.precio||0);
     if(precio<=0)return;
     const margen=(precio-Number(v.costo||0)-rep-Number(v.comision||0))/precio*100;
+    // Ventas con pérdida = liquidaciones autorizadas por Gerencia: no cuentan contra el vendedor
+    if(margen<0){window._margenExcluidas=(window._margenExcluidas||0)+1;return;}
     const n=nombreVendedor(v);
     if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0,gan:0,ventas:0};
     margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;margenPorVendedor[n].gan+=margen*precio/100;margenPorVendedor[n].ventas+=precio;
@@ -7529,14 +7532,17 @@ function renderResumenVentasWord(){
   // Margen de ganancia promedio por vendedor, SOLO de ventas propias (ahí sí hay costo y
   // reparaciones completos para calcularlo bien). Margen % = ganancia / precio de venta × 100,
   // igual que en el resto del sistema.
+  window._margenExcluidas=0;
   const margenPorVendedor={};
-  propias.forEach(v=>{
+  ventasMes.forEach(v=>{ // propias + consignación (pedido de Gerencia)
     const vh=buscarVehiculoOConsig(v.vehiculoId);
     const rep=vh?(vh.reparaciones||[]).reduce((s,r)=>s+Number(r.costo||0),0):0;
     const precio=Number(v.precio||0);
     if(precio<=0)return;
     const ganancia=precio-Number(v.costo||0)-rep-Number(v.comision||0);
     const margen=ganancia/precio*100;
+    // Ventas con pérdida = liquidaciones autorizadas por Gerencia: no cuentan contra el vendedor
+    if(margen<0){window._margenExcluidas=(window._margenExcluidas||0)+1;return;}
     const n=nombreVendedor(v);
     if(!margenPorVendedor[n])margenPorVendedor[n]={suma:0,n:0,gan:0,ventas:0};
     margenPorVendedor[n].suma+=margen;margenPorVendedor[n].n++;margenPorVendedor[n].gan+=margen*precio/100;margenPorVendedor[n].ventas+=precio;
@@ -7556,10 +7562,31 @@ function renderResumenVentasWord(){
   </table>`;
   const tablaMargen=()=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
-      <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejor margen (propias)</td></tr>
+      <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejor margen (propias + consig.)</td></tr>
       ${mejorMargen?filaW(mejorMargen[0],mejorMargen[1].toFixed(1)+'%'+(mejorMargen[2]!=null?`<div style="font-size:10px;font-weight:600;color:#B2F2BB">${fmtD(Math.round(mejorMargen[2]))}</div>`:'')):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin datos todavía</td></tr>`}
       ${rankingMargen.slice(1).map(([n,m,g])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%${g!=null?` · ${fmtD(Math.round(g))}`:''}</td></tr>`).join('')}
-      ${rankingMargen.length?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">% = ganancia total ÷ total vendido</td></tr>`:''}
+      ${rankingMargen.length?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">% = ganancia total ÷ total vendido${window._margenExcluidas?` · no incluye ${window._margenExcluidas} venta${window._margenExcluidas===1?'':'s'} con pérdida (liquidación autorizada)`:''}</td></tr>`:''}
+    </tbody>
+  </table>`;
+  // Cuadro por forma de pago (propias + consignación), según el texto de "pago" que arma la venta
+  const fpCols=[['cash','Cash'],['canje','Cash + Canje'],['banco','Crédito bancario'],['tercero','Crédito terceros']];
+  const fpDe=v=>{const t=String(v.pago||'');
+    if(/terceros/i.test(t)||v.bancarioTipo==='tercero'&&/cr[eé]dito/i.test(t))return 'tercero';
+    if(/banco|financ/i.test(t))return 'banco';
+    if(/canje/i.test(t))return 'canje';
+    return 'cash';};
+  const fpPorVend={},fpTot={cash:0,canje:0,banco:0,tercero:0};
+  ventasMes.forEach(v=>{const n=nombreVendedor(v),k=fpDe(v);(fpPorVend[n]=fpPorVend[n]||{cash:0,canje:0,banco:0,tercero:0})[k]++;fpTot[k]++;});
+  const fpFilas=Object.entries(fpPorVend).sort((a,b)=>Object.values(b[1]).reduce((x,y)=>x+y,0)-Object.values(a[1]).reduce((x,y)=>x+y,0));
+  const celFP=(n,neg)=>`<td style="background:${neg?'#000':'#FFF3BF'};color:${neg?'#fff':'#000'};padding:6px 10px;font-weight:800;font-size:13px;text-align:center;border:1px solid ${neg?'#000':'#E9E2B8'}">${n||'–'}</td>`;
+  const tablaFormaPago=()=>`<table style="border-collapse:collapse">
+    <tbody>
+      <tr><td colspan="${fpCols.length+2}" style="background:#7048E8;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #7048E8">💳 Forma de pago (propias + consig.)</td></tr>
+      <tr><td style="background:#F3F0FF;padding:4px 8px;font-size:11px;font-weight:700;border:1px solid #E5DBFF">Vendedor</td>${fpCols.map(([k,t])=>`<td style="background:#F3F0FF;padding:4px 8px;font-size:11px;font-weight:700;text-align:center;border:1px solid #E5DBFF">${t}</td>`).join('')}<td style="background:#F3F0FF;padding:4px 8px;font-size:11px;font-weight:700;text-align:center;border:1px solid #E5DBFF">Total</td></tr>
+      ${fpFilas.length?fpFilas.map(([n,o])=>`<tr><td style="background:#FFF3BF;padding:6px 10px;font-weight:700;font-size:12px;border:1px solid #E9E2B8">${n}</td>${fpCols.map(([k])=>celFP(o[k])).join('')}${celFP(Object.values(o).reduce((x,y)=>x+y,0),true)}</tr>`).join('')
+        :`<tr><td colspan="${fpCols.length+2}" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin ventas todavía este mes</td></tr>`}
+      <tr><td style="background:#000;color:#fff;padding:6px 10px;font-weight:800;font-size:12px;border:1px solid #000">TOTAL</td>${fpCols.map(([k])=>celFP(fpTot[k],true)).join('')}${celFP(ventasMes.length,true)}</tr>
+      <tr><td colspan="${fpCols.length+2}" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">Cash incluye efectivo, depósitos y transferencias</td></tr>
     </tbody>
   </table>`;
   const yaCerrado=(contData.historialVentasPorVendedor||[]).some(h=>h.mes===mes);
@@ -7579,6 +7606,7 @@ function renderResumenVentasWord(){
       ${tabla('Ventas Propias',filasPropias,propias.length,'#1971C2')}
       ${tabla('Ventas Consignación',filasConsig,consig.length,'#495057')}
       ${tablaMargen()}
+      ${tablaFormaPago()}
     </div>
   </div>`;
 }
