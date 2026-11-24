@@ -9811,6 +9811,105 @@ function excelCambiosPrecio(){
   exportarExcelConFormato(rows,'cambios_de_precio','Cambios de precio','Carros con cambio de precio');
 }
 
+
+// ======================== ESTADO DE RESULTADO HORIZONTAL (por mes) ========================
+// Usa el mismo cálculo del ER (renderEstado con calc.detalle) para cada mes del período, así los
+// números de cada columna son exactamente los que da el ER de ese mes. Primer y último mes se
+// recortan a las fechas elegidas.
+function erMesesDelPeriodo(desde,hasta){
+  const out=[];let y=Number(desde.slice(0,4)),m=Number(desde.slice(5,7));
+  const nombres=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  while(true){
+    const mk=y+'-'+String(m).padStart(2,'0');
+    if(mk>hasta.slice(0,7))break;
+    const ult=new Date(y,m,0).getDate();
+    const d=mk+'-01'<desde?desde:mk+'-01',h=mk+'-'+String(ult).padStart(2,'0')>hasta?hasta:mk+'-'+String(ult).padStart(2,'0');
+    out.push({mk,label:nombres[m-1]+' '+String(y).slice(2),desde:d,hasta:h});
+    m++;if(m>12){m=1;y++;}
+    if(out.length>36)break;
+  }
+  return out;
+}
+function erHorizontalDatos(desde,hasta){
+  const meses=erMesesDelPeriodo(desde,hasta);
+  const cols=meses.map(x=>renderEstado({desde:x.desde,hasta:x.hasta,detalle:true}));
+  const tot=renderEstado({desde,hasta,detalle:true});
+  const cuentas=k=>{const set=new Set();[...cols,tot].forEach(c=>Object.keys(c[k]||{}).forEach(n=>set.add(n)));return [...set].sort((a,b)=>(tot[k][b]||0)-(tot[k][a]||0));};
+  const L=[]; // {t:'titulo'|'linea'|'sub'|'total', label, vals:[...], total, signo}
+  const linea=(label,f,tipo='linea',neg=false)=>L.push({tipo,label,vals:cols.map(f),total:f(tot),neg});
+  L.push({tipo:'titulo',label:'INGRESOS'});
+  linea('Ventas de vehículos',c=>c.ingresosVentas);
+  linea('Reembolso de alistamiento',c=>c.reembolso);
+  linea('Otros ingresos (comisiones directas)',c=>c.otrosIngresos);
+  linea('Total ingresos',c=>c.ingresos,'sub');
+  L.push({tipo:'titulo',label:'COSTO DE VENTAS'});
+  linea('Costo de adquisición',c=>c.costoAdq,'linea',true);
+  linea('Reparaciones de vehículos vendidos',c=>c.reparaciones,'linea',true);
+  linea('Comisión de compradores',c=>c.comisionCompradores,'linea',true);
+  linea('Total costo de ventas',c=>c.costos,'sub',true);
+  linea('UTILIDAD BRUTA',c=>c.utilBruta,'total');
+  linea('Comisiones de vendedores',c=>c.comisiones,'linea',true);
+  L.push({tipo:'titulo',label:'GASTOS OPERATIVOS / ADMINISTRATIVOS'});
+  cuentas('admin').forEach(n=>linea(n,c=>(c.admin||{})[n]||0,'linea',true));
+  linea('Total gastos operativos',c=>c.totAdmin,'sub',true);
+  linea('UTILIDAD OPERATIVA',c=>c.utilOp,'total');
+  const fin=cuentas('financiero');
+  if(fin.length){L.push({tipo:'titulo',label:'GASTOS FINANCIEROS'});fin.forEach(n=>linea(n,c=>(c.financiero||{})[n]||0,'linea',true));linea('Total gastos financieros',c=>c.totFinanciero,'sub',true);}
+  linea('UTILIDAD DESPUÉS DE FINANCIEROS',c=>c.utilFinanciera,'total');
+  const no=cuentas('noOp');
+  if(no.length){L.push({tipo:'titulo',label:'GASTOS NO OPERATIVOS'});no.forEach(n=>linea(n,c=>(c.noOp||{})[n]||0,'linea',true));linea('Total no operativos',c=>c.totNoOp,'sub',true);}
+  if(cols.some(c=>c.totReclamo)||tot.totReclamo)linea('Gastos por reclamos',c=>c.totReclamo,'linea',true);
+  linea('UTILIDAD NETA',c=>c.utilNeta,'total');
+  linea('Unidades vendidas',c=>c.nVentas,'cant');
+  return{meses,L};
+}
+function erHorizontalTablaHTML(desde,hasta){
+  const {meses,L}=erHorizontalDatos(desde,hasta);
+  const f=(v,neg,tipo)=>{if(tipo==='cant')return v||'–';if(!v)return '<span style="color:#cbd5e1">–</span>';const t=fmt(Math.abs(v));return (neg&&v>0)||v<0?`<span style="color:#C92A2A">(${t})</span>`:t;};
+  const n=meses.length+2;
+  const filas=L.map(x=>{
+    if(x.tipo==='titulo')return `<tr><td colspan="${n}" style="background:#E7F5FF;font-weight:800;font-size:11px;color:#1971C2;padding:6px 8px">${x.label}</td></tr>`;
+    const st=x.tipo==='total'?'font-weight:800;background:#000;color:#fff':x.tipo==='sub'?'font-weight:700;background:#f1f5f9':'';
+    const prom=meses.length?x.total/meses.length:0;
+    return `<tr style="${st}"><td style="padding:4px 8px;white-space:nowrap;${x.tipo==='linea'?'padding-left:18px':''}">${x.label}</td>${x.vals.map(v=>`<td class="num" style="padding:4px 8px;text-align:right;white-space:nowrap">${f(v,x.neg,x.tipo)}</td>`).join('')}<td class="num" style="padding:4px 8px;text-align:right;font-weight:800;white-space:nowrap;${x.tipo==='total'?'':'background:#FFF9DB'}">${f(x.total,x.neg,x.tipo)}</td><td class="num" style="padding:4px 8px;text-align:right;white-space:nowrap;color:${x.tipo==='total'?'#ccc':'#64748b'}">${x.tipo==='cant'?(prom?prom.toFixed(1):'–'):f(prom,x.neg,x.tipo)}</td></tr>`;
+  }).join('');
+  return `<table style="border-collapse:collapse;font-size:11.5px;width:100%"><thead><tr style="background:#0f172a;color:#fff"><th style="text-align:left;padding:6px 8px">Cuenta</th>${meses.map(m=>`<th style="padding:6px 8px;text-align:right">${m.label}</th>`).join('')}<th style="padding:6px 8px;text-align:right;background:#E67700">Total</th><th style="padding:6px 8px;text-align:right">Promedio</th></tr></thead><tbody>${filas}</tbody></table>`;
+}
+function abrirERHorizontal(desde,hasta){
+  document.getElementById('erh-ov')?.remove();
+  const meses=erMesesDelPeriodo(desde,hasta);
+  const ov=document.createElement('div');ov.id='erh-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:2vh 1vw;overflow:auto';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(1600px,100%);padding:1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.6rem">
+      <h3 style="margin:0;font-size:17px"><i class="ti ti-table-column" style="color:#0B6E6E"></i> Estado de Resultado por mes — del ${desde.split('-').reverse().join('/')} al ${hasta.split('-').reverse().join('/')} (${meses.length} mes${meses.length===1?'':'es'})</h3>
+      <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="imprimirERHorizontal('${desde}','${hasta}')"><i class="ti ti-printer"></i>Imprimir</button><button class="btn btn-sm" onclick="excelERHorizontal('${desde}','${hasta}')"><i class="ti ti-download"></i>Excel</button><button class="btn btn-sm" onclick="document.getElementById('erh-ov').remove()"><i class="ti ti-x"></i>Cerrar</button></div>
+    </div>
+    <p style="font-size:11px;color:var(--text3);margin:0 0 .6rem">Cada columna es el Estado de Resultado de ese mes (mismo cálculo). Gastos y costos entre paréntesis en rojo. Para cambiar los meses, cambiá las fechas "del / al" del Estado de Resultado.</p>
+    <div style="overflow-x:auto">${erHorizontalTablaHTML(desde,hasta)}</div>
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+}
+function imprimirERHorizontal(desde,hasta){
+  const w=window.open('','_blank');if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  const n=erMesesDelPeriodo(desde,hasta).length;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Estado de Resultado por mes</title><style>body{font-family:Arial,sans-serif;margin:10px;color:#0f172a}table{width:100%;border-collapse:collapse;font-size:${n>8?'8.5':'10'}px}td,th{border:1px solid #e2e8f0}@page{size:${n>6?'legal':'letter'} landscape;margin:8mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+  <h2 style="margin:0">NICAUTO — Estado de Resultado por mes</h2><div style="color:#475569;margin:2px 0 8px;font-size:12px">Del ${desde.split('-').reverse().join('/')} al ${hasta.split('-').reverse().join('/')}</div>
+  ${erHorizontalTablaHTML(desde,hasta)}<script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+function excelERHorizontal(desde,hasta){
+  const {meses,L}=erHorizontalDatos(desde,hasta);
+  const rows=[['Cuenta',...meses.map(m=>m.label),'Total','Promedio']];
+  L.forEach(x=>{
+    if(x.tipo==='titulo'){rows.push([x.label]);return;}
+    const sg=v=>x.tipo==='cant'?v:(x.neg?-Math.abs(v||0):(v||0));
+    rows.push([x.label,...x.vals.map(sg),sg(x.total),meses.length?Math.round(sg(x.total)/meses.length*100)/100:0]);
+  });
+  exportarExcelConFormato(rows,'estado_resultado_por_mes','ER por mes','Estado de Resultado por mes — '+desde+' al '+hasta);
+}
+
 // ======================== HOJA POR ANTIGÜEDAD (Inventario) ========================
 // Clasifica los carros en inventario (no vendidos) por días desde la fecha de compra, en grupos,
 // con filtros de marca, modelo, precio, estado y elección de columnas. Imprime y exporta a Excel
@@ -15678,6 +15777,14 @@ function renderEstado(calc){
   const utilOp=utilBruta-(vistaComision?0:comisiones)-totAdmin;
   const utilFinanciera=utilOp-totFinanciero;
   const utilNeta=utilFinanciera-totNoOp-totReclamo;
+  if(soloCalculo&&calc.detalle){
+    // Para el ER horizontal por mes: todas las líneas, con los gastos agrupados por cuenta
+    const porCta=lista=>{const m={};lista.forEach(g=>{const k=g.cat||'Sin categoría';m[k]=(m[k]||0)+Number(g.monto||0);});return m;};
+    return{ingresosVentas,reembolso:totReembolsoAlistamiento,otrosIngresos:totComDirER,ingresos,
+      costoAdq:vtasC.reduce((s,v)=>s+Number(v.costo||0),0),reparaciones:totReparacionesReales,comisionCompradores:totComisionCompradores,costos,
+      utilBruta,comisiones,admin:porCta(gastosAdmin),totAdmin,utilOp,financiero:porCta(gastosFinancieros),totFinanciero,utilFinanciera,
+      noOp:porCta(gastosNoOp),totNoOp,totReclamo,utilNeta,nVentas:vtasC.length};
+  }
   if(soloCalculo)return{ingresos,utilBruta,comisiones,margenVentas:utilBruta-comisiones,utilOp,utilNeta};
   const mb=ingresos>0?((utilBruta/ingresos)*100).toFixed(1):0;
   const mn=ingresos>0?((utilNeta/ingresos)*100).toFixed(1):0;
@@ -15734,6 +15841,7 @@ function renderEstado(calc){
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${MODO==='admin'?`<button class="btn" onclick="corregirCategoriasRendicionAntiguas()" style="color:var(--purple);border-color:var(--purple)" title="Corrige gastos viejos de Rendición que quedaron mal clasificados"><i class="ti ti-tool"></i>Corregir cuentas de Rendición</button>`:''}
+      <button class="btn" onclick="abrirERHorizontal('${desde}','${hasta}')" style="color:#0B6E6E;border-color:#0B6E6E" title="Mismo Estado de Resultado, con cada mes del período en una columna"><i class="ti ti-table-column"></i>Ver por mes (horizontal)</button>
       <button class="btn" onclick="imprimirEstadoResultado('${desde}','${hasta}')"><i class="ti ti-printer"></i>Imprimir</button>
       ${MODO==='admin'?`<button class="btn btn-success" onclick="cerrarEstadoResultado('${desde}','${hasta}')"><i class="ti ti-archive"></i>Cerrar y archivar este período</button>`:''}
     </div>
