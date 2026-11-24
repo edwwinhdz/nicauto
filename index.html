@@ -7567,9 +7567,9 @@ function renderResumenVentasWord(){
   const tablaMargen=()=>`<table style="max-width:280px;border-collapse:collapse">
     <tbody>
       <tr><td colspan="2" style="background:#2F9E44;color:#fff;font-weight:800;text-align:center;text-transform:uppercase;border:1px solid #2F9E44">🏆 Mejor margen (propias + consig.)</td></tr>
-      ${mejorMargen?filaW(mejorMargen[0],mejorMargen[1].toFixed(1)+'%'+(mejorMargen[2]!=null?`<div style="font-size:10px;font-weight:600;color:#B2F2BB">${fmtD(Math.round(mejorMargen[2]))}</div>`:'')):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin datos todavía</td></tr>`}
-      ${rankingMargen.slice(1).map(([n,m,g])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%${g!=null?` · ${fmtD(Math.round(g))}`:''}</td></tr>`).join('')}
-      ${rankingMargen.length?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">% = parte de la ganancia total generada (${fmtD(Math.round(rankingMargen.reduce((t,r)=>t+(r[2]||0),0)))})${window._margenExcluidas?` · no incluye ${window._margenExcluidas} venta${window._margenExcluidas===1?'':'s'} con pérdida (liquidación autorizada)`:''}</td></tr>`:''}
+      ${mejorMargen?filaW(mejorMargen[0],mejorMargen[1].toFixed(1)+'%'):`<tr><td colspan="2" style="padding:6px 10px;text-align:center;color:var(--text3);font-size:12px">Sin datos todavía</td></tr>`}
+      ${rankingMargen.slice(1).map(([n,m,g])=>`<tr><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);border:1px solid #E9ECEF">${n}</td><td style="background:#F8F9FA;padding:4px 10px;font-size:11px;color:var(--text2);text-align:center;border:1px solid #E9ECEF">${m.toFixed(1)}%</td></tr>`).join('')}
+      ${rankingMargen.length?`<tr><td colspan="2" style="padding:3px 6px;font-size:10px;color:var(--text3);text-align:center">% = parte de la ganancia total generada${window._margenExcluidas?` · no incluye ${window._margenExcluidas} venta${window._margenExcluidas===1?'':'s'} con pérdida (liquidación autorizada)`:''}</td></tr>`:''}
     </tbody>
   </table>`;
   // Cuadro por forma de pago (propias + consignación), según el texto de "pago" que arma la venta
