@@ -9613,7 +9613,7 @@ function renderDash(){
   const consigVivos=(contData.consignacion||[]).filter(c=>c&&c.estado!=='Vendido'&&!c.anulado);
   const invPropio=vehiculos.filter(v=>v.estado!=='Vendido').length;
   let invGer=0;try{invGer=inventarioGerTaller().n;}catch(e){}
-  const invTotal=invPropio+invGer; // sin consignación (pedido nov 2026), con Gerencia/Taller
+  const invTotal=invPropio; // Inventario de Venta: solo carros de Inventario (sin consignación ni Gerencia/Taller — pedido 26/11)
   const dispConsig=consigVivos.filter(c=>c.estado==='Disponible').length;
   const dispTotal=disp+dispConsig;
   const vendidosMes=vtasMes.length;
@@ -9628,7 +9628,7 @@ function renderDash(){
   const nombreMes=hoy.toLocaleDateString('es-NI',{month:'long',year:'numeric'});
   const sub=t=>`<div style="font-size:10.5px;color:var(--text3);margin-top:2px">${t}</div>`;
   document.getElementById('dash-stats').innerHTML=`
-    <div class="stat-card" style="cursor:pointer" onclick="showPage('inventario')"><div class="stat-label"><i class="ti ti-car"></i>Inventario total</div><div class="stat-value stat-blue">${invTotal}</div>${sub(invPropio+' inventario · '+invGer+' Gerencia/Taller')}</div>
+    <div class="stat-card" style="cursor:pointer" onclick="showPage('inventario')"><div class="stat-label"><i class="ti ti-car"></i>Inventario de Venta</div><div class="stat-value stat-blue">${invPropio}</div></div>
     <div class="stat-card" style="cursor:pointer" onclick="showPage('listaprecios')"><div class="stat-label"><i class="ti ti-check"></i>Disponibles</div><div class="stat-value stat-green">${dispTotal}</div>${sub(disp+' propios · '+dispConsig+' consignación')}</div>
     <div class="stat-card" style="cursor:pointer" onclick="showPage('ventas')"><div class="stat-label"><i class="ti ti-shopping-cart"></i>Vendidos (mes)</div><div class="stat-value stat-amber">${vendidosMes}</div>${sub('Ventas completadas de '+nombreMes)}</div>
     <div class="stat-card"><div class="stat-label"><i class="ti ti-users"></i>Clientes</div><div class="stat-value stat-blue">0</div></div><!-- clientes.length -->
@@ -30239,7 +30239,7 @@ function renderComisionesContable(){
   const puede=['admin','coordinador','gerente1','gerente2'].includes(MODO);
   const el=document.getElementById('cont-comisiones');
   if(!el)return;
-  el.innerHTML=`
+  el.innerHTML=`${planillaSemanalComHTML()}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
     <p style="font-size:13px;color:var(--text2)">Planilla de comisiones por período</p>
     ${puede?`<button class="btn btn-primary btn-sm" onclick="nuevaPlanillaComision()"><i class="ti ti-plus"></i>Nueva planilla</button>`:''}
@@ -30277,6 +30277,202 @@ function renderComisionesContable(){
       </tr></tfoot>
     </table></div>
   </div>`).join('')}`;
+}
+
+
+// ======================== PLANILLA SEMANAL DE COMISIONES (automática) ========================
+// Vendedores: comisión registrada en cada venta FACTURADA (Completada) dentro de la semana.
+// Compradores: $200 por cada carro COMPRADO en la semana (fecha de compra), recompras incluidas;
+// las compras de Gerencia no llevan comisión.
+const COMISION_COMPRA_USD=200;
+function comSemanaPorDefecto(){
+  const h=new Date(hoyLocal()+'T12:00:00');const dow=(h.getDay()+6)%7; // lunes=0
+  const lun=new Date(h);lun.setDate(h.getDate()-dow);const dom=new Date(lun);dom.setDate(lun.getDate()+6);
+  const f=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return{desde:f(lun),hasta:f(dom)};
+}
+function comSemanalDatos(desde,hasta){
+  const enR=f=>f&&f>=desde&&f<=hasta;
+  const nomVeh=vh=>vh?`${String(vh.marca||'').trim()} ${String(vh.modelo||'').trim()} ${vh.anio||''}`.replace(/\s+/g,' ').trim()+(vh.placa?' ('+vh.placa+')':''):'Vehículo';
+  let ventasL=ventas.filter(v=>v.estado==='Completada'&&enR(v.fecha)&&Number(v.comision||0)>0).map(v=>{
+    const vnd=clientes.find(c=>c.id===v.vendedorId);
+    const vh=buscarVehiculoOConsig(v.vehiculoId);
+    return{key:'V_'+v.id,tipo:'venta',nombre:normalizarNombrePizarra(vnd?vnd.nombre:(v.vendedor||'—'))||'—',fecha:v.fecha,detalle:nomVeh(vh)+(/^CONSIG_/.test(String(v.vehiculoId||''))?' [Consig.]':''),monto:Number(v.comision||0),recibo:v.numeroRecibo||v.recibo||''};
+  }).filter(x=>x.nombre!=='Gerencia');
+  let comprasL=vehiculos.filter(v=>enR(v.fechacompra)&&String(v.agentecompra||'').trim()).map(v=>({key:'C_'+v.id,tipo:'compra',nombre:normalizarNombrePizarra(v.agentecompra)||String(v.agentecompra).trim(),fecha:v.fechacompra,detalle:nomVeh(v),monto:COMISION_COMPRA_USD}))
+    .filter(x=>!/^gerencia$/i.test(x.nombre));
+  // Correcciones a mano: cambios (nombre, vehículo, monto), líneas borradas y líneas agregadas
+  const aj=contData.comSemanalAjustes||{};
+  const ov=aj.cambios||{};
+  const extras=(aj.extras||[]).filter(x=>x&&!x.anulado&&enR(x.fecha)).map(x=>({...x,key:'X_'+x.id,manual:true}));
+  const aplicar=l=>l.map(x=>{const c=ov[x.key];if(!c||(!c.borrado&&c.nombre==null&&c.detalle==null&&c.monto==null))return x;if(c.borrado)return {...x,borrado:true};return{...x,nombre:c.nombre!=null?c.nombre:x.nombre,detalle:c.detalle!=null?c.detalle:x.detalle,monto:c.monto!=null?Number(c.monto):x.monto,editado:true,original:x};});
+  const todasV=aplicar(ventasL).concat(extras.filter(x=>x.tipo==='venta'));
+  const todasC=aplicar(comprasL).concat(extras.filter(x=>x.tipo==='compra'));
+  const borradas=[...todasV,...todasC].filter(x=>x.borrado);
+  ventasL=todasV.filter(x=>!x.borrado);comprasL=todasC.filter(x=>!x.borrado);
+  const agrupar=l=>{const m={};l.forEach(x=>{(m[x.nombre]=m[x.nombre]||{nombre:x.nombre,items:[],total:0}).items.push(x);m[x.nombre].total+=x.monto;});return Object.values(m).map(g=>({...g,items:g.items.sort((a,b)=>a.fecha.localeCompare(b.fecha))})).sort((a,b)=>b.total-a.total||a.nombre.localeCompare(b.nombre));};
+  const vend=agrupar(ventasL),comp=agrupar(comprasL);
+  const personas={};
+  vend.forEach(g=>{(personas[g.nombre]=personas[g.nombre]||{nombre:g.nombre,venta:0,compra:0,nV:0,nC:0});personas[g.nombre].venta+=g.total;personas[g.nombre].nV+=g.items.length;});
+  comp.forEach(g=>{(personas[g.nombre]=personas[g.nombre]||{nombre:g.nombre,venta:0,compra:0,nV:0,nC:0});personas[g.nombre].compra+=g.total;personas[g.nombre].nC+=g.items.length;});
+  const dedMap=((contData.comSemanalAjustes||{}).deducciones)||{};
+  const resumen=Object.values(personas).map(p=>{const dd=dedMap[desde+'|'+p.nombre]||{};const ded=Number(dd.monto||0);return{...p,bruto:p.venta+p.compra,ded,dedMotivo:dd.motivo||'',total:p.venta+p.compra-ded};}).sort((a,b)=>b.bruto-a.bruto);
+  return{vend,comp,resumen,borradas,totDed:resumen.reduce((s,r)=>s+r.ded,0),totVenta:ventasL.reduce((s,x)=>s+x.monto,0),totCompra:comprasL.reduce((s,x)=>s+x.monto,0)};
+}
+function comSemanalTablasHTML(desde,hasta,paraImprimir){
+  const d=comSemanalDatos(desde,hasta);
+  const fF=f=>f?f.split('-').reverse().join('/'):'';
+  const ed=!paraImprimir&&puedeEditarComSemanal();
+  const det=(g,concepto)=>g.items.map((x,i)=>`<tr${(x.editado||x.manual)&&!paraImprimir?' style="background:#FFF9DB"':''}>
+      ${i===0?`<td rowspan="${g.items.length}" style="font-weight:700;vertical-align:top">${g.nombre}</td>`:''}
+      <td>${fF(x.fecha)}</td><td>${x.detalle}${x.recibo?` <span style="color:#64748b;font-size:10px">Rec. ${x.recibo}</span>`:''}${!paraImprimir&&x.editado?' <span style="color:#E67700;font-size:10px" title="Corregido a mano">● corregido</span>':''}${!paraImprimir&&x.manual?' <span style="color:#E67700;font-size:10px">● agregado a mano</span>':''}</td>
+      <td class="num" style="text-align:right">${fmtD(x.monto)}</td>
+      ${i===0?`<td rowspan="${g.items.length}" class="num" style="text-align:right;font-weight:800;vertical-align:top">${fmtD(g.total)}</td>`:''}
+      ${ed?`<td style="white-space:nowrap;text-align:center"><button class="btn btn-sm" title="Modificar" onclick="editarLineaComSemanal('${x.key}')" style="padding:2px 6px"><i class="ti ti-pencil"></i></button> <button class="btn btn-sm" title="Borrar" onclick="borrarLineaComSemanal('${x.key}')" style="padding:2px 6px;color:var(--red)"><i class="ti ti-trash"></i></button></td>`:''}
+    </tr>`).join('');
+  const tabla=(titulo,color,grupos,tot,txtVacio,tipoTabla)=>`<div style="margin-bottom:.9rem">
+    <div style="background:${color};color:#fff;font-weight:800;padding:6px 10px;border-radius:6px 6px 0 0;font-size:13px">${titulo}</div>
+    <table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead><tr><th>Nombre</th><th>Fecha</th><th>Vehículo</th><th style="text-align:right">Comisión</th><th style="text-align:right">Total persona</th>${ed?'<th style="text-align:center">Acciones</th>':''}</tr></thead>
+    <tbody>${grupos.length?grupos.map(g=>det(g)).join(''):`<tr><td colspan="${ed?6:5}" style="text-align:center;color:#64748b;padding:.7rem">${txtVacio}</td></tr>`}</tbody>
+    <tfoot><tr style="font-weight:800;background:#f1f5f9"><td colspan="4" style="text-align:right">${ed?`<button class="btn btn-sm" style="float:left" onclick="agregarLineaComSemanal('${tipoTabla}')"><i class="ti ti-plus"></i>Agregar línea</button>`:''}Subtotal</td><td style="text-align:right">${fmtD(tot)}</td>${ed?'<td></td>':''}</tr></tfoot></table></div>`;
+  const resumen=`<div>
+    <div style="background:#0f172a;color:#fff;font-weight:800;padding:6px 10px;border-radius:6px 6px 0 0;font-size:13px">RESUMEN A PAGAR POR PERSONA</div>
+    <table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead><tr><th>Nombre</th><th style="text-align:right">Comisión venta</th><th style="text-align:right">Comisión compra</th><th style="text-align:right">Subtotal</th><th style="text-align:right">Deducciones</th><th style="text-align:right">TOTAL A PAGAR</th><th style="min-width:140px">Firma</th></tr></thead>
+    <tbody>${d.resumen.map(r=>`<tr><td style="font-weight:700">${r.nombre}</td>
+      <td style="text-align:right">${r.venta?fmtD(r.venta)+` <span style="color:#64748b;font-size:10px">(${r.nV})</span>`:'–'}</td>
+      <td style="text-align:right">${r.compra?fmtD(r.compra)+` <span style="color:#64748b;font-size:10px">(${r.nC})</span>`:'–'}</td>
+      <td style="text-align:right">${fmtD(r.bruto)}</td>
+      <td style="text-align:right;color:#C92A2A;${ed?'cursor:pointer;background:#FFF5F5':''}" ${ed?`onclick="editarDeduccionComSemanal('${desde}','${r.nombre.replace(/'/g,"\\'")}')" title="Clic para poner o cambiar la deducción"`:''}>${r.ded?'('+fmtD(r.ded)+')':(ed?'<span style="color:#cbd5e1">+ agregar</span>':'–')}${r.dedMotivo?`<div style="font-size:9.5px;color:#64748b">${r.dedMotivo}</div>`:''}</td>
+      <td style="text-align:right;font-weight:800;color:${r.total<0?'#C92A2A':'#2F9E44'}">${fmtD(r.total)}</td><td style="border-bottom:1px solid #94a3b8;height:26px"></td></tr>`).join('')||`<tr><td colspan="7" style="text-align:center;color:#64748b">Sin comisiones en la semana</td></tr>`}</tbody>
+    <tfoot><tr style="font-weight:800;background:#000;color:#fff"><td>TOTAL</td><td style="text-align:right">${fmtD(d.totVenta)}</td><td style="text-align:right">${fmtD(d.totCompra)}</td><td style="text-align:right">${fmtD(d.totVenta+d.totCompra)}</td><td style="text-align:right">${d.totDed?'('+fmtD(d.totDed)+')':'–'}</td><td style="text-align:right;font-size:14px;background:#2F9E44">${fmtD(d.totVenta+d.totCompra-d.totDed)}</td><td></td></tr></tfoot></table></div>`;
+  const borr=ed&&d.borradas.length?`<div style="font-size:11px;color:var(--text3);margin:-.4rem 0 .8rem">🗑 ${d.borradas.length} línea${d.borradas.length===1?'':'s'} borrada${d.borradas.length===1?'':'s'} esta semana: ${d.borradas.map(x=>`<span style="white-space:nowrap">${x.nombre} — ${x.detalle} (${fmtD(x.monto)}) <a href="#" onclick="restaurarLineaComSemanal('${x.key}');return false" style="color:var(--blue)">restaurar</a></span>`).join(' · ')}</div>`:'';
+  return tabla('COMISIONES DE VENDEDORES — ventas facturadas en la semana','#1971C2',d.vend,d.totVenta,'Sin ventas facturadas en la semana','venta')
+    +tabla(`COMISIONES DE COMPRADORES — $${COMISION_COMPRA_USD} por carro comprado (sin Gerencia)`,'#7048E8',d.comp,d.totCompra,'Sin compras en la semana','compra')
+    +borr+resumen;
+}
+function planillaSemanalComHTML(){
+  const def=comSemanaPorDefecto();
+  const desde=window._comSemDesde||def.desde,hasta=window._comSemHasta||def.hasta;
+  return `<div class="card" style="margin-bottom:1.2rem">
+    <div class="card-head" style="flex-wrap:wrap;gap:8px"><h3><i class="ti ti-calendar-week"></i> Planilla semanal de comisiones (automática)</h3>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px">
+        Del <input type="date" value="${desde}" onchange="window._comSemDesde=this.value;renderComisionesContable()" style="width:auto;padding:5px 8px">
+        al <input type="date" value="${hasta}" onchange="window._comSemHasta=this.value;renderComisionesContable()" style="width:auto;padding:5px 8px">
+        <button class="btn btn-sm" onclick="comSemanaMover(-7)" title="Semana anterior"><i class="ti ti-chevron-left"></i></button>
+        <button class="btn btn-sm" onclick="comSemanaMover(7)" title="Semana siguiente"><i class="ti ti-chevron-right"></i></button>
+        <button class="btn btn-sm" onclick="imprimirPlanillaSemanalCom()"><i class="ti ti-printer"></i>Imprimir</button>
+      </div></div>
+    <div style="padding:.8rem 1rem">
+      <p style="font-size:11px;color:var(--text3);margin:0 0 .7rem">Vendedores: la comisión registrada en cada venta facturada en la semana. Compradores: $${COMISION_COMPRA_USD} por cada carro comprado en la semana (fecha de compra, recompras incluidas); las compras de Gerencia no llevan comisión.</p>
+      ${comSemanalTablasHTML(desde,hasta)}
+    </div></div>`;
+}
+
+function puedeEditarComSemanal(){return ['admin','coordinador','gerente1','gerente2'].includes(MODO);}
+function comSemRango(){const def=comSemanaPorDefecto();return{desde:window._comSemDesde||def.desde,hasta:window._comSemHasta||def.hasta};}
+function comSemBuscarLinea(key){
+  const {desde,hasta}=comSemRango();const d=comSemanalDatos(desde,hasta);
+  for(const g of [...d.vend,...d.comp])for(const x of g.items)if(x.key===key)return x;
+  return null;
+}
+async function comSemGuardar(){renderComisionesContable();await saveOne('contable',{id:'main',...contData});}
+function comSemAj(){contData.comSemanalAjustes=contData.comSemanalAjustes||{cambios:{},extras:[]};contData.comSemanalAjustes.cambios=contData.comSemanalAjustes.cambios||{};contData.comSemanalAjustes.extras=contData.comSemanalAjustes.extras||[];return contData.comSemanalAjustes;}
+function comSemFormulario(titulo,x,tipo,onOk){
+  document.getElementById('comsem-ov')?.remove();
+  const nombres=[...new Set([...clientes.filter(c=>c.rol==='vendedor').map(c=>normalizarNombrePizarra(c.nombre)),...vehiculos.map(v=>normalizarNombrePizarra(v.agentecompra||'')).filter(Boolean)])].filter(n=>n&&n!=='Gerencia').sort();
+  const ov=document.createElement('div');ov.id='comsem-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:10vh 1rem';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(460px,100%);padding:1.1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <h3 style="margin:0 0 .8rem;font-size:16px">${titulo}</h3>
+    <div class="form-group"><label>${tipo==='venta'?'Vendedor':'Comprador (agente)'}</label><input id="cs-nombre" list="cs-nombres" value="${String(x.nombre||'').replace(/"/g,'&quot;')}"><datalist id="cs-nombres">${nombres.map(n=>`<option value="${n}">`).join('')}</datalist></div>
+    ${x.fechaEditable?`<div class="form-group"><label>Fecha</label><input type="date" id="cs-fecha" value="${x.fecha||''}"></div>`:''}
+    <div class="form-group"><label>Vehículo</label><input id="cs-detalle" value="${String(x.detalle||'').replace(/"/g,'&quot;')}" placeholder="Marca Modelo Año (placa)"></div>
+    <div class="form-group"><label>Comisión (USD $)</label><input id="cs-monto" type="text" inputmode="decimal" value="${x.monto!=null?x.monto:''}"></div>
+    ${x.original?`<p style="font-size:11px;color:var(--text3)">Original del sistema: ${x.original.nombre} — ${x.original.detalle} — ${fmtD(x.original.monto)} <a href="#" onclick="document.getElementById('comsem-ov').remove();restaurarLineaComSemanal('${x.key}');return false" style="color:var(--blue)">volver al original</a></p>`:''}
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:.8rem"><button class="btn" onclick="document.getElementById('comsem-ov').remove()">Cancelar</button><button class="btn btn-primary" id="cs-ok"><i class="ti ti-device-floppy"></i>Guardar</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('cs-ok').onclick=()=>{
+    const nombre=document.getElementById('cs-nombre').value.trim(),detalle=document.getElementById('cs-detalle').value.trim();
+    const monto=parseFloat(String(document.getElementById('cs-monto').value).replace(/[^0-9.\-]/g,''));
+    const fecha=document.getElementById('cs-fecha')?.value;
+    if(!nombre){alert('Escribí el nombre.');return;}
+    if(isNaN(monto)){alert('Escribí el monto de la comisión.');return;}
+    if(x.fechaEditable&&!fecha){alert('Elegí la fecha.');return;}
+    ov.remove();onOk({nombre:normalizarNombrePizarra(nombre)||nombre,detalle,monto,fecha});
+  };
+}
+function editarLineaComSemanal(key){
+  if(!puedeEditarComSemanal())return;
+  const x=comSemBuscarLinea(key);if(!x){alert('No se encontró esa línea.');return;}
+  if(x.manual){
+    comSemFormulario('Modificar línea agregada',{...x,fechaEditable:true},x.tipo,async r=>{
+      const e=comSemAj().extras.find(z=>'X_'+z.id===key);if(!e)return;
+      Object.assign(e,{nombre:r.nombre,detalle:r.detalle,monto:r.monto,fecha:r.fecha});await comSemGuardar();
+    });return;
+  }
+  comSemFormulario('Modificar comisión',x,x.tipo,async r=>{
+    comSemAj().cambios[key]={nombre:r.nombre,detalle:r.detalle,monto:r.monto,borrado:false,por:getNombreUsuario(),fecha:hoyLocal()};
+    await comSemGuardar();
+  });
+}
+async function borrarLineaComSemanal(key){
+  if(!puedeEditarComSemanal())return;
+  const x=comSemBuscarLinea(key);if(!x)return;
+  if(!confirm(`¿Borrar esta comisión de la planilla?\n\n${x.nombre} — ${x.detalle} — ${fmtD(x.monto)}\n\n(Solo se quita de la planilla de comisiones; la venta o la compra no se tocan.)`))return;
+  const aj=comSemAj();
+  if(x.manual){const e=aj.extras.find(z=>'X_'+z.id===key);if(e)e.anulado=true;}
+  else aj.cambios[key]={...(aj.cambios[key]||{}),borrado:true,por:getNombreUsuario(),fecha:hoyLocal()};
+  await comSemGuardar();
+}
+async function restaurarLineaComSemanal(key){
+  const aj=comSemAj();
+  // Se marca como "sin cambios" (null) en vez de borrar la clave, para que el merge con el servidor no la reviva
+  aj.cambios[key]={nombre:null,detalle:null,monto:null,borrado:false};
+  await comSemGuardar();
+}
+function agregarLineaComSemanal(tipo){
+  if(!puedeEditarComSemanal())return;
+  const {desde,hasta}=comSemRango();
+  const hoy=hoyLocal();
+  comSemFormulario(tipo==='venta'?'Agregar comisión de vendedor':'Agregar comisión de comprador',{nombre:'',detalle:'',monto:tipo==='compra'?COMISION_COMPRA_USD:'',fecha:hoy>=desde&&hoy<=hasta?hoy:desde,fechaEditable:true},tipo,async r=>{
+    if(r.fecha<desde||r.fecha>hasta)alert('Ojo: la fecha queda fuera de esta semana, va a aparecer en la planilla de la semana de esa fecha.');
+    comSemAj().extras.push({id:uid(),tipo,nombre:r.nombre,detalle:r.detalle,monto:r.monto,fecha:r.fecha,por:getNombreUsuario()});
+    await comSemGuardar();
+  });
+}
+
+
+function editarDeduccionComSemanal(desde,nombre){
+  if(!puedeEditarComSemanal())return;
+  const aj=comSemAj();aj.deducciones=aj.deducciones||{};
+  const k=desde+'|'+nombre,act=aj.deducciones[k]||{};
+  const m=prompt(`Deducción para ${nombre} (USD $)\n\nEscribí 0 o dejalo vacío para quitarla.`,act.monto?String(act.monto):'');
+  if(m===null)return;
+  const monto=parseFloat(String(m).replace(/[^0-9.]/g,''))||0;
+  let motivo='';
+  if(monto>0){motivo=prompt('Motivo de la deducción (ej. adelanto, préstamo, faltante):',act.motivo||'');if(motivo===null)return;}
+  aj.deducciones[k]={monto,motivo:(motivo||'').trim(),por:getNombreUsuario(),fecha:hoyLocal()};
+  comSemGuardar();
+}
+
+function comSemanaMover(dias){
+  const def=comSemanaPorDefecto();
+  const mv=f=>{const d=new Date(f+'T12:00:00');d.setDate(d.getDate()+dias);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+  window._comSemDesde=mv(window._comSemDesde||def.desde);window._comSemHasta=mv(window._comSemHasta||def.hasta);
+  renderComisionesContable();
+}
+function imprimirPlanillaSemanalCom(){
+  const def=comSemanaPorDefecto();
+  const desde=window._comSemDesde||def.desde,hasta=window._comSemHasta||def.hasta;
+  const w=window.open('','_blank');if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  const fF=f=>f.split('-').reverse().join('/');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Planilla semanal de comisiones</title><style>body{font-family:Arial,sans-serif;margin:16px;font-size:11.5px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}th{background:#e2e8f0;font-size:10.5px}@page{size:letter portrait;margin:10mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+    <h2 style="margin:0">NICAUTO — Planilla semanal de comisiones</h2><div style="color:#475569;margin:2px 0 10px">Semana del ${fF(desde)} al ${fF(hasta)} · Emitida ${fF(hoyLocal())}</div>
+    ${comSemanalTablasHTML(desde,hasta,true)}
+    <div style="display:flex;justify-content:space-around;margin-top:40px;font-size:11px"><div style="border-top:1px solid #000;width:200px;text-align:center;padding-top:4px">Elaborado por</div><div style="border-top:1px solid #000;width:200px;text-align:center;padding-top:4px">Autorizado por</div></div>
+    <script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
 }
 
 function calcNetoComision(pi,li){
