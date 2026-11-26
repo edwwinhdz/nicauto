@@ -14684,6 +14684,71 @@ function encabezadoCargoCredito(tipo){
   return String(tipo||'').startsWith('CxP')?'<th style="text-align:right">Cargos (pagos)</th><th style="text-align:right">Créditos (deuda)</th><th style="text-align:right">Saldo</th>'
     :'<th style="text-align:right">Cargos</th><th style="text-align:right">Créditos (abonos)</th><th style="text-align:right">Saldo</th>';
 }
+
+// ======================== ESTADO DE CUENTA POR PERSONA (CxC) ========================
+// Desde el subtotal de cada persona en Contable › Cuentas: cargos y abonos de todas sus cuentas,
+// con saldo corrido, en dólares o en córdobas (convertido al tipo de cambio del sistema).
+function elegirMonedaEstadoCuenta(k){
+  const g=(window._ecGrupos||{})[k];if(!g)return;
+  document.getElementById('ec-ov')?.remove();
+  const ov=document.createElement('div');ov.id='ec-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:14vh 1rem';
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(400px,100%);padding:1.1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3);text-align:center">
+    <h3 style="margin:0 0 .3rem;font-size:16px"><i class="ti ti-printer"></i> Estado de cuenta</h3>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:.9rem"><b>${g.nombre}</b> — ¿en qué moneda?</div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:.7rem">
+      <button class="btn btn-primary" style="min-width:130px" onclick="document.getElementById('ec-ov').remove();imprimirEstadoCuentaPersona(window._ecSel,'USD')">💵 Dólares (US$)</button>
+      <button class="btn btn-success" style="min-width:130px" onclick="const t=parseFloat(document.getElementById('ec-tasa').value)||bancoTasa();document.getElementById('ec-ov').remove();imprimirEstadoCuentaPersona(window._ecSel,'NIO',t)">🇳🇮 Córdobas (C$)</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3)">Tipo de cambio para córdobas: C$ <input id="ec-tasa" type="text" inputmode="decimal" value="${bancoTasa()}" style="width:70px;padding:3px 6px;font-size:11px;display:inline-block"></div>
+    <button class="btn btn-sm" style="margin-top:.8rem" onclick="document.getElementById('ec-ov').remove()">Cancelar</button>
+  </div>`;
+  window._ecSel=k;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+}
+function imprimirEstadoCuentaPersona(k,moneda,tasa){
+  const g=(window._ecGrupos||{})[k];if(!g)return;
+  const ctas=(contData.cuentas||[]).filter(c=>g.ids.includes(c.id));
+  const nio=moneda==='NIO';tasa=Number(tasa||bancoTasa());
+  const cv=x=>nio?Number(x||0)*tasa:Number(x||0);
+  const fm=x=>(nio?'C$ ':'US$ ')+Number(cv(x)).toLocaleString('es-NI',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fF=f=>f?String(f).split('-').reverse().join('/'):'—';
+  let totC=0,totA=0,totSaldo=0;
+  const bloques=ctas.slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))).map(c=>{
+    const monto=Number(c.monto||0);
+    const hp=(Array.isArray(c.historialPagos)?c.historialPagos:[]).filter(p=>p&&Number(p.monto)>0).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+    const pag=hp.reduce((s,p)=>s+Number(p.monto||0),0);
+    const sinHist=monto-Number(c.saldo||0)-pag;
+    const movs=hp.map(p=>({fecha:p.fecha||'',recibo:p.recibo||'',concepto:p.concepto||'Abono',monto:Number(p.monto)}));
+    if(sinHist>0.005)movs.push({fecha:c.fechaPago||'',recibo:c.reciboCancelacion||'',concepto:'Abono registrado sin detalle',monto:sinHist});
+    let saldo=monto;totC+=monto;
+    const filas=[`<tr><td>${fF(c.fecha)}</td><td><b>${String(c.desc||'Cargo').replace(/^\s*\[[^\]]*\]\s*/,'').replace(/\s*—\s*Registrado por .*$/i,'').trim()||'Cargo'}</b></td><td></td><td class="n">${fm(monto)}</td><td class="n"></td><td class="n"><b>${fm(saldo)}</b></td></tr>`]
+      .concat(movs.map(m=>{saldo-=m.monto;totA+=m.monto;return `<tr style="color:#2F9E44"><td>${fF(m.fecha)}</td><td style="padding-left:16px">↳ ${m.concepto}</td><td>${m.recibo||''}</td><td class="n"></td><td class="n">${fm(m.monto)}</td><td class="n" style="color:#0f172a">${fm(Math.max(0,saldo))}</td></tr>`;}));
+    const pend=c.estado==='Pagada'?0:Number(c.saldo||0);totSaldo+=pend;
+    return filas.join('')+`<tr class="sub"><td colspan="5" style="text-align:right">Saldo de esta cuenta${c.estado==='Pagada'?' (pagada)':''}</td><td class="n">${fm(pend)}</td></tr>`;
+  }).join('');
+  const w=window.open('','_blank');if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Estado de cuenta — ${g.nombre}</title><style>
+    body{font-family:Arial,sans-serif;margin:18px;font-size:12px;color:#0f172a}table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{border:1px solid #cbd5e1;padding:5px 7px;text-align:left}th{background:#0f172a;color:#fff;font-size:11px}.n{text-align:right;white-space:nowrap}
+    tr.sub td{background:#f1f5f9;font-weight:700;font-size:11px}.tot td{background:#000;color:#fff;font-weight:800}
+    @page{size:letter portrait;margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #0f172a;padding-bottom:8px">
+      <div><div style="font-size:20px;font-weight:900">NICAUTO</div><div style="font-size:15px;font-weight:700">ESTADO DE CUENTA</div></div>
+      <div style="text-align:right;font-size:11px;color:#475569">Fecha de emisión: ${fF(hoyLocal())}<br>Moneda: <b>${nio?'Córdobas (C$)':'Dólares (US$)'}</b>${nio?`<br>Tipo de cambio: C$ ${tasa} por US$ 1`:''}</div>
+    </div>
+    <div style="margin-top:10px;font-size:13px">Cliente: <b>${g.nombre}</b> &nbsp;·&nbsp; Cuenta: ${g.tipo}</div>
+    <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Recibo</th><th class="n">Cargo</th><th class="n">Abono</th><th class="n">Saldo</th></tr></thead>
+    <tbody>${bloques||'<tr><td colspan="6" style="text-align:center">Sin movimientos</td></tr>'}</tbody>
+    <tfoot><tr class="tot"><td colspan="3">TOTALES</td><td class="n">${fm(totC)}</td><td class="n">${fm(totA)}</td><td class="n">${fm(totSaldo)}</td></tr></tfoot></table>
+    <div style="margin-top:14px;padding:10px 12px;border:2px solid #0f172a;border-radius:8px;display:flex;justify-content:space-between;font-size:14px"><b>SALDO PENDIENTE</b><b>${fm(totSaldo)}</b></div>
+    ${nio?`<div style="font-size:10px;color:#64748b;margin-top:6px">Montos convertidos de dólares a córdobas al tipo de cambio indicado. Equivalente en dólares: US$ ${Number(totSaldo).toLocaleString('es-NI',{minimumFractionDigits:2})}</div>`:''}
+    <div style="display:flex;justify-content:space-around;margin-top:60px;font-size:11px"><div style="border-top:1px solid #000;width:200px;text-align:center;padding-top:4px">Elaborado por</div><div style="border-top:1px solid #000;width:200px;text-align:center;padding-top:4px">Recibido por (cliente)</div></div>
+    <script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+
 function filasAbonosCxC(c,ncols){
   if(!c||!/^Cx[CP]/.test(String(c.tipo||'')))return'';
   const esCxP=String(c.tipo).startsWith('CxP');
@@ -14905,7 +14970,9 @@ function renderCuentas(){
     const pagDe=l=>l.reduce((s,c)=>s+cuentaPagado(c),0);
     const esCxPT=String(tipo).startsWith('CxP');
     const celdasTot=(l,peso)=>{const m=montoDe(l),p=pagDe(l);return`<td style="font-weight:${peso};text-align:right;color:var(--blue)">${fmtD(esCxPT?p:m)}</td><td style="font-weight:${peso};text-align:right;color:var(--green)">${fmtD(esCxPT?m:p)}</td>`;};
-    const filaSub=g=>`<tr style="background:var(--surface2);font-size:12px"><td></td><td style="font-weight:700">Subtotal ${g.nombre} <span style="font-weight:400;color:var(--text3)">(${g.filas.length})</span></td><td></td>${celdasTot(g.filas,700)}<td style="font-weight:800;text-align:right">${fmtD(pendDe(g.filas))}</td><td colspan="4"></td></tr>`;
+    window._ecGrupos=window._ecGrupos||{};
+    const filaSub=g=>{const kEC=tipo+'|'+g.nombre;window._ecGrupos[kEC]={nombre:g.nombre,tipo,ids:g.filas.map(c=>c.id)};
+      return `<tr style="background:var(--surface2);font-size:12px"><td></td><td style="font-weight:700">Subtotal ${g.nombre} <span style="font-weight:400;color:var(--text3)">(${g.filas.length})</span>${/^CxC/.test(String(tipo))?` <button class="btn btn-sm" onclick="event.stopPropagation();elegirMonedaEstadoCuenta('${kEC.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')" title="Imprimir estado de cuenta de esta persona" style="padding:2px 8px;font-size:11px;margin-left:6px;color:var(--purple);border-color:var(--purple)"><i class="ti ti-printer"></i> Estado de cuenta</button>`:''}</td><td></td>${celdasTot(g.filas,700)}<td style="font-weight:800;text-align:right">${fmtD(pendDe(g.filas))}</td><td colspan="4"></td></tr>`;};
     const cuerpo=grupos.map(g=>g.filas.map(c=>tblRows(c)+filasAbonosCxC(c,10)).join('')+filaSub(g)).join('')
       +`<tr style="background:var(--blue-light);font-weight:800"><td></td><td>TOTAL ${String(titulo).replace(/<[^>]*>/g,'').trim()}</td><td></td>${celdasTot(filas,800)}<td style="text-align:right">${fmtD(pendDe(filas))}</td><td colspan="4" style="font-size:11px;font-weight:400;color:var(--text2)">saldo pendiente (sin contar las pagadas)</td></tr>`;
     return`<div class="card" style="margin-bottom:1rem">
