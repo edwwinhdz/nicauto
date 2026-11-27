@@ -30423,19 +30423,22 @@ function comSemanalDatos(desde,hasta){
   const aplicar=l=>l.map(x=>{const c=ov[x.key];if(!c||(!c.borrado&&c.nombre==null&&c.detalle==null&&c.monto==null))return x;if(c.borrado)return {...x,borrado:true};return{...x,nombre:c.nombre!=null?c.nombre:x.nombre,detalle:c.detalle!=null?c.detalle:x.detalle,monto:c.monto!=null?Number(c.monto):x.monto,editado:true,original:x};});
   const todasV=aplicar(ventasL).concat(extras.filter(x=>x.tipo==='venta'));
   const todasC=aplicar(comprasL).concat(extras.filter(x=>x.tipo==='compra'));
+  const adicL=extras.filter(x=>x.tipo==='adicional');
   const borradas=[...todasV,...todasC].filter(x=>x.borrado);
   ventasL=todasV.filter(x=>!x.borrado);comprasL=todasC.filter(x=>!x.borrado);
   const agrupar=l=>{const m={};l.forEach(x=>{(m[x.nombre]=m[x.nombre]||{nombre:x.nombre,items:[],total:0}).items.push(x);m[x.nombre].total+=x.monto;});return Object.values(m).map(g=>({...g,items:g.items.sort((a,b)=>a.fecha.localeCompare(b.fecha))})).sort((a,b)=>b.total-a.total||a.nombre.localeCompare(b.nombre));};
-  const vend=agrupar(ventasL),comp=agrupar(comprasL);
+  const vend=agrupar(ventasL),comp=agrupar(comprasL),adic=agrupar(adicL);
   const personas={};
   vend.forEach(g=>{(personas[g.nombre]=personas[g.nombre]||{nombre:g.nombre,venta:0,compra:0,nV:0,nC:0});personas[g.nombre].venta+=g.total;personas[g.nombre].nV+=g.items.length;});
   comp.forEach(g=>{(personas[g.nombre]=personas[g.nombre]||{nombre:g.nombre,venta:0,compra:0,nV:0,nC:0});personas[g.nombre].compra+=g.total;personas[g.nombre].nC+=g.items.length;});
+  adic.forEach(g=>{(personas[g.nombre]=personas[g.nombre]||{nombre:g.nombre,venta:0,compra:0,nV:0,nC:0});personas[g.nombre].adic=(personas[g.nombre].adic||0)+g.total;personas[g.nombre].nA=g.items.length;});
   const dedMap=((contData.comSemanalAjustes||{}).deducciones)||{};
-  const resumen=Object.values(personas).map(p=>{const dd=dedMap[desde+'|'+p.nombre]||{};const ded=Number(dd.monto||0);return{...p,bruto:p.venta+p.compra,ded,dedMotivo:dd.motivo||'',total:p.venta+p.compra-ded};}).sort((a,b)=>b.bruto-a.bruto);
-  return{vend,comp,resumen,borradas,totDed:resumen.reduce((s,r)=>s+r.ded,0),totVenta:ventasL.reduce((s,x)=>s+x.monto,0),totCompra:comprasL.reduce((s,x)=>s+x.monto,0)};
+  const resumen=Object.values(personas).map(p=>{const dd=dedMap[desde+'|'+p.nombre]||{};const ded=Number(dd.monto||0);const ad=Number(p.adic||0);return{...p,adic:ad,bruto:p.venta+p.compra+ad,ded,dedMotivo:dd.motivo||'',total:p.venta+p.compra+ad-ded};}).sort((a,b)=>b.bruto-a.bruto);
+  return{vend,comp,adic,totAdic:adicL.reduce((s,x)=>s+x.monto,0),resumen,borradas,totDed:resumen.reduce((s,r)=>s+r.ded,0),totVenta:ventasL.reduce((s,x)=>s+x.monto,0),totCompra:comprasL.reduce((s,x)=>s+x.monto,0)};
 }
-function comSemanalTablasHTML(desde,hasta,paraImprimir){
-  const d=comSemanalDatos(desde,hasta);
+function comSemanalTablasHTML(desde,hasta,paraImprimir,dFijo){
+  const d=dFijo||comSemanalDatos(desde,hasta);
+  if(dFijo)paraImprimir=paraImprimir||'fijo';
   const fF=f=>f?f.split('-').reverse().join('/'):'';
   const ed=!paraImprimir&&puedeEditarComSemanal();
   const det=(g,concepto)=>g.items.map((x,i)=>`<tr${(x.editado||x.manual)&&!paraImprimir?' style="background:#FFF9DB"':''}>
@@ -30447,22 +30450,24 @@ function comSemanalTablasHTML(desde,hasta,paraImprimir){
     </tr>`).join('');
   const tabla=(titulo,color,grupos,tot,txtVacio,tipoTabla)=>`<div style="margin-bottom:.9rem">
     <div style="background:${color};color:#fff;font-weight:800;padding:6px 10px;border-radius:6px 6px 0 0;font-size:13px">${titulo}</div>
-    <table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead><tr><th>Nombre</th><th>Fecha</th><th>Vehículo</th><th style="text-align:right">Comisión</th><th style="text-align:right">Total persona</th>${ed?'<th style="text-align:center">Acciones</th>':''}</tr></thead>
+    <table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead><tr><th>Nombre</th><th>Fecha</th><th>${tipoTabla==='adicional'?'Concepto':'Vehículo'}</th><th style="text-align:right">Comisión</th><th style="text-align:right">Total persona</th>${ed?'<th style="text-align:center">Acciones</th>':''}</tr></thead>
     <tbody>${grupos.length?grupos.map(g=>det(g)).join(''):`<tr><td colspan="${ed?6:5}" style="text-align:center;color:#64748b;padding:.7rem">${txtVacio}</td></tr>`}</tbody>
     <tfoot><tr style="font-weight:800;background:#f1f5f9"><td colspan="4" style="text-align:right">${ed?`<button class="btn btn-sm" style="float:left" onclick="agregarLineaComSemanal('${tipoTabla}')"><i class="ti ti-plus"></i>Agregar línea</button>`:''}Subtotal</td><td style="text-align:right">${fmtD(tot)}</td>${ed?'<td></td>':''}</tr></tfoot></table></div>`;
   const resumen=`<div>
     <div style="background:#0f172a;color:#fff;font-weight:800;padding:6px 10px;border-radius:6px 6px 0 0;font-size:13px">RESUMEN A PAGAR POR PERSONA</div>
-    <table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead><tr><th>Nombre</th><th style="text-align:right">Comisión venta</th><th style="text-align:right">Comisión compra</th><th style="text-align:right">Subtotal</th><th style="text-align:right">Deducciones</th><th style="text-align:right">TOTAL A PAGAR</th><th style="min-width:140px">Firma</th></tr></thead>
+    <table class="tbl" style="font-size:12px;width:100%;border-collapse:collapse"><thead><tr><th>Nombre</th><th style="text-align:right">Comisión venta</th><th style="text-align:right">Comisión compra</th><th style="text-align:right">Pagos adicionales</th><th style="text-align:right">Subtotal</th><th style="text-align:right">Deducciones</th><th style="text-align:right">TOTAL A PAGAR</th><th style="min-width:140px">Firma</th></tr></thead>
     <tbody>${d.resumen.map(r=>`<tr><td style="font-weight:700">${r.nombre}</td>
       <td style="text-align:right">${r.venta?fmtD(r.venta)+` <span style="color:#64748b;font-size:10px">(${r.nV})</span>`:'–'}</td>
       <td style="text-align:right">${r.compra?fmtD(r.compra)+` <span style="color:#64748b;font-size:10px">(${r.nC})</span>`:'–'}</td>
+      <td style="text-align:right">${r.adic?fmtD(r.adic):'–'}</td>
       <td style="text-align:right">${fmtD(r.bruto)}</td>
       <td style="text-align:right;color:#C92A2A;${ed?'cursor:pointer;background:#FFF5F5':''}" ${ed?`onclick="editarDeduccionComSemanal('${desde}','${r.nombre.replace(/'/g,"\\'")}')" title="Clic para poner o cambiar la deducción"`:''}>${r.ded?'('+fmtD(r.ded)+')':(ed?'<span style="color:#cbd5e1">+ agregar</span>':'–')}${r.dedMotivo?`<div style="font-size:9.5px;color:#64748b">${r.dedMotivo}</div>`:''}</td>
-      <td style="text-align:right;font-weight:800;color:${r.total<0?'#C92A2A':'#2F9E44'}">${fmtD(r.total)}</td><td style="border-bottom:1px solid #94a3b8;height:26px"></td></tr>`).join('')||`<tr><td colspan="7" style="text-align:center;color:#64748b">Sin comisiones en la semana</td></tr>`}</tbody>
-    <tfoot><tr style="font-weight:800;background:#000;color:#fff"><td>TOTAL</td><td style="text-align:right">${fmtD(d.totVenta)}</td><td style="text-align:right">${fmtD(d.totCompra)}</td><td style="text-align:right">${fmtD(d.totVenta+d.totCompra)}</td><td style="text-align:right">${d.totDed?'('+fmtD(d.totDed)+')':'–'}</td><td style="text-align:right;font-size:14px;background:#2F9E44">${fmtD(d.totVenta+d.totCompra-d.totDed)}</td><td></td></tr></tfoot></table></div>`;
+      <td style="text-align:right;font-weight:800;color:${r.total<0?'#C92A2A':'#2F9E44'}">${fmtD(r.total)}</td><td style="border-bottom:1px solid #94a3b8;height:26px">${paraImprimir?'':`<button class="btn btn-sm" onclick="imprimirReciboComisionPersona('${r.nombre.replace(/'/g,"\\'")}')" style="padding:2px 8px;font-size:11px;color:var(--purple);border-color:var(--purple)"><i class="ti ti-receipt"></i> Recibo</button>`}</td></tr>`).join('')||`<tr><td colspan="8" style="text-align:center;color:#64748b">Sin comisiones en la semana</td></tr>`}</tbody>
+    <tfoot><tr style="font-weight:800;background:#000;color:#fff"><td>TOTAL</td><td style="text-align:right">${fmtD(d.totVenta)}</td><td style="text-align:right">${fmtD(d.totCompra)}</td><td style="text-align:right">${(d.totAdic||0)?fmtD(d.totAdic):'–'}</td><td style="text-align:right">${fmtD(d.totVenta+d.totCompra+(d.totAdic||0))}</td><td style="text-align:right">${d.totDed?'('+fmtD(d.totDed)+')':'–'}</td><td style="text-align:right;font-size:14px;background:#2F9E44">${fmtD(d.totVenta+d.totCompra+(d.totAdic||0)-d.totDed)}</td><td></td></tr></tfoot></table></div>`;
   const borr=ed&&d.borradas.length?`<div style="font-size:11px;color:var(--text3);margin:-.4rem 0 .8rem">🗑 ${d.borradas.length} línea${d.borradas.length===1?'':'s'} borrada${d.borradas.length===1?'':'s'} esta semana: ${d.borradas.map(x=>`<span style="white-space:nowrap">${x.nombre} — ${x.detalle} (${fmtD(x.monto)}) <a href="#" onclick="restaurarLineaComSemanal('${x.key}');return false" style="color:var(--blue)">restaurar</a></span>`).join(' · ')}</div>`:'';
   return tabla('COMISIONES DE VENDEDORES — ventas facturadas en la semana','#1971C2',d.vend,d.totVenta,'Sin ventas facturadas en la semana','venta')
     +tabla(`COMISIONES DE COMPRADORES — $${COMISION_COMPRA_USD} por carro comprado (sin Gerencia)`,'#7048E8',d.comp,d.totCompra,'Sin compras en la semana','compra')
+    +tabla('PAGOS ADICIONALES — viáticos, bonos u otros','#E8590C',d.adic||[],d.totAdic||0,'Sin pagos adicionales esta semana','adicional')
     +borr+resumen;
 }
 function planillaSemanalComHTML(){
@@ -30476,11 +30481,89 @@ function planillaSemanalComHTML(){
         <button class="btn btn-sm" onclick="comSemanaMover(-7)" title="Semana anterior"><i class="ti ti-chevron-left"></i></button>
         <button class="btn btn-sm" onclick="comSemanaMover(7)" title="Semana siguiente"><i class="ti ti-chevron-right"></i></button>
         <button class="btn btn-sm" onclick="imprimirPlanillaSemanalCom()"><i class="ti ti-printer"></i>Imprimir</button>
+        <button class="btn btn-sm" onclick="imprimirReciboComisionPersona(null)" style="color:var(--purple);border-color:var(--purple)" title="Un recibo por ejecutivo, cada uno en su hoja"><i class="ti ti-receipt"></i>Recibos de todos</button>
       </div></div>
     <div style="padding:.8rem 1rem">
       <p style="font-size:11px;color:var(--text3);margin:0 0 .7rem">Vendedores: la comisión registrada en cada venta facturada en la semana. Compradores: $${COMISION_COMPRA_USD} por cada carro comprado en la semana (fecha de compra, recompras incluidas); las compras de Gerencia no llevan comisión.</p>
+      ${comSemPagadaBanner(desde,hasta)}
       ${comSemanalTablasHTML(desde,hasta)}
-    </div></div>`;
+    </div></div>
+  ${comSemHistorialHTML()}`;
+}
+// ---- Historial de semanas pagadas: foto fija de la planilla al momento de pagarla ----
+function comSemHistActivas(){return (contData.comSemanalHistorial||[]).filter(h=>h&&!h.anulado);}
+function comSemPagadaBanner(desde,hasta){
+  const h=comSemHistActivas().find(x=>x.desde===desde&&x.hasta===hasta);
+  if(h)return `<div style="background:#EBFBEE;border:1.5px solid #2F9E44;border-radius:8px;padding:.55rem .8rem;margin-bottom:.8rem;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <span>✅ <b>Semana PAGADA</b> el ${h.fechaPago.split('-').reverse().join('/')} por ${h.por||'—'} · Total pagado <b>${fmtD(h.totalNeto)}</b>. Está guardada en el historial (abajo).</span>
+    ${puedeEditarComSemanal()?`<button class="btn btn-sm" onclick="guardarSemanaComPagada(true)" title="Volver a guardar la foto con los datos actuales"><i class="ti ti-refresh"></i>Actualizar foto</button>`:''}</div>`;
+  return puedeEditarComSemanal()?`<div style="display:flex;justify-content:flex-end;margin-bottom:.6rem"><button class="btn btn-success btn-sm" onclick="guardarSemanaComPagada(false)"><i class="ti ti-circle-check"></i>Marcar semana como PAGADA y guardar en historial</button></div>`:'';
+}
+async function guardarSemanaComPagada(actualizar){
+  if(!puedeEditarComSemanal())return;
+  const {desde,hasta}=comSemRango();
+  const d=comSemanalDatos(desde,hasta);
+  const neto=d.totVenta+d.totCompra+(d.totAdic||0)-d.totDed;
+  const fF=f=>f.split('-').reverse().join('/');
+  if(!confirm(`${actualizar?'¿Actualizar la foto guardada de':'¿Marcar como PAGADA y guardar en el historial'} la semana del ${fF(desde)} al ${fF(hasta)}?
+
+Total a pagar: ${fmtD(neto)} (${d.resumen.length} ejecutivo${d.resumen.length===1?'':'s'})`))return;
+  contData.comSemanalHistorial=contData.comSemanalHistorial||[];
+  const prev=comSemHistActivas().find(x=>x.desde===desde&&x.hasta===hasta);
+  const foto=JSON.parse(JSON.stringify(d));
+  if(prev){Object.assign(prev,{datos:foto,totalNeto:neto,actualizado:hoyLocal(),actualizadoPor:getNombreUsuario()});}
+  else contData.comSemanalHistorial.push({id:uid(),desde,hasta,fechaPago:hoyLocal(),por:getNombreUsuario(),datos:foto,totalNeto:neto,totVenta:d.totVenta,totCompra:d.totCompra,totDed:d.totDed});
+  renderComisionesContable();
+  await saveOne('contable',{id:'main',...contData});
+}
+function comSemHistorialHTML(){
+  const l=comSemHistActivas().slice().sort((a,b)=>b.desde.localeCompare(a.desde));
+  const fF=f=>f?f.split('-').reverse().join('/'):'';
+  return `<div class="card" style="margin-bottom:1.2rem">
+    <div class="card-head"><h3><i class="ti ti-history"></i> Historial de semanas pagadas</h3><span style="font-size:12px;color:var(--text3)">${l.length} semana${l.length===1?'':'s'}</span></div>
+    ${l.length?`<table class="tbl" style="font-size:12px"><thead><tr><th>Semana</th><th>Pagada el</th><th>Por</th><th style="text-align:right">Ventas</th><th style="text-align:right">Compras</th><th style="text-align:right">Adicionales</th><th style="text-align:right">Deducciones</th><th style="text-align:right">Total pagado</th><th></th></tr></thead><tbody>
+      ${l.map(h=>`<tr><td style="font-weight:700">${fF(h.desde)} – ${fF(h.hasta)}</td><td>${fF(h.fechaPago)}</td><td>${h.por||'—'}</td>
+        <td style="text-align:right">${fmtD(h.datos.totVenta)}</td><td style="text-align:right">${fmtD(h.datos.totCompra)}</td><td style="text-align:right">${h.datos.totAdic?fmtD(h.datos.totAdic):'–'}</td><td style="text-align:right;color:var(--red)">${h.datos.totDed?'('+fmtD(h.datos.totDed)+')':'–'}</td>
+        <td style="text-align:right;font-weight:800;color:var(--green)">${fmtD(h.totalNeto)}</td>
+        <td style="white-space:nowrap"><button class="btn btn-sm" onclick="verSemanaComHist('${h.id}')" title="Ver"><i class="ti ti-eye"></i></button>
+          <button class="btn btn-sm" onclick="imprimirSemanaComHist('${h.id}')" title="Imprimir planilla"><i class="ti ti-printer"></i></button>
+          <button class="btn btn-sm" onclick="imprimirReciboComisionPersona(null,'${h.id}')" title="Imprimir recibos" style="color:var(--purple)"><i class="ti ti-receipt"></i></button>
+          ${puedeEditarComSemanal()?`<button class="btn btn-sm" onclick="deshacerSemanaComHist('${h.id}')" title="Deshacer (quitar del historial)" style="color:var(--red)"><i class="ti ti-arrow-back-up"></i></button>`:''}</td></tr>`).join('')}
+    </tbody></table>`:`<p style="padding:1rem;font-size:12px;color:var(--text3)">Todavía no hay semanas pagadas. Cuando pagues una, usá "Marcar semana como PAGADA y guardar en historial".</p>`}
+  </div>`;
+}
+function verSemanaComHist(id){
+  const h=(contData.comSemanalHistorial||[]).find(x=>x.id===id);if(!h)return;
+  document.getElementById('comhist-ov')?.remove();
+  const ov=document.createElement('div');ov.id='comhist-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:3vh 1rem;overflow:auto';
+  const fF=f=>f.split('-').reverse().join('/');
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(1000px,100%);padding:1rem 1.2rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem;gap:8px;flex-wrap:wrap"><h3 style="margin:0;font-size:16px">Semana pagada ${fF(h.desde)} – ${fF(h.hasta)} <span style="font-size:12px;color:var(--text3);font-weight:400">· pagada el ${fF(h.fechaPago)} por ${h.por||'—'}</span></h3>
+      <div style="display:flex;gap:6px"><button class="btn btn-sm" onclick="imprimirSemanaComHist('${h.id}')"><i class="ti ti-printer"></i>Planilla</button><button class="btn btn-sm" onclick="imprimirReciboComisionPersona(null,'${h.id}')"><i class="ti ti-receipt"></i>Recibos</button><button class="btn btn-sm" onclick="document.getElementById('comhist-ov').remove()"><i class="ti ti-x"></i>Cerrar</button></div></div>
+    ${comSemanalTablasHTML(h.desde,h.hasta,true,h.datos)}
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+}
+function imprimirSemanaComHist(id){
+  const h=(contData.comSemanalHistorial||[]).find(x=>x.id===id);if(!h)return;
+  const w=window.open('','_blank');if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  const fF=f=>f.split('-').reverse().join('/');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Planilla de comisiones pagada</title><style>body{font-family:Arial,sans-serif;margin:16px;font-size:11.5px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:left}th{background:#e2e8f0;font-size:10.5px}@page{size:letter portrait;margin:10mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+    <h2 style="margin:0">NICAUTO — Planilla semanal de comisiones <span style="color:#2F9E44">(PAGADA)</span></h2><div style="color:#475569;margin:2px 0 10px">Semana del ${fF(h.desde)} al ${fF(h.hasta)} · Pagada el ${fF(h.fechaPago)} por ${h.por||'—'}</div>
+    ${comSemanalTablasHTML(h.desde,h.hasta,true,h.datos)}
+    <div style="display:flex;justify-content:space-around;margin-top:40px;font-size:11px"><div style="border-top:1px solid #000;width:200px;text-align:center;padding-top:4px">Elaborado por</div><div style="border-top:1px solid #000;width:200px;text-align:center;padding-top:4px">Autorizado por</div></div>
+    <script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
+}
+async function deshacerSemanaComHist(id){
+  if(!puedeEditarComSemanal())return;
+  const h=(contData.comSemanalHistorial||[]).find(x=>x.id===id);if(!h)return;
+  if(!confirm('¿Quitar esta semana del historial de pagadas?\n\n(La planilla vuelve a quedar como NO pagada; las comisiones no se borran.)'))return;
+  h.anulado=true;h.anuladoPor=getNombreUsuario();h.anuladoFecha=hoyLocal();
+  renderComisionesContable();
+  await saveOne('contable',{id:'main',...contData});
 }
 
 function puedeEditarComSemanal(){return ['admin','coordinador','gerente1','gerente2'].includes(MODO);}
@@ -30499,10 +30582,10 @@ function comSemFormulario(titulo,x,tipo,onOk){
   ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3000;display:flex;align-items:flex-start;justify-content:center;padding:10vh 1rem';
   ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;width:min(460px,100%);padding:1.1rem 1.2rem;box-shadow:0 20px 50px rgba(0,0,0,.3)">
     <h3 style="margin:0 0 .8rem;font-size:16px">${titulo}</h3>
-    <div class="form-group"><label>${tipo==='venta'?'Vendedor':'Comprador (agente)'}</label><input id="cs-nombre" list="cs-nombres" value="${String(x.nombre||'').replace(/"/g,'&quot;')}"><datalist id="cs-nombres">${nombres.map(n=>`<option value="${n}">`).join('')}</datalist></div>
+    <div class="form-group"><label>${tipo==='venta'?'Vendedor':tipo==='adicional'?'Ejecutivo':'Comprador (agente)'}</label><input id="cs-nombre" list="cs-nombres" value="${String(x.nombre||'').replace(/"/g,'&quot;')}"><datalist id="cs-nombres">${nombres.map(n=>`<option value="${n}">`).join('')}</datalist></div>
     ${x.fechaEditable?`<div class="form-group"><label>Fecha</label><input type="date" id="cs-fecha" value="${x.fecha||''}"></div>`:''}
-    <div class="form-group"><label>Vehículo</label><input id="cs-detalle" value="${String(x.detalle||'').replace(/"/g,'&quot;')}" placeholder="Marca Modelo Año (placa)"></div>
-    <div class="form-group"><label>Comisión (USD $)</label><input id="cs-monto" type="text" inputmode="decimal" value="${x.monto!=null?x.monto:''}"></div>
+    <div class="form-group"><label>${tipo==='adicional'?'Concepto':'Vehículo'}</label><input id="cs-detalle" list="${tipo==='adicional'?'cs-conceptos':''}" value="${String(x.detalle||'').replace(/"/g,'&quot;')}" placeholder="${tipo==='adicional'?'Viático, bono, combustible…':'Marca Modelo Año (placa)'}"><datalist id="cs-conceptos"><option value="Viático"><option value="Bono"><option value="Combustible"><option value="Alimentación"><option value="Transporte"></datalist></div>
+    <div class="form-group"><label>${tipo==='adicional'?'Monto':'Comisión'} (USD $)</label><input id="cs-monto" type="text" inputmode="decimal" value="${x.monto!=null?x.monto:''}"></div>
     ${x.original?`<p style="font-size:11px;color:var(--text3)">Original del sistema: ${x.original.nombre} — ${x.original.detalle} — ${fmtD(x.original.monto)} <a href="#" onclick="document.getElementById('comsem-ov').remove();restaurarLineaComSemanal('${x.key}');return false" style="color:var(--blue)">volver al original</a></p>`:''}
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:.8rem"><button class="btn" onclick="document.getElementById('comsem-ov').remove()">Cancelar</button><button class="btn btn-primary" id="cs-ok"><i class="ti ti-device-floppy"></i>Guardar</button></div>
   </div>`;
@@ -30512,6 +30595,7 @@ function comSemFormulario(titulo,x,tipo,onOk){
     const monto=parseFloat(String(document.getElementById('cs-monto').value).replace(/[^0-9.\-]/g,''));
     const fecha=document.getElementById('cs-fecha')?.value;
     if(!nombre){alert('Escribí el nombre.');return;}
+    if(tipo==='adicional'&&!detalle){alert('Escribí el concepto (viático, bono…).');return;}
     if(isNaN(monto)){alert('Escribí el monto de la comisión.');return;}
     if(x.fechaEditable&&!fecha){alert('Elegí la fecha.');return;}
     ov.remove();onOk({nombre:normalizarNombrePizarra(nombre)||nombre,detalle,monto,fecha});
@@ -30550,7 +30634,7 @@ function agregarLineaComSemanal(tipo){
   if(!puedeEditarComSemanal())return;
   const {desde,hasta}=comSemRango();
   const hoy=hoyLocal();
-  comSemFormulario(tipo==='venta'?'Agregar comisión de vendedor':'Agregar comisión de comprador',{nombre:'',detalle:'',monto:tipo==='compra'?COMISION_COMPRA_USD:'',fecha:hoy>=desde&&hoy<=hasta?hoy:desde,fechaEditable:true},tipo,async r=>{
+  comSemFormulario(tipo==='venta'?'Agregar comisión de vendedor':tipo==='adicional'?'Agregar pago adicional (viático, bono…)':'Agregar comisión de comprador',{nombre:'',detalle:'',monto:tipo==='compra'?COMISION_COMPRA_USD:'',fecha:hoy>=desde&&hoy<=hasta?hoy:desde,fechaEditable:true},tipo,async r=>{
     if(r.fecha<desde||r.fecha>hasta)alert('Ojo: la fecha queda fuera de esta semana, va a aparecer en la planilla de la semana de esa fecha.');
     comSemAj().extras.push({id:uid(),tipo,nombre:r.nombre,detalle:r.detalle,monto:r.monto,fecha:r.fecha,por:getNombreUsuario()});
     await comSemGuardar();
@@ -30569,6 +30653,66 @@ function editarDeduccionComSemanal(desde,nombre){
   if(monto>0){motivo=prompt('Motivo de la deducción (ej. adelanto, préstamo, faltante):',act.motivo||'');if(motivo===null)return;}
   aj.deducciones[k]={monto,motivo:(motivo||'').trim(),por:getNombreUsuario(),fecha:hoyLocal()};
   comSemGuardar();
+}
+
+
+// ======================== RECIBO DE PAGO DE COMISIONES (por ejecutivo) ========================
+function numeroALetrasES(n){
+  const U=['','UNO','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE','DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE','VEINTE','VEINTIUNO','VEINTIDÓS','VEINTITRÉS','VEINTICUATRO','VEINTICINCO','VEINTISÉIS','VEINTISIETE','VEINTIOCHO','VEINTINUEVE'];
+  const D=['','','','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA'];
+  const C=['','CIENTO','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS'];
+  const m999=x=>{if(x===0)return'';if(x===100)return'CIEN';const c=Math.floor(x/100),r=x%100;let t=c?C[c]:'';
+    if(r){t+=(t?' ':'')+(r<30?U[r]:D[Math.floor(r/10)]+(r%10?' Y '+U[r%10]:''));}return t;};
+  n=Math.floor(Math.abs(n));if(n===0)return'CERO';
+  const mill=Math.floor(n/1e6),miles=Math.floor((n%1e6)/1000),resto=n%1000;let out=[];
+  if(mill)out.push(mill===1?'UN MILLÓN':m999(mill).replace(/UNO$/,'UN')+' MILLONES');
+  if(miles)out.push(miles===1?'MIL':m999(miles).replace(/UNO$/,'UN')+' MIL');
+  if(resto)out.push(m999(resto));
+  return out.join(' ');
+}
+function montoEnLetrasUSD(x){const n=Math.round(Math.abs(Number(x||0))*100);return numeroALetrasES(Math.floor(n/100))+' DÓLARES CON '+String(n%100).padStart(2,'0')+'/100';}
+function reciboComisionHTML(nombre,desde,hasta,d){
+  const fF=f=>f?String(f).split('-').reverse().join('/'):'';
+  const items=[...(d.vend.find(g=>g.nombre===nombre)?.items||[]).map(x=>({...x,concepto:'Comisión por venta'})),...(d.comp.find(g=>g.nombre===nombre)?.items||[]).map(x=>({...x,concepto:'Comisión por compra'})),...((d.adic||[]).find(g=>g.nombre===nombre)?.items||[]).map(x=>({...x,concepto:'Pago adicional',detalle:x.detalle}))].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const r=d.resumen.find(x=>x.nombre===nombre)||{bruto:0,ded:0,total:0,dedMotivo:''};
+  const nRec='COM-'+desde.replace(/-/g,'').slice(2)+'-'+String(Math.abs([...nombre].reduce((h,c)=>(h*31+c.charCodeAt(0))|0,7))%1000).padStart(3,'0');
+  return `<div class="rec">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:8px">
+      <div><div style="font-size:22px;font-weight:900;letter-spacing:.02em">NICAUTO</div><div style="font-size:14px;font-weight:700">RECIBO DE PAGO DE COMISIONES</div></div>
+      <div style="text-align:right;font-size:11px;color:#475569">Recibo N° <b style="color:#0f172a">${nRec}</b><br>Fecha: ${fF(hoyLocal())}<br>Período: ${fF(desde)} al ${fF(hasta)}</div>
+    </div>
+    <div style="margin:12px 0;font-size:13px;line-height:1.7">Recibí de <b>NICAUTO</b> la cantidad de <b style="font-size:15px">${fmtD(r.total)}</b><br>
+      <span style="font-size:11.5px">(${montoEnLetrasUSD(r.total)})</span><br>
+      en concepto de pago de comisiones${(d.adic||[]).some(g=>g.nombre===nombre)?' y pagos adicionales':''} del período indicado, según el siguiente detalle:</div>
+    <div style="font-size:13px;margin-bottom:6px">Ejecutivo: <b>${nombre}</b></div>
+    <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Vehículo / detalle</th><th class="n">Monto</th></tr></thead>
+      <tbody>${items.map(x=>`<tr><td>${fF(x.fecha)}</td><td>${x.concepto}</td><td>${x.detalle}</td><td class="n">${fmtD(x.monto)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center">Sin comisiones</td></tr>'}</tbody>
+      <tfoot>
+        <tr><td colspan="3" style="text-align:right">Subtotal</td><td class="n">${fmtD(r.bruto)}</td></tr>
+        ${r.ded?`<tr><td colspan="3" style="text-align:right;color:#C92A2A">(-) Deducciones${r.dedMotivo?' — '+r.dedMotivo:''}</td><td class="n" style="color:#C92A2A">(${fmtD(r.ded)})</td></tr>`:''}
+        <tr class="tot"><td colspan="3" style="text-align:right">TOTAL RECIBIDO</td><td class="n">${fmtD(r.total)}</td></tr>
+      </tfoot></table>
+    <div style="display:flex;justify-content:space-around;margin-top:55px;font-size:11px">
+      <div style="border-top:1px solid #000;width:210px;text-align:center;padding-top:4px">Entregué conforme<br>NICAUTO</div>
+      <div style="border-top:1px solid #000;width:210px;text-align:center;padding-top:4px">Recibí conforme<br><b>${nombre}</b></div>
+    </div>
+  </div>`;
+}
+function imprimirReciboComisionPersona(nombre,histId){
+  const h=histId?(contData.comSemanalHistorial||[]).find(x=>x.id===histId):null;
+  const {desde,hasta}=h?{desde:h.desde,hasta:h.hasta}:comSemRango();
+  const d=h?h.datos:comSemanalDatos(desde,hasta);
+  const nombres=nombre?[nombre]:d.resumen.filter(r=>r.total>0||r.bruto>0).map(r=>r.nombre);
+  if(!nombres.length){alert('No hay comisiones en esta semana.');return;}
+  const w=window.open('','_blank');if(!w){alert('Permití las ventanas emergentes para imprimir.');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Recibo de comisiones${nombre?' — '+nombre:''}</title><style>
+    body{font-family:Arial,sans-serif;margin:0;color:#0f172a;font-size:12px}.rec{padding:14mm 16mm;page-break-after:always}.rec:last-child{page-break-after:auto}
+    table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:5px 7px;text-align:left}th{background:#0f172a;color:#fff;font-size:11px}.n{text-align:right;white-space:nowrap}
+    tfoot td{font-weight:700;background:#f8fafc}.tot td{background:#000!important;color:#fff;font-weight:800;font-size:13px}
+    @page{size:letter portrait;margin:0}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>
+    ${nombres.map(n=>reciboComisionHTML(n,desde,hasta,d)).join('')}
+    <script>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  w.document.close();
 }
 
 function comSemanaMover(dias){
