@@ -8925,10 +8925,18 @@ function renderListaPrecios(){
       <span style="color:var(--text3);font-size:12px">—</span>
       <input type="date" id="lp-ffechahasta" style="padding:5px 8px;border:1.5px solid var(--blue);border-radius:var(--radius);font-size:12px" onchange="renderListaPrecios()">
     </div>
-    <button class="btn btn-sm" onclick="document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';document.getElementById('lp-fdias').value='';lpEstadosSel=[];renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
+    <div style="display:flex;align-items:center;gap:4px;border:1.5px solid #E8590C;border-radius:var(--radius);padding:3px 6px;background:#FFF4E6">
+      <label style="display:flex;align-items:center;gap:4px;margin:0;font-size:12px;font-weight:700;color:#E8590C;cursor:pointer;white-space:nowrap"><input type="checkbox" id="lp-fnuevos" style="width:auto;margin:0" onchange="renderListaPrecios()">🏷️ Nuevos precios</label>
+      <span style="font-size:11px;color:var(--text2);white-space:nowrap">desde</span>
+      <input type="date" id="lp-fnuevos-desde" style="padding:3px 6px;border:1px solid #FFC078;border-radius:6px;font-size:11px;width:auto" onchange="document.getElementById('lp-fnuevos').checked=true;renderListaPrecios()">
+      <button type="button" class="btn btn-sm" id="lp-fnuevos-wa" onclick="copiarNuevosPreciosWA()" title="Copiar la lista de nuevos precios como mensaje para WhatsApp" style="display:none;padding:2px 8px;color:#25D366;border-color:#25D366"><i class="ti ti-brand-whatsapp"></i>Mensaje</button>
+    </div>
+    <button class="btn btn-sm" onclick="document.getElementById('lp-fnuevos').checked=false;document.getElementById('lp-q').value='';document.getElementById('lp-ftipo').value='';document.getElementById('lp-fcolor').value='';document.getElementById('lp-fmontomin').value='';document.getElementById('lp-fmontomax').value='';document.getElementById('lp-ffechadesde').value='';document.getElementById('lp-ffechahasta').value='';document.getElementById('lp-fdias').value='';lpEstadosSel=[];renderListaPrecios()" title="Quitar todos los filtros" style="color:var(--red);border-color:var(--red)"><i class="ti ti-x"></i>Quitar filtros</button>`;
     lpCont.parentNode.insertBefore(filtBar,lpCont);
     try{const o=safeStorage.getItem('lp_orden');if(o)document.getElementById('lp-orden').value=o;}catch(e){}
+    {const d=new Date(hoyLocal()+'T12:00:00');d.setDate(d.getDate()-7);document.getElementById('lp-fnuevos-desde').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
   }
+  {const b=document.getElementById('lp-fnuevos-wa');if(b)b.style.display=document.getElementById('lp-fnuevos')?.checked?'':'none';}
   const q=(document.getElementById('lp-q')?.value||'').toLowerCase();
   const ftipo=document.getElementById('lp-ftipo')?.value||'';
   const fcolor=document.getElementById('lp-fcolor')?.value||'';
@@ -8953,6 +8961,7 @@ function renderListaPrecios(){
   if(fcolor)veh=veh.filter(v=>v.color===fcolor);
   if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
   {const fdias=document.getElementById('lp-fdias')?.value||'';if(fdias)veh=veh.filter(v=>enRangoDias(v,fdias));}
+  veh=lpFiltrarNuevosPrecios(veh);
   if(fmontomin!=null)veh=veh.filter(v=>Number(v.precio||0)>=fmontomin);
   if(fmontomax!=null)veh=veh.filter(v=>Number(v.precio||0)<=fmontomax);
   if(ffechadesde)veh=veh.filter(v=>v.fechacompra&&v.fechacompra>=ffechadesde);
@@ -9082,8 +9091,8 @@ function lpRow(v,idx){
     <td style="font-size:12px">${v.color||'—'}</td>
     <td style="font-size:12px">${v.motor||'—'}</td>
     <td><span class="lp-dias ${diasCls}">${diasTxt}</span></td>
-    <td style="color:var(--green);font-weight:700">${v.precio?pHoy(v,fmtD(v.precio)):'—'}</td>
-    <td style="color:var(--blue);font-weight:600">${v.precioB?pHoy(v,fmtD(v.precioB)):'—'}</td>
+    <td style="color:var(--green);font-weight:700">${v.precio?pHoy(v,fmtD(v.precio)):'—'}${lpNuevoPrecioInfo(v,'A')}</td>
+    <td style="color:var(--blue);font-weight:600">${v.precioB?pHoy(v,fmtD(v.precioB)):'—'}${lpNuevoPrecioInfo(v,'B')}</td>
     <td><input class="calc-input" type="text" inputmode="decimal" step="0.01" placeholder="0.00" value="${v.comisionLP||''}" onclick="event.stopPropagation()" onchange="guardarComisionLP('${v.id}',this.value)" style="width:80px;padding:3px 6px;font-size:12px;text-align:right"></td>
     <td onclick="event.stopPropagation();${v.estado==='Reservado'?`verReservadoLP('${v.id}')`:''}" style="${v.estado==='Reservado'?'cursor:pointer':''}">${badge(v.estado,'')}</td>
     <td>${gerCol}</td>
@@ -16615,6 +16624,43 @@ const LP_PRINT_COLS=[
   {k:'trans',t:'Trans.'},{k:'color',t:'Color'},{k:'motor',t:'Motor'},{k:'dias',t:'Días en lote'},
   {k:'listaA',t:'Lista A'},{k:'listaB',t:'Lista B'},{k:'comision',t:'Comisión'},{k:'estado',t:'Estado'}
 ];
+
+// ======================== FILTRO "NUEVOS PRECIOS" (Lista de Precios) ========================
+// Carros cuyo Precio A o B cambió (subió o bajó) desde la fecha elegida, según historialPrecios.
+// El "precio anterior" es el que tenía justo antes del primer cambio dentro del período.
+function lpNuevosPreciosActivo(){return !!document.getElementById('lp-fnuevos')?.checked;}
+function lpNuevosDesde(){return document.getElementById('lp-fnuevos-desde')?.value||'0000-00-00';}
+function lpCambioPrecioDesde(v,desde){
+  const h=(Array.isArray(v.historialPrecios)?v.historialPrecios:[]).filter(x=>x&&x.fecha>=desde&&(Number(x.antesA||0)||Number(x.antesB||0)));
+  if(!h.length)return null;
+  const p=h[0];
+  const antesA=Number(p.antesA||0),antesB=Number(p.antesB||0),ahoraA=Number(v.precio||0),ahoraB=Number(v.precioB||0);
+  if(Math.abs(antesA-ahoraA)<0.005&&Math.abs(antesB-ahoraB)<0.005)return null; // volvió al mismo precio
+  return{antesA,antesB,ahoraA,ahoraB,fecha:h[h.length-1].fecha};
+}
+function lpFiltrarNuevosPrecios(veh){
+  if(!lpNuevosPreciosActivo())return veh;
+  const d=lpNuevosDesde();
+  return veh.filter(v=>lpCambioPrecioDesde(v,d));
+}
+function lpNuevoPrecioInfo(v,cual){
+  if(!lpNuevosPreciosActivo())return '';
+  const c=lpCambioPrecioDesde(v,lpNuevosDesde());if(!c)return '';
+  const antes=cual==='A'?c.antesA:c.antesB,ahora=cual==='A'?c.ahoraA:c.ahoraB;
+  if(!antes||Math.abs(antes-ahora)<0.005)return '';
+  return `<div style="font-size:10px;font-weight:600;white-space:nowrap"><s style="color:#94a3b8">${fmtD(antes)}</s> <span style="color:${ahora<antes?'#C92A2A':'#2F9E44'}">${ahora<antes?'▼':'▲'}</span></div>`;
+}
+function copiarNuevosPreciosWA(){
+  const lista=lpVehiculosFiltrados();
+  const d=lpNuevosDesde();
+  if(!lista.length){alert('No hay carros con precio nuevo en ese período.');return;}
+  const lineas=lista.map(v=>{const c=lpCambioPrecioDesde(v,d);const nom=[(v.marca||'').trim(),(v.modelo||'').trim(),v.anio||''].filter(Boolean).join(' ');
+    return `• ${nom}${v.placa?' ('+v.placa+')':''}: antes ${fmtD(c.antesA)} → *ahora ${fmtD(c.ahoraA)}*${c.ahoraA<c.antesA?' ⬇️':' ⬆️'}`;});
+  const txt=`🚗 *NICAUTO — Actualización de precios* (${hoyLocal().split('-').reverse().join('/')})\n\n${lineas.join('\n')}\n\n¡Consultanos! 📲`;
+  const listo=()=>alert(`✅ Mensaje copiado (${lista.length} carro${lista.length===1?'':'s'}). Pegalo en WhatsApp.`);
+  try{navigator.clipboard.writeText(txt).then(listo,()=>prompt('Copiá este mensaje:',txt));}catch(e){prompt('Copiá este mensaje:',txt);}
+}
+
 function lpVehiculosFiltrados(){
   const val=id=>document.getElementById(id)?.value||'';
   const q=val('lp-q').toLowerCase(),ftipo=val('lp-ftipo'),fcolor=val('lp-fcolor');
@@ -16630,6 +16676,7 @@ function lpVehiculosFiltrados(){
   if(fh)veh=veh.filter(v=>v.fechacompra&&v.fechacompra<=fh);
   if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
   {const fdias=document.getElementById('lp-fdias')?.value||'';if(fdias)veh=veh.filter(v=>enRangoDias(v,fdias));}
+  veh=lpFiltrarNuevosPrecios(veh);
   return ordenarListaPrecios(veh,val('lp-orden')||'tipo');
 }
 function lpValorCol(v,k,i,paraExcel){
@@ -16877,7 +16924,7 @@ function generarCatalogoLP(origen){
       <div class="top">
         <div class="izq"><span class="num" style="background:${c.num}">${pad(i+1)}</span>
           <div><div class="nom">${esc(String(v.marca||'').trim())} ${esc(String(v.modelo||'').trim())}</div><div class="sub">${esc(v.anio)}${v.tipo?' &nbsp;·&nbsp; '+esc(v.tipo):''}</div></div></div>
-        <div class="der"><div class="plbl">PRECIO LISTA A</div><div class="precio">${v.precio?usd(v.precio):'—'}</div>
+        <div class="der"><div class="plbl">${!esConsig&&lpNuevosPreciosActivo()&&lpCambioPrecioDesde(v,lpNuevosDesde())?'NUEVO PRECIO':'PRECIO LISTA A'}</div>${(()=>{if(esConsig||!lpNuevosPreciosActivo())return '';const cc=lpCambioPrecioDesde(v,lpNuevosDesde());return cc&&cc.antesA&&Math.abs(cc.antesA-cc.ahoraA)>0.005?`<div style="font-size:calc(13px*var(--s,1));color:#94a3b8;text-decoration:line-through;line-height:1">${usd(cc.antesA)}</div>`:'';})()}<div class="precio">${v.precio?usd(v.precio):'—'}</div>
           <span class="est" style="background:${c.bg};color:${c.fg}">${esc(v.estado)}</span></div>
       </div>
       <div class="det">
@@ -17008,6 +17055,7 @@ async function exportExcelListaPrecios(){
   if(ffechahasta)veh=veh.filter(v=>v.fechacompra&&v.fechacompra<=ffechahasta);
   if(lpEstadosSel.length)veh=veh.filter(v=>lpEstadosSel.includes(v.estado));
   {const fdias=document.getElementById('lp-fdias')?.value||'';if(fdias)veh=veh.filter(v=>enRangoDias(v,fdias));}
+  veh=lpFiltrarNuevosPrecios(veh);
   const ordenX=document.getElementById('lp-orden')?.value||'tipo';
   const rows=[['Tipo','Vehículo','Placa','Km','Trans.','Color','Motor','Días en lote','Lista A (USD)','Lista B (USD)','Comisión','Estado']];
   ordenarListaPrecios(veh,ordenX).forEach(v=>{
