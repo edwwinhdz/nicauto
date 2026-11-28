@@ -21009,6 +21009,16 @@ function cdAbrirMov(tipo,editId){
       <input type="checkbox" id="cd-comdir" ${m?.comisionDirecta?'checked':''} style="width:16px;height:16px;margin-top:1px">
       <span><b>Es comisión directa (venta externa)</b><br>Se suma en Ventas → "Comisiones directas" y en el Estado de Resultado → 4002 Otros ingresos.</span>
     </label>`:''}
+    ${!esIng?(()=>{const cx=m?(contData.cuentas||[]).find(c=>c.origenCajaId===m.id):null;
+      const personas=[...new Set((contData.cuentas||[]).filter(c=>/^CxC/.test(c.tipo||'')).map(c=>String(c.persona||'').trim()).filter(Boolean))].sort();
+      return `<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:#FFF4E6;border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer;margin-bottom:.5rem">
+      <input type="checkbox" id="cd-cxc" ${cx?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-cxc-wrap').style.display=this.checked?'flex':'none'">
+      <span><b>Es una cuenta por cobrar (préstamo / adelanto)</b><br>Además de salir de caja, se crea la cuenta por cobrar en Contable › Cuentas con este monto.</span></label>
+      <div id="cd-cxc-wrap" style="display:${cx?'flex':'none'};gap:8px;margin:-.1rem 0 .75rem;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:150px;margin:0"><label>Tipo</label><select id="cd-cxc-tipo">${[['CxC-Empleado','CxC — Empleados'],['CxC-Cliente','CxC — Clientes'],['CxC-Tercero','CxC — Terceros / Ajenos'],['CxC-Inversor','CxC — Inversores'],['CxC-Banco','CxC — Bancos']].map(([k,t])=>`<option value="${k}" ${(cx?cx.tipo:'CxC-Empleado')===k?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="form-group" style="flex:1.4;min-width:170px;margin:0"><label>¿Quién debe? (persona)</label><input id="cd-cxc-persona" list="cd-cxc-personas" value="${String(cx?.persona||'').replace(/"/g,'&quot;')}" placeholder="Ej. Yenkel Luna"><datalist id="cd-cxc-personas">${personas.map(x=>`<option value="${x.replace(/"/g,'&quot;')}">`).join('')}</datalist></div>
+        ${cx&&Number(cx.monto||0)-Number(cx.saldo||0)>0.005?`<div style="font-size:11px;color:var(--text3);width:100%">Esta cuenta ya tiene abonos por ${fmtD(Number(cx.monto)-Number(cx.saldo))}; si cambiás el monto, el saldo se ajusta respetando esos abonos.</div>`:''}
+      </div>`;})():''}
     <div class="form-group"><label>Nota / aclaración (opcional)</label><textarea id="cd-nota" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px" placeholder="Ej. el cliente pagó en dos partes; recibo físico extraviado…">${(m?.nota)||''}</textarea></div>
     <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;background:var(--blue-light);border-radius:var(--radius);padding:.6rem .75rem;cursor:pointer;margin-bottom:.5rem">
       <input type="checkbox" id="cd-trasbanco" ${m?.trasladoBanco?'checked':''} style="width:16px;height:16px;margin-top:1px" onchange="document.getElementById('cd-trasbanco-wrap').style.display=this.checked?'block':'none'">
@@ -21035,6 +21045,7 @@ function cdAbrirMov(tipo,editId){
     if(partes.some(p=>!(p.monto>0))){alert('Poné el monto de cada forma de pago (o dejá una sola sin monto).');return;}
     const sumaP=partes.reduce((s,p)=>s+p.monto,0);
     if(document.getElementById('cd-trasbanco')?.checked&&document.getElementById('cd-trasladojm')?.checked){alert('Elegí solo una: depósito/retiro de banco O traslado con Don Julio.');return;}
+    if(document.getElementById('cd-cxc')?.checked&&!cdVal('cd-cxc-persona')){alert('Escribí quién debe (la persona de la cuenta por cobrar).');return;}
     if(Math.abs(sumaP-monto)>0.009&&!confirm(`Las formas de pago suman ${fmtD(sumaP)} y el monto es ${fmtD(monto)}.\n\n¿Guardar con el total ${fmtD(sumaP)}?`))return;
     const partesObj=partes.map(p=>{const banco=!esIng&&p.forma!=='Cash';return{forma:p.forma,col:banco?'banco':p.dest,bancoCta:banco?p.dest:'',monto:Number(p.monto.toFixed(2))};});
     const p0=partesObj[0];
@@ -21051,9 +21062,31 @@ function cdAbrirMov(tipo,editId){
     if(i>=0)contData.cajaDiariaMovs[i]=obj;else contData.cajaDiariaMovs.push(obj);
     cdSincronizarFondosJM(obj);
     cdSincronizarComisionDirecta(obj);
+    if(!esIng)cdSincronizarCxC(obj,document.getElementById('cd-cxc')?.checked?{tipo:cdVal('cd-cxc-tipo')||'CxC-Empleado',persona:cdVal('cd-cxc-persona')}:null);
     await cdGuardarTodo();
   });
   cdPfCargar(tipo,m);
+}
+// Salida de caja marcada como "cuenta por cobrar" (préstamo / adelanto) → crea o actualiza la CxC
+// enlazada (origenCajaId). Si se desmarca o se anula la salida y la cuenta no tiene abonos, se quita.
+function cdSincronizarCxC(m,cfg){
+  contData.cuentas=contData.cuentas||[];
+  const i=contData.cuentas.findIndex(c=>c.origenCajaId===m.id);
+  const ex=i>=0?contData.cuentas[i]:null;
+  const pagado=ex?Math.max(0,Number(ex.monto||0)-Number(ex.saldo||0)):0;
+  if(!cfg||m.anulado){
+    if(ex){
+      if(pagado>0.005){alert(`Ojo: la cuenta por cobrar de ${ex.persona} ya tiene abonos (${fmtD(pagado)}), así que no se borró. Revisala en Contable › Cuentas.`);}
+      else contData.cuentas.splice(i,1);
+    }
+    return;
+  }
+  const monto=Number(m.monto||0),saldo=Math.max(0,Number((monto-pagado).toFixed(2)));
+  const fch=m.fecha||hoyLocal();
+  const base={tipo:cfg.tipo,persona:cfg.persona,fecha:fch,monto,saldo,desc:m.desc+(m.recibo&&m.recibo.toLowerCase()!=='sn'?' — Recibo '+m.recibo:'')+' [Salida de caja '+fch.split('-').reverse().join('/')+']',
+    estado:saldo<=0.005?'Pagada':(pagado>0?'Parcial':'Pendiente'),origenCajaId:m.id,ultimaEdicionPor:getNombreUsuario()};
+  if(ex)Object.assign(ex,base);
+  else contData.cuentas.push({id:uid(),vence:'',creadoPor:getNombreUsuario(),...base});
 }
 // Ingreso de Cash in Hand marcado como "comisión directa" → queda espejado en Comisiones directas
 // (Ventas y ER 4002). Si se edita o se quita el ingreso, la comisión se actualiza o se anula sola.
@@ -21197,7 +21230,7 @@ function cdEditarLinea(key,manual){
 }
 async function cdQuitarLinea(key,manual){
   if(!confirm(manual?'¿Eliminar este movimiento de la caja?':'¿Quitar esta línea de la hoja de caja?\n\nLa venta o compra NO se borra, solo deja de aparecer aquí.'))return;
-  if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m){m.anulado=true;m.anuladoPor=getNombreUsuario();cdSincronizarFondosJM(m);cdSincronizarComisionDirecta(m);}}
+  if(manual){const m=(contData.cajaDiariaMovs||[]).find(x=>x.id===key);if(m){m.anulado=true;m.anuladoPor=getNombreUsuario();cdSincronizarFondosJM(m);cdSincronizarComisionDirecta(m);if(m.tipo==='egreso')cdSincronizarCxC(m,null);}}
   else{
     contData.cajaDiariaAjustes=contData.cajaDiariaAjustes||[];
     const a=cdAjuste(key);if(a)a.oculta=true;else contData.cajaDiariaAjustes.push({id:key,oculta:true});
